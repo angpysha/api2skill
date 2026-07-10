@@ -1,0 +1,33 @@
+{
+  "project_brief": "PROJECT.md",
+  "code_search_source": "project-brief",
+  "detected_signals": [
+    "PROJECT.md Stack: \"C# / .NET (console application)\"",
+    "human override: --dotnet-console-app",
+    "codesearch index: 5 files / 21 chunks, all pipeline scaffolding — no runtime code (confirms greenfield)",
+    "no *.csproj / *.sln on filesystem yet"
+  ],
+  "packs": [
+    { "name": "dotnet-minimal", "score": 0.9, "features": [] }
+  ],
+  "agents": [
+    { "name": "coordinator", "enabled": true },
+    { "name": "ba-analyst", "enabled": true },
+    { "name": "architect", "enabled": true },
+    { "name": "team-lead", "enabled": true },
+    { "name": "developer", "enabled": true },
+    { "name": "tester", "enabled": true },
+    { "name": "security-reviewer", "enabled": true },
+    { "name": "devops", "enabled": false },
+    { "name": "tech-writer", "enabled": true },
+    { "name": "stack-selector", "enabled": true }
+  ],
+  "tracker": { "type": "beads", "prefix": "task" },
+  "pr": { "type": "manual", "target_branch": "main" },
+  "host": "all",
+  "build": { "command": "dotnet build --configuration Release --verbosity minimal" },
+  "test": { "command": "pwsh .cursor/skills/dotnet-unit-tests/scripts/dotnet-unit-tests.ps1" },
+  "format": { "command": "" },
+  "spec_kit": { "enabled": true, "integration": "claude", "integrations_installed": ["claude", "cursor-agent"] },
+  "confidence": "high"
+}

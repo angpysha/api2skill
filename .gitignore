@@ -1,0 +1,10 @@
+_code_agent/
+
+# .NET build artifacts
+bin/
+obj/
+TestResults/
+
+# local indexes (regeneratable)
+.codesearch.db/
+graphify-out/
