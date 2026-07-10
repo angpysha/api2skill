@@ -1,0 +1,87 @@
+openapi: "3.0.3"
+info:
+  title: Multi-Auth Sample API
+  description: One operation per supported security scheme, for auth-codegen tests.
+  version: "1.0.0"
+servers:
+  - url: https://api.multiauth.example.com
+tags:
+  - name: auth-samples
+paths:
+  /apikey-op:
+    get:
+      tags: [auth-samples]
+      operationId: apiKeyOp
+      summary: Requires an API key header
+      security:
+        - apiKeyAuth: []
+      responses:
+        "200":
+          description: ok
+
+  /bearer-op:
+    get:
+      tags: [auth-samples]
+      operationId: bearerOp
+      summary: Requires a bearer token
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: ok
+
+  /basic-op:
+    get:
+      tags: [auth-samples]
+      operationId: basicOp
+      summary: Requires HTTP basic auth
+      security:
+        - basicAuth: []
+      responses:
+        "200":
+          description: ok
+
+  /oauth2-op:
+    post:
+      tags: [auth-samples]
+      operationId: oauth2Op
+      summary: Requires an OAuth2 client-credentials token
+      security:
+        - oauth2Auth: [write:samples]
+      responses:
+        "200":
+          description: ok
+
+  /unsupported-op:
+    get:
+      tags: [auth-samples]
+      operationId: unsupportedOp
+      summary: Uses a security scheme api2skill does not support (openIdConnect)
+      security:
+        - openIdAuth: []
+      responses:
+        "200":
+          description: ok
+
+components:
+  securitySchemes:
+    apiKeyAuth:
+      type: apiKey
+      name: X-Api-Key
+      in: header
+    bearerAuth:
+      type: http
+      scheme: bearer
+    basicAuth:
+      type: http
+      scheme: basic
+    oauth2Auth:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: https://api.multiauth.example.com/oauth/token
+          scopes:
+            write:samples: Write access to samples
+    openIdAuth:
+      type: openIdConnect
+      openIdConnectUrl: https://api.multiauth.example.com/.well-known/openid-configuration
