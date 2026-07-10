@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.OpenApi" Version="3.8.0" />
+    <PackageReference Include="Microsoft.OpenApi.YamlReader" Version="3.8.0" />
     <PackageReference Include="System.CommandLine" Version="2.0.9" />
   </ItemGroup>
 

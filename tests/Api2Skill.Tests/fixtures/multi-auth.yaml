@@ -47,7 +47,7 @@ paths:
       operationId: oauth2Op
       summary: Requires an OAuth2 client-credentials token
       security:
-        - oauth2Auth: [write:samples]
+        - oauth2Auth: ["write:samples"]
       responses:
         "200":
           description: ok
