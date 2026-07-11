@@ -9,21 +9,28 @@ public sealed class SkillDirectoryExistsException(string path)
 
 /// <summary>
 /// Orchestrates writing a <see cref="SkillModel"/> to disk: directory layout, the
-/// exists/--force policy, and the shared content writers (SkillMdWriter, ReferenceWriter)
-/// plus the selected <see cref="IScriptEmitter"/>. <c>SecretsScaffold</c> and the
-/// secrets-preserving nuance of <c>--force</c> (never clobber a real secrets.json) land in
-/// US2 (T023/T025) — for now <c>force: true</c> simply clears and recreates the directory.
+/// exists/--force policy (preserving a real <c>secrets.json</c> across regeneration — FR-009,
+/// NFR-1), and the shared content writers (SkillMdWriter, ReferenceWriter, SecretsScaffold)
+/// plus the selected <see cref="IScriptEmitter"/>.
 /// </summary>
 public static class SkillWriter
 {
     public static DirectoryInfo Write(SkillModel model, string outputDirectory, bool force, IScriptEmitter emitter)
     {
         var dir = new DirectoryInfo(outputDirectory);
+        byte[]? preservedSecrets = null;
+
         if (dir.Exists)
         {
             if (!force)
             {
                 throw new SkillDirectoryExistsException(outputDirectory);
+            }
+
+            var secretsPath = Path.Combine(dir.FullName, SecretsScaffold.RealSecretsFileName);
+            if (File.Exists(secretsPath))
+            {
+                preservedSecrets = File.ReadAllBytes(secretsPath);
             }
 
             dir.Delete(recursive: true);
@@ -33,7 +40,15 @@ public static class SkillWriter
 
         SkillMdWriter.Write(model, dir, emitter);
         ReferenceWriter.Write(model, dir);
+        SecretsScaffold.Write(model, dir);
         emitter.Emit(model, dir);
+
+        if (preservedSecrets is not null)
+        {
+            // Never parsed/embedded — copied back byte-for-byte, after every generated file is
+            // already written, so a real credential is never read during generation itself.
+            File.WriteAllBytes(Path.Combine(dir.FullName, SecretsScaffold.RealSecretsFileName), preservedSecrets);
+        }
 
         return dir;
     }
