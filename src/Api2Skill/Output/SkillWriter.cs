@@ -22,14 +22,18 @@ public sealed class SkillDirectoryExistsException(string path)
 ///
 /// <c>--force</c> also preserves an existing <c>auth.json</c> (unless this run supplies a new
 /// one via <c>--auth</c>/<c>--auth-config</c>) and always preserves <c>.auth-cache.json</c>
-/// (+ its lock file), since that cache holds live OAuth sessions (contracts/cli.md).
+/// (+ its lock file), since that cache holds live OAuth sessions (contracts/cli.md). The
+/// <c>.api2skill.json</c> generation manifest (specs/003-skill-update-command) is always
+/// (re)written when supplied — it has no preservation logic, since it should always reflect the
+/// most recent invocation.
 /// </summary>
 public static class SkillWriter
 {
     private const string AuthConfigFileName = "auth.json";
 
     public static DirectoryInfo Write(
-        SkillModel model, string outputDirectory, bool force, IScriptEmitter emitter, string? authConfigJson = null)
+        SkillModel model, string outputDirectory, bool force, IScriptEmitter emitter,
+        string? authConfigJson = null, string? manifestJson = null)
     {
         var targetDir = new DirectoryInfo(Path.GetFullPath(outputDirectory));
         byte[]? preservedSecrets = null;
@@ -105,6 +109,13 @@ public static class SkillWriter
             if (preservedTokenCacheLock is not null)
             {
                 File.WriteAllBytes(Path.Combine(stagingDir.FullName, SecretsScaffold.TokenCacheFileName + ".lock"), preservedTokenCacheLock);
+            }
+
+            if (manifestJson is not null)
+            {
+                // Always overwritten (unlike auth.json) — the manifest should always reflect
+                // the most recent invocation's options (spec.md FR-007).
+                File.WriteAllText(Path.Combine(stagingDir.FullName, SkillManifestIo.FileName), manifestJson);
             }
 
             if (targetDir.Exists)

@@ -11,6 +11,7 @@ api2skill generate ./petstore.json
 #      reference/<tag>.md     # full per-operation detail, loaded on demand
 #      scripts/call.cs        # the dispatcher (.cs by default; --script fsx|csx also available)
 #      secrets.example.json   # template — copy to secrets.json and fill in real credentials
+#      .api2skill.json        # generation manifest — records options for `update`
 #      .gitignore             # excludes secrets.json
 ```
 
@@ -55,6 +56,14 @@ api2skill generate ./stripe.json --include tag:Charges
 
 # Pick a different script kind
 api2skill generate ./petstore.json --script fsx   # or csx
+
+# Custom name and output path — options are recorded in .api2skill.json
+api2skill generate ./petstore.json --name my-petstore --out ./skills/my-petstore --script fsx --include tag:pet
+
+# Later, when the spec changes, refresh in place (no need to retype --script/--include/--out)
+api2skill update ./skills/my-petstore ./petstore-v2.json
+# Or re-read/re-fetch the manifest's original source:
+api2skill update ./skills/my-petstore
 ```
 
 Then, inside the generated skill directory:
@@ -93,7 +102,7 @@ src/Api2Skill/       the generator (console app)
   Model/              the emitter-agnostic SkillModel + the OpenAPI -> SkillModel mapping
   Emit/               SKILL.md/reference/secrets writers + the three script emitters
   Output/             directory write orchestration (safe --force, no partial output)
-  Cli/                the `generate` command
+  Cli/                the `generate` and `update` commands
 
 tests/Api2Skill.Tests/   xUnit — unit, golden/snapshot, and real subprocess integration tests
 

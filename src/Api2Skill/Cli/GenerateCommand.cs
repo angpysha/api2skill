@@ -259,10 +259,22 @@ public static class GenerateCommand
 
         var outputDirectory = options.OutputDirectory is { Length: > 0 } o ? o : Path.Combine(".", name);
 
+        // FR-001 (specs/003-skill-update-command): every generate records the options needed to
+        // reproduce it later via `update`, without any secret/credential values.
+        var manifestJson = SkillManifestIo.Serialize(new SkillManifest(
+            Name: name,
+            SpecSource: options.SpecSource,
+            ScriptKind: options.ScriptKind,
+            Include: options.Include,
+            Exclude: options.Exclude,
+            Format: options.Format,
+            BaseUrl: options.BaseUrl,
+            Insecure: options.Insecure));
+
         DirectoryInfo written;
         try
         {
-            written = SkillWriter.Write(model, outputDirectory, options.Force, emitter, authConfigJson);
+            written = SkillWriter.Write(model, outputDirectory, options.Force, emitter, authConfigJson, manifestJson);
         }
         catch (SkillDirectoryExistsException ex)
         {

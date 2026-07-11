@@ -1,4 +1,5 @@
 using Api2Skill.Cli;
+using Api2Skill.Output;
 
 namespace Api2Skill.Tests.Cli;
 
@@ -197,7 +198,7 @@ public class ExitCodeTests : IDisposable
         var outDir = Path.Combine(_workDir, "out-auth-missing");
         var options = Options(FixturePath("petstore.json"), outDir)
             with
-            { AuthConfigPath = Path.Combine(_workDir, "does-not-exist-auth.json") };
+        { AuthConfigPath = Path.Combine(_workDir, "does-not-exist-auth.json") };
 
         var exitCode = await GenerateCommand.RunAsync(options, CancellationToken.None);
 
@@ -250,5 +251,23 @@ public class ExitCodeTests : IDisposable
         Assert.True(File.Exists(Path.Combine(outDir, "auth.json")));
         var secretsExample = await File.ReadAllTextAsync(Path.Combine(outDir, "secrets.example.json"));
         Assert.Contains("BEARER_TOKEN", secretsExample, StringComparison.Ordinal);
+    }
+
+    // --- Generation manifest (T007, specs/003-skill-update-command) ---
+
+    [Fact]
+    public async Task ValidSpec_WritesGenerationManifestWithResolvedOptions()
+    {
+        var outDir = Path.Combine(_workDir, "out-manifest");
+        var options = Options(FixturePath("petstore.json"), outDir, scriptKind: "fsx") with { Include = ["tag:pet"] };
+
+        var exitCode = await GenerateCommand.RunAsync(options, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        var manifest = SkillManifestIo.TryLoad(outDir);
+        Assert.NotNull(manifest);
+        Assert.Equal(FixturePath("petstore.json"), manifest.SpecSource);
+        Assert.Equal("fsx", manifest.ScriptKind);
+        Assert.Equal(["tag:pet"], manifest.Include);
     }
 }

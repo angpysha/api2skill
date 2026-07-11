@@ -34,6 +34,17 @@ public class FsxCsxGoldenTests : IDisposable
         return SkillModelBuilder.Build(loaded.Document, loaded.SpecVersion, new BuildOptions(Name: "petstore"));
     }
 
+    private static string PetstoreManifestJson(string scriptKind) =>
+        SkillManifestIo.Serialize(new SkillManifest(
+            Name: "petstore",
+            SpecSource: "tests/Api2Skill.Tests/fixtures/petstore.json",
+            ScriptKind: scriptKind,
+            Include: [],
+            Exclude: [],
+            Format: null,
+            BaseUrl: null,
+            Insecure: false));
+
     private static void AssertMatchesGolden(string outputDir, string approvedDir)
     {
         var approvedFiles = Directory.GetFiles(approvedDir, "*", SearchOption.AllDirectories)
@@ -59,7 +70,7 @@ public class FsxCsxGoldenTests : IDisposable
     {
         var model = await BuildPetstoreModelAsync();
         var outputDir = Path.Combine(_workDir, "fsx");
-        SkillWriter.Write(model, outputDir, force: false, new FsxEmitter());
+        SkillWriter.Write(model, outputDir, force: false, new FsxEmitter(), manifestJson: PetstoreManifestJson("fsx"));
 
         AssertMatchesGolden(outputDir, FixturePath(Path.Combine("__approved__", "petstore-fsx")));
     }
@@ -69,7 +80,7 @@ public class FsxCsxGoldenTests : IDisposable
     {
         var model = await BuildPetstoreModelAsync();
         var outputDir = Path.Combine(_workDir, "csx");
-        SkillWriter.Write(model, outputDir, force: false, new CsxEmitter());
+        SkillWriter.Write(model, outputDir, force: false, new CsxEmitter(), manifestJson: PetstoreManifestJson("csx"));
 
         AssertMatchesGolden(outputDir, FixturePath(Path.Combine("__approved__", "petstore-csx")));
     }
