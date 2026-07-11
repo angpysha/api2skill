@@ -1,0 +1,212 @@
+using System.CommandLine;
+using Api2Skill.Emit;
+using Api2Skill.Input;
+using Api2Skill.Model;
+using Api2Skill.Output;
+using Api2Skill.Parsing;
+
+namespace Api2Skill.Cli;
+
+/// <summary>Exit codes per contracts/cli.md.</summary>
+public static class ExitCodes
+{
+    public const int Success = 0;
+    public const int ParseFailure = 1;
+    public const int UsageError = 2;
+    public const int OutputExists = 3;
+    public const int AcquisitionFailure = 4;
+}
+
+/// <summary>
+/// Builds the <c>generate</c> command (contracts/cli.md). Accepts a file, URL, or stdin
+/// (<c>-</c>) spec source via <see cref="SpecSource.AcquireAsync"/>, and emits through
+/// whichever of the three <see cref="IScriptEmitter"/> implementations <c>--script</c> selects
+/// (<see cref="CsFileEmitter"/> default, <see cref="FsxEmitter"/>, <see cref="CsxEmitter"/>).
+/// </summary>
+public static class GenerateCommand
+{
+    public static Command Create()
+    {
+        var specArgument = new Argument<string>("spec-source")
+        {
+            Description = "Local file path, remote URL, or '-' for stdin.",
+        };
+        var outOption = new Option<string?>("--out", "-o")
+        {
+            Description = "Output directory. Defaults to ./<slug-of-title>.",
+        };
+        var nameOption = new Option<string?>("--name")
+        {
+            Description = "Override the skill name (defaults to a slug of info.title).",
+        };
+        var scriptOption = new Option<string>("--script")
+        {
+            Description = "Emitter to use: cs (default), fsx, or csx.",
+            DefaultValueFactory = _ => "cs",
+        };
+        var includeOption = new Option<string[]>("--include")
+        {
+            Description = "Keep only matching tag:/path:/op: selectors (repeatable).",
+            DefaultValueFactory = _ => [],
+        };
+        var excludeOption = new Option<string[]>("--exclude")
+        {
+            Description = "Drop matching tag:/path:/op: selectors (repeatable, applied after --include).",
+            DefaultValueFactory = _ => [],
+        };
+        var forceOption = new Option<bool>("--force", "-f")
+        {
+            Description = "Regenerate over an existing output directory.",
+        };
+        var insecureOption = new Option<bool>("--insecure")
+        {
+            Description = "Dev-only: accept untrusted HTTPS certificates when fetching a spec URL or making generated calls.",
+        };
+        var formatOption = new Option<string?>("--format")
+        {
+            Description = "Force the input format (json|yaml) instead of sniffing it.",
+        };
+        var baseUrlOption = new Option<string?>("--base-url")
+        {
+            Description = "Base URL to use when the spec has no `servers` entry.",
+        };
+
+        var command = new Command("generate", "Generate a Claude Skill from an OpenAPI/Swagger document")
+        {
+            specArgument,
+            outOption,
+            nameOption,
+            scriptOption,
+            includeOption,
+            excludeOption,
+            forceOption,
+            insecureOption,
+            formatOption,
+            baseUrlOption,
+        };
+
+        command.SetAction(async (parseResult, cancellationToken) =>
+        {
+            var options = new GenerateOptions(
+                SpecSource: parseResult.GetValue(specArgument)!,
+                OutputDirectory: parseResult.GetValue(outOption),
+                Name: parseResult.GetValue(nameOption),
+                ScriptKind: parseResult.GetValue(scriptOption)!,
+                Include: SplitSelectors(parseResult.GetValue(includeOption)),
+                Exclude: SplitSelectors(parseResult.GetValue(excludeOption)),
+                Force: parseResult.GetValue(forceOption),
+                Insecure: parseResult.GetValue(insecureOption),
+                Format: parseResult.GetValue(formatOption),
+                BaseUrl: parseResult.GetValue(baseUrlOption));
+
+            return await RunAsync(options, cancellationToken).ConfigureAwait(false);
+        });
+
+        return command;
+    }
+
+    /// <summary>
+    /// Expands comma-separated selector values (<c>--include tag:a,tag:b</c>) alongside
+    /// repeatable-flag usage (<c>--include tag:a --include tag:b</c>) — contracts/cli.md
+    /// promises both forms for <c>--include</c>/<c>--exclude</c>.
+    /// </summary>
+    internal static string[] SplitSelectors(string[]? raw) =>
+        raw is null or []
+            ? []
+            : [.. raw.SelectMany(v => v.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))];
+
+    internal static async Task<int> RunAsync(GenerateOptions options, CancellationToken cancellationToken)
+    {
+        MemoryStream stream;
+        string format;
+        try
+        {
+            (stream, format) = await SpecSource.AcquireAsync(options.SpecSource, options.Format, options.Insecure, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (FileNotFoundException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return ExitCodes.AcquisitionFailure;
+        }
+        catch (HttpRequestException ex)
+        {
+            // Covers connection failures, DNS failures, and TLS certificate errors when
+            // --insecure was not passed (EC-8).
+            Console.Error.WriteLine($"Failed to fetch spec from {options.SpecSource}: {ex.Message}");
+            if (!options.Insecure)
+            {
+                Console.Error.WriteLine("If the server uses a self-signed/untrusted certificate, pass --insecure (dev-only).");
+            }
+            return ExitCodes.AcquisitionFailure;
+        }
+
+        LoadedSpec loaded;
+        await using (stream)
+        {
+            try
+            {
+                loaded = await OpenApiLoader.LoadAsync(stream, format, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OpenApiParseException ex)
+            {
+                Console.Error.WriteLine("Failed to parse the OpenAPI document:");
+                foreach (var error in ex.Errors)
+                {
+                    Console.Error.WriteLine(error.Pointer is { Length: > 0 }
+                        ? $"  {error.Pointer}: {error.Message}"
+                        : $"  {error.Message}");
+                }
+                return ExitCodes.ParseFailure;
+            }
+        }
+
+        var name = options.Name is { Length: > 0 }
+            ? Slug.Create(options.Name)
+            : Slug.Create(loaded.Document.Info?.Title is { Length: > 0 } title ? title : "skill");
+
+        var buildOptions = new BuildOptions(
+            Name: name,
+            IncludeSelectors: options.Include,
+            ExcludeSelectors: options.Exclude,
+            BaseUrlOverride: options.BaseUrl,
+            InsecureDefault: options.Insecure);
+
+        var model = SkillModelBuilder.Build(loaded.Document, loaded.SpecVersion, buildOptions);
+
+        IScriptEmitter? emitter = options.ScriptKind switch
+        {
+            "cs" => new CsFileEmitter(),
+            "fsx" => new FsxEmitter(),
+            "csx" => new CsxEmitter(),
+            _ => null,
+        };
+        if (emitter is null)
+        {
+            Console.Error.WriteLine($"Unknown --script '{options.ScriptKind}'. Valid values: cs, fsx, csx.");
+            return ExitCodes.UsageError;
+        }
+
+        var outputDirectory = options.OutputDirectory is { Length: > 0 } o ? o : Path.Combine(".", name);
+
+        DirectoryInfo written;
+        try
+        {
+            written = SkillWriter.Write(model, outputDirectory, options.Force, emitter);
+        }
+        catch (SkillDirectoryExistsException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return ExitCodes.OutputExists;
+        }
+
+        foreach (var warning in loaded.Warnings.Concat(model.Warnings))
+        {
+            Console.Error.WriteLine($"warning: {warning}");
+        }
+
+        var opCount = model.Tags.Sum(t => t.Operations.Count);
+        Console.WriteLine($"{written.FullName} ({opCount} operation(s), {model.Tags.Count} tag(s))");
+        return ExitCodes.Success;
+    }
+}
