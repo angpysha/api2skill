@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Sockets;
 using System.Text;
 using Api2Skill.Input;
 
@@ -14,16 +13,15 @@ namespace Api2Skill.Tests.Input;
 /// real regression guard for a flaky one; see specs/001-openapi-to-skill/quickstart.md
 /// Scenario 5 for the documented manual check.
 /// </summary>
+[Collection("LoopbackHttp")]
 public class UrlFetchTlsTests : IAsyncLifetime
 {
-    private readonly HttpListener _listener = new();
+    private HttpListener _listener = null!;
     private int _port;
 
     public Task InitializeAsync()
     {
-        _port = GetFreeLoopbackPort();
-        _listener.Prefixes.Add($"http://127.0.0.1:{_port}/");
-        _listener.Start();
+        (_listener, _port) = LoopbackHttpListenerFactory.Start();
         return Task.CompletedTask;
     }
 
@@ -33,14 +31,6 @@ public class UrlFetchTlsTests : IAsyncLifetime
         _listener.Close();
         return Task.CompletedTask;
     }
-
-    private static int GetFreeLoopbackPort()
-    {
-        using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-        socket.Bind(new IPEndPoint(IPAddress.Loopback, 0));
-        return ((IPEndPoint)socket.LocalEndPoint!).Port;
-    }
-
     private async Task ServeOnceAsync(string body, string contentType = "application/json")
     {
         var context = await _listener.GetContextAsync().WaitAsync(TimeSpan.FromSeconds(10));

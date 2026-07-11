@@ -92,8 +92,8 @@ public static class GenerateCommand
                 OutputDirectory: parseResult.GetValue(outOption),
                 Name: parseResult.GetValue(nameOption),
                 ScriptKind: parseResult.GetValue(scriptOption)!,
-                Include: parseResult.GetValue(includeOption) ?? [],
-                Exclude: parseResult.GetValue(excludeOption) ?? [],
+                Include: SplitSelectors(parseResult.GetValue(includeOption)),
+                Exclude: SplitSelectors(parseResult.GetValue(excludeOption)),
                 Force: parseResult.GetValue(forceOption),
                 Insecure: parseResult.GetValue(insecureOption),
                 Format: parseResult.GetValue(formatOption),
@@ -104,6 +104,16 @@ public static class GenerateCommand
 
         return command;
     }
+
+    /// <summary>
+    /// Expands comma-separated selector values (<c>--include tag:a,tag:b</c>) alongside
+    /// repeatable-flag usage (<c>--include tag:a --include tag:b</c>) — contracts/cli.md
+    /// promises both forms for <c>--include</c>/<c>--exclude</c>.
+    /// </summary>
+    internal static string[] SplitSelectors(string[]? raw) =>
+        raw is null or []
+            ? []
+            : [.. raw.SelectMany(v => v.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))];
 
     internal static async Task<int> RunAsync(GenerateOptions options, CancellationToken cancellationToken)
     {

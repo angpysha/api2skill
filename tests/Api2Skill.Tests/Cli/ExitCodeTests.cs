@@ -88,6 +88,19 @@ public class ExitCodeTests : IDisposable
         Assert.False(Directory.Exists(outDir));
     }
 
+    [Theory]
+    [InlineData(new[] { "tag:pet,tag:store" }, new[] { "tag:pet", "tag:store" })]
+    [InlineData(new[] { "tag:pet", "tag:store" }, new[] { "tag:pet", "tag:store" })]
+    [InlineData(new[] { "tag:pet, tag:store" }, new[] { "tag:pet", "tag:store" })]
+    [InlineData(new string[0], new string[0])]
+    public void SplitSelectors_AcceptsBothCommaSeparatedAndRepeatedFlagForms(string[] raw, string[] expected)
+    {
+        // contracts/cli.md documents both `--include a,b` and `--include a --include b`;
+        // this is a regression guard for the gap where only the repeated-flag form actually
+        // worked (comma-joined values were treated as one literal, unmatchable selector).
+        Assert.Equal(expected, GenerateCommand.SplitSelectors(raw));
+    }
+
     [Fact]
     public async Task ValidSpec_ExitsZero_AndWritesTheSkill()
     {

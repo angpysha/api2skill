@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Net;
-using System.Net.Sockets;
 using Api2Skill.Emit;
 using Api2Skill.Model;
 using Api2Skill.Output;
@@ -14,18 +13,17 @@ namespace Api2Skill.Tests.Integration;
 /// performed manually during development, now automated. Complements AuthCodegenTests
 /// (source-text assertions) with real execution coverage.
 /// </summary>
+[Collection("LoopbackHttp")]
 public class DispatcherAuthTests : IAsyncLifetime
 {
     private readonly string _workDir = Path.Combine(Path.GetTempPath(), "api2skill-dispatcher-" + Guid.NewGuid().ToString("N"));
-    private readonly HttpListener _listener = new();
+    private HttpListener _listener = null!;
     private int _port;
     private string _skillDir = "";
 
     public async Task InitializeAsync()
     {
-        _port = GetFreeLoopbackPort();
-        _listener.Prefixes.Add($"http://127.0.0.1:{_port}/");
-        _listener.Start();
+        (_listener, _port) = LoopbackHttpListenerFactory.Start();
 
         _skillDir = await GenerateMultiAuthSkillAsync();
         await File.WriteAllTextAsync(Path.Combine(_skillDir, "secrets.json"), $$"""
@@ -47,13 +45,6 @@ public class DispatcherAuthTests : IAsyncLifetime
             Directory.Delete(_workDir, recursive: true);
         }
         return Task.CompletedTask;
-    }
-
-    private static int GetFreeLoopbackPort()
-    {
-        using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-        socket.Bind(new IPEndPoint(IPAddress.Loopback, 0));
-        return ((IPEndPoint)socket.LocalEndPoint!).Port;
     }
 
     private async Task<string> GenerateMultiAuthSkillAsync()

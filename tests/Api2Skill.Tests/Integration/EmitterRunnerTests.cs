@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Net;
-using System.Net.Sockets;
 using Api2Skill.Emit;
 using Api2Skill.Model;
 using Api2Skill.Output;
@@ -16,17 +15,16 @@ namespace Api2Skill.Tests.Integration;
 /// .cs project; the full four-scheme matrix is already proven once, for .cs — this is about
 /// proving each *translation* is correct, not re-proving the shared model/codegen approach).
 /// </summary>
+[Collection("LoopbackHttp")]
 public class EmitterRunnerTests : IAsyncLifetime
 {
     private readonly string _workDir = Path.Combine(Path.GetTempPath(), "api2skill-emitrun-" + Guid.NewGuid().ToString("N"));
-    private readonly HttpListener _listener = new();
+    private HttpListener _listener = null!;
     private int _port;
 
     public Task InitializeAsync()
     {
-        _port = GetFreeLoopbackPort();
-        _listener.Prefixes.Add($"http://127.0.0.1:{_port}/");
-        _listener.Start();
+        (_listener, _port) = LoopbackHttpListenerFactory.Start();
         return Task.CompletedTask;
     }
 
@@ -39,13 +37,6 @@ public class EmitterRunnerTests : IAsyncLifetime
             Directory.Delete(_workDir, recursive: true);
         }
         return Task.CompletedTask;
-    }
-
-    private static int GetFreeLoopbackPort()
-    {
-        using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-        socket.Bind(new IPEndPoint(IPAddress.Loopback, 0));
-        return ((IPEndPoint)socket.LocalEndPoint!).Port;
     }
 
     private static string FixturePath(string name) => Path.Combine(AppContext.BaseDirectory, "fixtures", name);
