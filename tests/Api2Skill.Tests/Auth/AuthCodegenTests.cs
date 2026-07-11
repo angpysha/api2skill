@@ -24,18 +24,20 @@ public class AuthCodegenTests : IDisposable
 
     private static string FixturePath(string name) => Path.Combine(AppContext.BaseDirectory, "fixtures", name);
 
-    private static async Task<string> GenerateMultiAuthDispatcherAsync()
+    private static async Task<string> GenerateMultiAuthDispatcherAsync() =>
+        await GenerateMultiAuthDispatcherAsync(new CsFileEmitter(), "call.cs");
+
+    private static async Task<string> GenerateMultiAuthDispatcherAsync(IScriptEmitter emitter, string scriptFileName)
     {
         await using var stream = new MemoryStream(await File.ReadAllBytesAsync(FixturePath("multi-auth.yaml")));
         var loaded = await OpenApiLoader.LoadAsync(stream, "yaml");
         var model = SkillModelBuilder.Build(loaded.Document, loaded.SpecVersion, new BuildOptions(Name: "multi-auth"));
 
-        var emitter = new CsFileEmitter();
         var dir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "api2skill-authcodegen-src-" + Guid.NewGuid().ToString("N")));
         try
         {
             emitter.Emit(model, dir);
-            return await File.ReadAllTextAsync(Path.Combine(dir.FullName, "scripts", "call.cs"));
+            return await File.ReadAllTextAsync(Path.Combine(dir.FullName, "scripts", scriptFileName));
         }
         finally
         {
@@ -96,6 +98,30 @@ public class AuthCodegenTests : IDisposable
         Assert.DoesNotContain("bearerToken\":", source, StringComparison.Ordinal);
         Assert.DoesNotContain("\"clientSecret\":\"", source, StringComparison.Ordinal); // a hardcoded JSON value, not the lookup key
         Assert.Contains("SecretValue(secrets, scheme.Id, \"clientSecret\")", source, StringComparison.Ordinal); // looked up at runtime, not embedded
+    }
+
+    public static IEnumerable<object[]> AllEmitters()
+    {
+        yield return [new CsFileEmitter(), "call.cs", "SecretValue(secrets, scheme.Id, \"clientSecret\")"];
+        yield return [new CsxEmitter(), "call.csx", "SecretValue(secrets, scheme.Id, \"clientSecret\")"];
+        yield return [new FsxEmitter(), "call.fsx", "schemeSecret secrets scheme.Id \"clientSecret\""];
+    }
+
+    [Theory]
+    [MemberData(nameof(AllEmitters))]
+    public async Task Generate_NeverEmbedsARealCredential_AcrossAllThreeEmitters(
+        IScriptEmitter emitter, string scriptFileName, string expectedLookupCall)
+    {
+        // SEC-004 (Phase 8.5 security review): the "no hardcoded credential" guarantee was
+        // previously only regression-tested for the .cs emitter, even though FsxEmitter and
+        // CsxEmitter independently generate their own auth codegen — a future change to either
+        // could silently regress Constitution IV's "never embed a real credential" guarantee
+        // with nothing catching it. This runs the same assertions against all three.
+        var source = await GenerateMultiAuthDispatcherAsync(emitter, scriptFileName);
+
+        Assert.DoesNotContain("bearerToken\":", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"clientSecret\":\"", source, StringComparison.Ordinal);
+        Assert.Contains(expectedLookupCall, source, StringComparison.Ordinal);
     }
 
     [Fact]

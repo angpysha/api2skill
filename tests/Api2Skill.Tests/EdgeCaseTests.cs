@@ -114,4 +114,157 @@ public class EdgeCaseTests
         Assert.Equal("https://override.example.com", model.BaseUrl);
         Assert.DoesNotContain(model.Warnings, w => w.Contains("no `servers` entry", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public async Task ExplicitlyDuplicatedOperationId_IsDisambiguatedTheSameWayAsASynthesizedCollision()
+    {
+        // EC-5 covers colliding *synthesized* ids; this covers the author declaring the same
+        // literal operationId twice by hand (a genuinely invalid-but-common-in-the-wild spec) —
+        // the dispatcher must still be able to resolve both operations unambiguously.
+        const string json = """
+        {
+          "openapi": "3.0.3",
+          "info": { "title": "Duplicate Explicit Ids", "version": "1" },
+          "servers": [{ "url": "https://example.com" }],
+          "paths": {
+            "/a": { "get": { "operationId": "dup", "responses": { "200": { "description": "ok" } } } },
+            "/b": { "get": { "operationId": "dup", "responses": { "200": { "description": "ok" } } } }
+          }
+        }
+        """;
+        var doc = await ParseAsync(json);
+        var model = SkillModelBuilder.Build(doc, Microsoft.OpenApi.OpenApiSpecVersion.OpenApi3_0,
+            new BuildOptions(Name: "dup-explicit"));
+
+        var ids = model.Tags.SelectMany(t => t.Operations).Select(o => o.OperationId).ToList();
+
+        Assert.Equal(2, ids.Count);
+        Assert.Equal(ids.Count, ids.Distinct(StringComparer.Ordinal).Count());
+        Assert.Contains("dup", ids);
+        Assert.Contains("dup_2", ids);
+    }
+
+    [Fact]
+    public async Task CircularSchemaReference_DoesNotHangOrCrashDuringBuild()
+    {
+        // A self-referencing schema (a "Node" with a "children" array of itself and a "parent"
+        // pointing back to itself) is legal OpenAPI. SkillModelBuilder only ever summarizes the
+        // *top-level* property names of a request-body schema (SummarizeSchema doesn't recurse
+        // into nested $ref targets), so this must complete promptly rather than looping forever
+        // walking the reference graph.
+        const string json = """
+        {
+          "openapi": "3.0.3",
+          "info": { "title": "Circular Refs", "version": "1" },
+          "servers": [{ "url": "https://example.com" }],
+          "paths": {
+            "/node": {
+              "post": {
+                "operationId": "createNode",
+                "requestBody": {
+                  "required": true,
+                  "content": {
+                    "application/json": { "schema": { "$ref": "#/components/schemas/Node" } }
+                  }
+                },
+                "responses": { "200": { "description": "ok" } }
+              }
+            }
+          },
+          "components": {
+            "schemas": {
+              "Node": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "children": { "type": "array", "items": { "$ref": "#/components/schemas/Node" } },
+                  "parent": { "$ref": "#/components/schemas/Node" }
+                }
+              }
+            }
+          }
+        }
+        """;
+        var doc = await ParseAsync(json);
+
+        var buildTask = Task.Run(() => SkillModelBuilder.Build(
+            doc, Microsoft.OpenApi.OpenApiSpecVersion.OpenApi3_0, new BuildOptions(Name: "circular")));
+        var completed = await Task.WhenAny(buildTask, Task.Delay(TimeSpan.FromSeconds(10)));
+
+        Assert.Same(buildTask, completed);
+        var model = await buildTask;
+        var op = Assert.Single(model.Tags.SelectMany(t => t.Operations));
+        Assert.NotNull(op.RequestBody);
+        Assert.Contains("object", op.RequestBody!.SchemaSummary);
+    }
+
+    [Fact]
+    public async Task NonStringEnumValues_OnAQueryParameter_DoNotCrashMapping()
+    {
+        // An integer-valued enum (e.g. a numeric status code parameter) is legal OpenAPI;
+        // ParameterModel.Type only ever records the schema *type* string ("integer"), never
+        // enumerates/echoes individual enum values, so this must map cleanly.
+        const string json = """
+        {
+          "openapi": "3.0.3",
+          "info": { "title": "Non-String Enum", "version": "1" },
+          "servers": [{ "url": "https://example.com" }],
+          "paths": {
+            "/items": {
+              "get": {
+                "operationId": "listItems",
+                "parameters": [
+                  { "name": "status", "in": "query", "schema": { "type": "integer", "enum": [1, 2, 3] } }
+                ],
+                "responses": { "200": { "description": "ok" } }
+              }
+            }
+          }
+        }
+        """;
+        var doc = await ParseAsync(json);
+        var model = SkillModelBuilder.Build(doc, Microsoft.OpenApi.OpenApiSpecVersion.OpenApi3_0,
+            new BuildOptions(Name: "non-string-enum"));
+
+        var op = Assert.Single(model.Tags.SelectMany(t => t.Operations));
+        var param = Assert.Single(op.Parameters);
+        Assert.Equal("status", param.Name);
+        Assert.Equal("Integer", param.Type);
+    }
+
+    [Fact]
+    public async Task DeeplyNestedSchema_DoesNotStackOverflowOrHang()
+    {
+        // Nested levels of `{"type":"object","properties":{"child": <nested>}}` —
+        // SummarizeSchema must not attempt to walk this recursively (it only reads the top
+        // level), but this guards the whole parse->build pipeline against a pathological spec
+        // regardless. Kept comfortably under System.Text.Json's default 64-level reader depth
+        // (the surrounding paths/requestBody/content wrapper adds a handful of levels on top of
+        // this) — a spec deep enough to hit *that* limit already fails cleanly as a parse error
+        // (FR-010), which is a distinct, already-covered scenario (ExitCodeTests), not a hang.
+        var nested = "{\"type\":\"string\"}";
+        for (var i = 0; i < 20; i++)
+        {
+            nested = "{\"type\":\"object\",\"properties\":{\"child\":" + nested + "}}";
+        }
+        var json = "{"
+            + "\"openapi\":\"3.0.3\","
+            + "\"info\":{\"title\":\"Deep Nesting\",\"version\":\"1\"},"
+            + "\"servers\":[{\"url\":\"https://example.com\"}],"
+            + "\"paths\":{\"/deep\":{\"post\":{"
+            + "\"operationId\":\"postDeep\","
+            + "\"requestBody\":{\"content\":{\"application/json\":{\"schema\":" + nested + "}}},"
+            + "\"responses\":{\"200\":{\"description\":\"ok\"}}"
+            + "}}}"
+            + "}";
+        var doc = await ParseAsync(json);
+
+        var buildTask = Task.Run(() => SkillModelBuilder.Build(
+            doc, Microsoft.OpenApi.OpenApiSpecVersion.OpenApi3_0, new BuildOptions(Name: "deep-nesting")));
+        var completed = await Task.WhenAny(buildTask, Task.Delay(TimeSpan.FromSeconds(10)));
+
+        Assert.Same(buildTask, completed);
+        var model = await buildTask;
+        Assert.Single(model.Tags.SelectMany(t => t.Operations));
+    }
 }

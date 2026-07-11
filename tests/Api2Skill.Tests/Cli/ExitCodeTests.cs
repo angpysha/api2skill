@@ -126,4 +126,42 @@ public class ExitCodeTests : IDisposable
         Assert.True(File.Exists(Path.Combine(outDir, "SKILL.md")));
         Assert.True(Directory.Exists(Path.Combine(outDir, "scripts")));
     }
+
+    [Fact]
+    public async Task UnreachableUrl_ExitsFour_AndWritesNoOutputDirectory()
+    {
+        // EC-8/contracts/cli.md: input-acquisition failure over HTTP (not just a missing local
+        // file, already covered by MissingSpecFile_ExitsFour) must map to the same documented
+        // exit code 4, not an unhandled exception or a different code. A closed loopback port
+        // gives a fast, reliable "connection refused" without depending on external network
+        // access or TLS setup (see UrlFetchTlsTests for why the TLS variant is a manual check).
+        using var probe = new System.Net.Sockets.Socket(
+            System.Net.Sockets.AddressFamily.InterNetwork, System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp);
+        probe.Bind(new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 0));
+        var closedPort = ((System.Net.IPEndPoint)probe.LocalEndPoint!).Port;
+        probe.Close(); // never listened on — guaranteed connection-refused on this port.
+
+        var outDir = Path.Combine(_workDir, "out-unreachable");
+
+        var exitCode = await GenerateCommand.RunAsync(
+            Options($"http://127.0.0.1:{closedPort}/spec.json", outDir), CancellationToken.None);
+
+        Assert.Equal(ExitCodes.AcquisitionFailure, exitCode);
+        Assert.False(Directory.Exists(outDir));
+    }
+
+    [Fact]
+    public async Task IncludeSelectorMatchingNothing_StillExitsZero_WithAMinimalSkillAndAWarning()
+    {
+        // CLI-level companion to Model/FilterTests.Include_SelectorWithNoMatches_ProducesEmptyModel:
+        // confirms the *whole pipeline* (not just SkillModelBuilder in isolation) treats a
+        // no-match filter as a valid, if pointless, generation rather than a usage error.
+        var outDir = Path.Combine(_workDir, "out-filtered-empty");
+        var options = Options(FixturePath("petstore.json"), outDir) with { Include = ["tag:does-not-exist"] };
+
+        var exitCode = await GenerateCommand.RunAsync(options, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.True(File.Exists(Path.Combine(outDir, "SKILL.md")));
+    }
 }

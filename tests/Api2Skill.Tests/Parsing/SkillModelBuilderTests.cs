@@ -100,7 +100,7 @@ public class SkillModelBuilderTests
     {
         var model = await BuildFromFixtureAsync("multi-auth.yaml", "yaml");
 
-        Assert.Equal(5, model.Tags.Sum(t => t.Operations.Count));
+        Assert.Equal(6, model.Tags.Sum(t => t.Operations.Count));
 
         var kinds = model.SecuritySchemes.ToDictionary(s => s.Id, s => s.Kind);
         Assert.Equal(SecuritySchemeKind.ApiKey, kinds["apiKeyAuth"]);

@@ -41,7 +41,9 @@ public static class SkillMdWriter
         sb.AppendLine();
         sb.AppendLine("Copy `secrets.example.json` to `secrets.json` and fill in real credentials before calling authenticated operations. `secrets.json` is gitignored — never commit it.");
         sb.AppendLine();
-        sb.AppendLine("Untrusted HTTPS (self-signed/invalid certificates) is **off by default**. Set `API2SKILL_INSECURE=1` to accept them — **dev/local use only**, never in production.");
+        sb.AppendLine(model.InsecureDefault
+            ? "Untrusted HTTPS (self-signed/invalid certificates) is **on by default for this skill** (generated with `--insecure`) — **dev/local use only**, never in production. Set `API2SKILL_INSECURE=0` to require valid certificates instead."
+            : "Untrusted HTTPS (self-signed/invalid certificates) is **off by default**. Set `API2SKILL_INSECURE=1` to accept them — **dev/local use only**, never in production.");
         sb.AppendLine();
 
         if (model.SecuritySchemes.Count > 0)

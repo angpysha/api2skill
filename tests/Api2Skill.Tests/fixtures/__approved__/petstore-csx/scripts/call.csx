@@ -83,6 +83,11 @@ async Task<int> Run(string[] args, string scriptDir)
         using var request = new HttpRequestMessage(new HttpMethod(op.Method), url);
         foreach (var (name, value) in headers)
         {
+            if (value.AsSpan().IndexOfAny('\r', '\n') >= 0)
+            {
+                Console.Error.WriteLine($"Invalid value for header '{name}': control characters are not allowed.");
+                return 2;
+            }
             request.Headers.TryAddWithoutValidation(name, value);
         }
 
@@ -120,8 +125,16 @@ JsonElement? LoadSecrets(string scriptDir)
     {
         return null;
     }
-    using var doc = JsonDocument.Parse(File.ReadAllText(secretsPath));
-    return doc.RootElement.Clone();
+    try
+    {
+        using var doc = JsonDocument.Parse(File.ReadAllText(secretsPath));
+        return doc.RootElement.Clone();
+    }
+    catch (JsonException ex)
+    {
+        Console.Error.WriteLine($"warning: secrets.json is not valid JSON ({ex.Message}); proceeding as if no secrets were configured.");
+        return null;
+    }
 }
 
 string? SecretValue(JsonElement? secrets, string schemeId, string key)
@@ -194,17 +207,26 @@ async Task<string?> FetchOAuth2TokenAsync(HttpClient http, string tokenUrl, stri
     {
         return null;
     }
-    using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-    if (!doc.RootElement.TryGetProperty("access_token", out var tokenEl))
+    try
     {
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        if (!doc.RootElement.TryGetProperty("access_token", out var tokenEl))
+        {
+            return null;
+        }
+        var token = tokenEl.GetString();
+        if (token is not null)
+        {
+            tokenCache[cacheKey] = token;
+        }
+        return token;
+    }
+    catch (JsonException)
+    {
+        // The token endpoint returned a 2xx with a body that isn't valid JSON — treat
+        // the same as a failed token fetch rather than crashing the whole dispatch.
         return null;
     }
-    var token = tokenEl.GetString();
-    if (token is not null)
-    {
-        tokenCache[cacheKey] = token;
-    }
-    return token;
 }
 
 (Dictionary<string, string> Params, string? Body) ParseArgs(string[] rest)

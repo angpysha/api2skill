@@ -63,6 +63,21 @@ paths:
         "200":
           description: ok
 
+  /header-echo-op:
+    get:
+      tags: [auth-samples]
+      operationId: headerEchoOp
+      summary: No auth — takes a caller-supplied header parameter, for header-injection tests
+      parameters:
+        - name: X-Custom
+          in: header
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ok
+
 components:
   securitySchemes:
     apiKeyAuth:

@@ -29,8 +29,12 @@ let secretsPath = IO.Path.Combine(__SOURCE_DIRECTORY__, "..", "secrets.json")
 
 let loadSecrets () : JsonElement option =
     if IO.File.Exists(secretsPath) then
-        use doc = JsonDocument.Parse(IO.File.ReadAllText(secretsPath))
-        Some (doc.RootElement.Clone())
+        try
+            use doc = JsonDocument.Parse(IO.File.ReadAllText(secretsPath))
+            Some (doc.RootElement.Clone())
+        with :? JsonException as ex ->
+            eprintfn "warning: secrets.json is not valid JSON (%s); proceeding as if no secrets were configured." ex.Message
+            None
     else
         None
 
@@ -85,13 +89,18 @@ let fetchOAuth2Token (http: HttpClient) (tokenUrl: string) (clientId: string) (c
         else
 
         let! text = response.Content.ReadAsStringAsync()
-        use doc = JsonDocument.Parse(text)
-        match doc.RootElement.TryGetProperty("access_token") with
-        | false, _ -> return None
-        | true, tokenEl ->
-            let token = tokenEl.GetString()
-            tokenCache.[cacheKey] <- token
-            return Some token
+        try
+            use doc = JsonDocument.Parse(text)
+            match doc.RootElement.TryGetProperty("access_token") with
+            | false, _ -> return None
+            | true, tokenEl ->
+                let token = tokenEl.GetString()
+                tokenCache.[cacheKey] <- token
+                return Some token
+        with :? JsonException ->
+            // The token endpoint returned a 2xx with a body that isn't valid JSON — treat
+            // the same as a failed token fetch rather than crashing the whole dispatch.
+            return None
     }
 
 let applyAuth (http: HttpClient) (scheme: SchemeSpec) (secrets: JsonElement option) (query: ResizeArray<string>) (headers: ResizeArray<string * string>) (tokenCache: Dictionary<string, string>) : Task<unit> =
@@ -195,6 +204,13 @@ let run (args: string[]) : Task<int> =
             let url =
                 baseUrl.TrimEnd('/') + path +
                 (if query.Count > 0 then "?" + String.concat "&" query else "")
+
+            let invalidHeaderName =
+                headers |> Seq.tryPick (fun (n, v) -> if v.IndexOfAny([| '\r'; '\n' |]) >= 0 then Some n else None)
+            if invalidHeaderName.IsSome then
+                eprintfn "Invalid value for header '%s': control characters are not allowed." invalidHeaderName.Value
+                return 2
+            else
 
             use request = new HttpRequestMessage(HttpMethod(op.Method), url)
             for (name, value) in headers do

@@ -111,6 +111,11 @@ public static class SkillModelBuilder
             warnings.Add("The spec (after any filters) has no callable operations; generated a minimal skill (OQ-4).");
         }
 
+        if (options.InsecureDefault)
+        {
+            warnings.Add("--insecure was set: this skill's dispatcher accepts untrusted TLS certificates by default. Dev/local use only — regenerate without --insecure before pointing it at any non-dev target.");
+        }
+
         return new SkillModel(
             Name: options.Name,
             Title: document.Info?.Title is { Length: > 0 } title ? title : options.Name,

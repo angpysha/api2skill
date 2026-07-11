@@ -113,4 +113,64 @@ public class FilterTests
         Assert.Empty(model.Tags);
         Assert.Contains(model.Warnings, w => w.Contains("no callable operations"));
     }
+
+    [Fact]
+    public async Task Selector_WithNoColon_MatchesNothing_RatherThanThrowingOrMatchingEverything()
+    {
+        // "pet" (missing the "tag:"/"path:"/"op:" prefix) is a malformed selector — the CLI
+        // does not validate selector grammar up front (contracts/cli.md documents the grammar
+        // but the builder has no separate validation pass), so this must fail closed (match
+        // nothing, same as an unrecognized selector kind) rather than silently matching every
+        // operation or throwing.
+        var doc = await LoadPetstoreDocumentAsync();
+        var model = SkillModelBuilder.Build(doc, Microsoft.OpenApi.OpenApiSpecVersion.OpenApi3_0,
+            new BuildOptions(Name: "petstore", IncludeSelectors: ["pet"]));
+
+        Assert.Empty(model.Tags);
+        Assert.Contains(model.Warnings, w => w.Contains("no callable operations"));
+    }
+
+    [Fact]
+    public async Task Selector_WithUnrecognizedKindPrefix_MatchesNothing()
+    {
+        // "method:GET" is a plausible-looking but unsupported selector kind — same fail-closed
+        // behavior as a missing colon.
+        var doc = await LoadPetstoreDocumentAsync();
+        var model = SkillModelBuilder.Build(doc, Microsoft.OpenApi.OpenApiSpecVersion.OpenApi3_0,
+            new BuildOptions(Name: "petstore", IncludeSelectors: ["method:GET"]));
+
+        Assert.Empty(model.Tags);
+    }
+
+    [Fact]
+    public async Task IncludeAndExclude_WithTheIdenticalSelector_ExcludeStillWins_ProducingAnEmptyModel()
+    {
+        // The exact same selector in both --include and --exclude is a legitimate (if odd)
+        // user input — since exclude is applied strictly after include (contracts/cli.md), the
+        // operation it names must end up excluded, not included, regardless of the selectors
+        // being textually identical.
+        var doc = await LoadPetstoreDocumentAsync();
+        var model = SkillModelBuilder.Build(doc, Microsoft.OpenApi.OpenApiSpecVersion.OpenApi3_0,
+            new BuildOptions(Name: "petstore", IncludeSelectors: ["op:addPet"], ExcludeSelectors: ["op:addPet"]));
+
+        Assert.Empty(model.Tags);
+        Assert.Contains(model.Warnings, w => w.Contains("no callable operations"));
+    }
+
+    [Fact]
+    public async Task Selectors_AreCaseInsensitive_ForTagAndOperationId()
+    {
+        // MatchesSelector lowercases the selector *kind* but compares tag/operationId values
+        // with OrdinalIgnoreCase — verify that actually holds for both tag: and op:, since a
+        // user is likely to type "Tag:Pet" or "OP:addpet" without matching the spec's exact case.
+        var doc = await LoadPetstoreDocumentAsync();
+
+        var byTag = SkillModelBuilder.Build(doc, Microsoft.OpenApi.OpenApiSpecVersion.OpenApi3_0,
+            new BuildOptions(Name: "petstore", IncludeSelectors: ["tag:PET"]));
+        Assert.Equal(["pet"], byTag.Tags.Select(t => t.Tag));
+
+        var byOp = SkillModelBuilder.Build(doc, Microsoft.OpenApi.OpenApiSpecVersion.OpenApi3_0,
+            new BuildOptions(Name: "petstore", IncludeSelectors: ["op:ADDPET"]));
+        Assert.Equal("addPet", Assert.Single(byOp.Tags.SelectMany(t => t.Operations)).OperationId);
+    }
 }
