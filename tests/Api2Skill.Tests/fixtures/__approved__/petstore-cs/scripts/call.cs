@@ -63,17 +63,36 @@ static async Task<int> Run(string[] args)
     using var http = new HttpClient(handler);
 
     // Auth: resolved into `query`/`headers` BEFORE the URL is built, since apiKey
-    // auth may live in the query string.
+    // auth may live in the query string. An operation covered by explicit auth.json
+    // profiles (AuthProfileNames non-empty) uses those, overriding spec-derived auth for
+    // this operation entirely (FR-006); otherwise spec-derived schemes apply as before.
     var oauthTokenCache = new Dictionary<string, string>(StringComparer.Ordinal);
     try
     {
-        foreach (var schemeId in op.SecuritySchemeIds)
+        if (op.AuthProfileNames.Length > 0)
         {
-            if (!schemes.TryGetValue(schemeId, out var scheme))
+            var authConfig = LoadAuthConfig();
+            var profiles = authConfig is { } cfg && cfg.TryGetProperty("profiles", out var profilesEl) ? profilesEl : (JsonElement?)null;
+            foreach (var profileName in op.AuthProfileNames)
             {
-                continue;
+                var profile = FindProfile(profiles, profileName);
+                if (profile is null)
+                {
+                    throw new AuthResolutionException($"auth.json has no profile named '{profileName}' (referenced by operation '{operationId}').");
+                }
+                ApplyExplicitProfile(profile.Value, secrets, query, headers);
             }
-            await ApplyAuthAsync(http, scheme, secrets, query, headers, oauthTokenCache);
+        }
+        else
+        {
+            foreach (var schemeId in op.SecuritySchemeIds)
+            {
+                if (!schemes.TryGetValue(schemeId, out var scheme))
+                {
+                    continue;
+                }
+                await ApplyAuthAsync(http, scheme, secrets, query, headers, oauthTokenCache);
+            }
         }
 
         var url = baseUrl.TrimEnd('/') + path + (query.Count > 0 ? "?" + string.Join("&", query) : "");
@@ -109,6 +128,11 @@ static async Task<int> Run(string[] args)
         }
         return 0;
     }
+    catch (AuthResolutionException ex)
+    {
+        Console.Error.WriteLine(ex.Message);
+        return 2;
+    }
     catch (HttpRequestException ex)
     {
         Console.Error.WriteLine($"Network error calling {baseUrl}: {ex.Message}");
@@ -133,6 +157,95 @@ static JsonElement? LoadSecrets([CallerFilePath] string callerPath = "")
     {
         Console.Error.WriteLine($"warning: secrets.json is not valid JSON ({ex.Message}); proceeding as if no secrets were configured.");
         return null;
+    }
+}
+
+static JsonElement? LoadAuthConfig([CallerFilePath] string callerPath = "")
+{
+    var scriptDir = Path.GetDirectoryName(callerPath) ?? ".";
+    var authConfigPath = Path.Combine(scriptDir, "..", "auth.json");
+    if (!File.Exists(authConfigPath))
+    {
+        return null;
+    }
+    try
+    {
+        using var doc = JsonDocument.Parse(File.ReadAllText(authConfigPath));
+        return doc.RootElement.Clone();
+    }
+    catch (JsonException ex)
+    {
+        throw new AuthResolutionException($"auth.json is not valid JSON ({ex.Message}).");
+    }
+}
+
+static JsonElement? FindProfile(JsonElement? profiles, string name)
+{
+    if (profiles is not { } arr || arr.ValueKind != JsonValueKind.Array)
+    {
+        return null;
+    }
+    foreach (var p in arr.EnumerateArray())
+    {
+        if (p.TryGetProperty("name", out var n) && n.GetString() == name)
+        {
+            return p;
+        }
+    }
+    return null;
+}
+
+static string ResolveSecretOrLiteral(string raw, JsonElement? secrets)
+{
+    if (raw.StartsWith("{secret:", StringComparison.Ordinal) && raw.EndsWith('}'))
+    {
+        var key = raw[8..^1];
+        if (secrets is { } root && root.TryGetProperty(key, out var value) && value.GetString() is { } s)
+        {
+            return s;
+        }
+        throw new AuthResolutionException($"secrets.json has no value for \"{key}\" (referenced by auth.json).");
+    }
+    return raw;
+}
+
+static string GetProp(JsonElement el, string name) => el.TryGetProperty(name, out var v) ? v.GetString() ?? "" : "";
+
+static void ApplyExplicitProfile(JsonElement profile, JsonElement? secrets, List<string> query, List<(string Name, string Value)> headers)
+{
+    var type = GetProp(profile, "type");
+    switch (type)
+    {
+        case "bearer":
+        {
+            var token = ResolveSecretOrLiteral(GetProp(profile, "token"), secrets);
+            var value = token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) ? token : $"Bearer {token}";
+            headers.Add(("Authorization", value));
+            break;
+        }
+        case "basic":
+        {
+            var user = ResolveSecretOrLiteral(GetProp(profile, "username"), secrets);
+            var pass = ResolveSecretOrLiteral(GetProp(profile, "password"), secrets);
+            var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{user}:{pass}"));
+            headers.Add(("Authorization", $"Basic {encoded}"));
+            break;
+        }
+        case "custom":
+        {
+            if (profile.TryGetProperty("headers", out var headersEl) && headersEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var h in headersEl.EnumerateArray())
+                {
+                    var name = GetProp(h, "name");
+                    var value = ResolveSecretOrLiteral(GetProp(h, "value"), secrets);
+                    headers.Add((name, value));
+                }
+            }
+            break;
+        }
+        default:
+            throw new AuthResolutionException($"Auth profile type '{type}' is not supported by this generated dispatcher yet.");
     }
 }
 
@@ -248,10 +361,10 @@ static (Dictionary<string, string> Params, string? Body) ParseArgs(string[] rest
 
 static Dictionary<string, OperationSpec> BuildOperations() => new()
 {
-    ["getPetById"] = new("GET", "/pet/{petId}", [new("petId", "path")], false, null, ["api_key"]),
-    ["addPet"] = new("POST", "/pet", [], true, "application/json", ["petstore_auth"]),
-    ["get_store_inventory"] = new("GET", "/store/inventory", [], false, null, ["api_key"]),
-    ["get_health"] = new("GET", "/health", [], false, null, []),
+    ["getPetById"] = new("GET", "/pet/{petId}", [new("petId", "path")], false, null, ["api_key"], []),
+    ["addPet"] = new("POST", "/pet", [], true, "application/json", ["petstore_auth"], []),
+    ["get_store_inventory"] = new("GET", "/store/inventory", [], false, null, ["api_key"], []),
+    ["get_health"] = new("GET", "/health", [], false, null, [], []),
 };
 
 static Dictionary<string, SchemeSpec> BuildSchemes() => new()
@@ -261,5 +374,6 @@ static Dictionary<string, SchemeSpec> BuildSchemes() => new()
 };
 
 sealed record ParamSpec(string Name, string Location);
-sealed record OperationSpec(string Method, string PathTemplate, ParamSpec[] Parameters, bool HasBody, string? BodyContentType, string[] SecuritySchemeIds);
+sealed record OperationSpec(string Method, string PathTemplate, ParamSpec[] Parameters, bool HasBody, string? BodyContentType, string[] SecuritySchemeIds, string[] AuthProfileNames);
 sealed record SchemeSpec(string Id, string Kind, string? ApiKeyName, string? ApiKeyLocation, string? OAuthTokenUrl);
+sealed class AuthResolutionException(string message) : Exception(message);

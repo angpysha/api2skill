@@ -19,13 +19,23 @@ public sealed class SkillDirectoryExistsException(string path)
 /// have already deleted the old skill dir (including any real, unrecoverable
 /// <c>secrets.json</c>, which is only held in memory until the very end) and left an
 /// incomplete directory in its place.
+///
+/// <c>--force</c> also preserves an existing <c>auth.json</c> (unless this run supplies a new
+/// one via <c>--auth</c>/<c>--auth-config</c>) and always preserves <c>.auth-cache.json</c>
+/// (+ its lock file), since that cache holds live OAuth sessions (contracts/cli.md).
 /// </summary>
 public static class SkillWriter
 {
-    public static DirectoryInfo Write(SkillModel model, string outputDirectory, bool force, IScriptEmitter emitter)
+    private const string AuthConfigFileName = "auth.json";
+
+    public static DirectoryInfo Write(
+        SkillModel model, string outputDirectory, bool force, IScriptEmitter emitter, string? authConfigJson = null)
     {
         var targetDir = new DirectoryInfo(Path.GetFullPath(outputDirectory));
         byte[]? preservedSecrets = null;
+        byte[]? preservedAuthConfig = null;
+        byte[]? preservedTokenCache = null;
+        byte[]? preservedTokenCacheLock = null;
 
         if (targetDir.Exists)
         {
@@ -38,6 +48,24 @@ public static class SkillWriter
             if (File.Exists(secretsPath))
             {
                 preservedSecrets = File.ReadAllBytes(secretsPath);
+            }
+
+            var authConfigPath = Path.Combine(targetDir.FullName, AuthConfigFileName);
+            if (authConfigJson is null && File.Exists(authConfigPath))
+            {
+                preservedAuthConfig = File.ReadAllBytes(authConfigPath);
+            }
+
+            var tokenCachePath = Path.Combine(targetDir.FullName, SecretsScaffold.TokenCacheFileName);
+            if (File.Exists(tokenCachePath))
+            {
+                preservedTokenCache = File.ReadAllBytes(tokenCachePath);
+            }
+
+            var tokenCacheLockPath = tokenCachePath + ".lock";
+            if (File.Exists(tokenCacheLockPath))
+            {
+                preservedTokenCacheLock = File.ReadAllBytes(tokenCacheLockPath);
             }
         }
 
@@ -59,6 +87,24 @@ public static class SkillWriter
                 // file is already staged, so a real credential is never read during
                 // generation itself.
                 File.WriteAllBytes(Path.Combine(stagingDir.FullName, SecretsScaffold.RealSecretsFileName), preservedSecrets);
+            }
+
+            if (authConfigJson is not null)
+            {
+                File.WriteAllText(Path.Combine(stagingDir.FullName, AuthConfigFileName), authConfigJson);
+            }
+            else if (preservedAuthConfig is not null)
+            {
+                File.WriteAllBytes(Path.Combine(stagingDir.FullName, AuthConfigFileName), preservedAuthConfig);
+            }
+
+            if (preservedTokenCache is not null)
+            {
+                File.WriteAllBytes(Path.Combine(stagingDir.FullName, SecretsScaffold.TokenCacheFileName), preservedTokenCache);
+            }
+            if (preservedTokenCacheLock is not null)
+            {
+                File.WriteAllBytes(Path.Combine(stagingDir.FullName, SecretsScaffold.TokenCacheFileName + ".lock"), preservedTokenCacheLock);
             }
 
             if (targetDir.Exists)

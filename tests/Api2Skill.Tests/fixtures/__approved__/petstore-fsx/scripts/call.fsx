@@ -8,15 +8,17 @@ open System.Text.Json
 open System.Threading.Tasks
 
 type ParamSpec = { Name: string; Location: string }
-type OperationSpec = { Method: string; PathTemplate: string; Parameters: ParamSpec list; HasBody: bool; BodyContentType: string option; SecuritySchemeIds: string list }
+type OperationSpec = { Method: string; PathTemplate: string; Parameters: ParamSpec list; HasBody: bool; BodyContentType: string option; SecuritySchemeIds: string list; AuthProfileNames: string list }
 type SchemeSpec = { Id: string; Kind: string; ApiKeyName: string option; ApiKeyLocation: string option; OAuthTokenUrl: string option }
+
+exception AuthResolutionException of string
 
 let operations : Map<string, OperationSpec> =
     Map.ofList [
-        "getPetById", { Method = "GET"; PathTemplate = "/pet/{petId}"; Parameters = [ { Name = "petId"; Location = "path" } ]; HasBody = false; BodyContentType = None; SecuritySchemeIds = [ "api_key" ] }
-        "addPet", { Method = "POST"; PathTemplate = "/pet"; Parameters = []; HasBody = true; BodyContentType = Some "application/json"; SecuritySchemeIds = [ "petstore_auth" ] }
-        "get_store_inventory", { Method = "GET"; PathTemplate = "/store/inventory"; Parameters = []; HasBody = false; BodyContentType = None; SecuritySchemeIds = [ "api_key" ] }
-        "get_health", { Method = "GET"; PathTemplate = "/health"; Parameters = []; HasBody = false; BodyContentType = None; SecuritySchemeIds = [] }
+        "getPetById", { Method = "GET"; PathTemplate = "/pet/{petId}"; Parameters = [ { Name = "petId"; Location = "path" } ]; HasBody = false; BodyContentType = None; SecuritySchemeIds = [ "api_key" ]; AuthProfileNames = [] }
+        "addPet", { Method = "POST"; PathTemplate = "/pet"; Parameters = []; HasBody = true; BodyContentType = Some "application/json"; SecuritySchemeIds = [ "petstore_auth" ]; AuthProfileNames = [] }
+        "get_store_inventory", { Method = "GET"; PathTemplate = "/store/inventory"; Parameters = []; HasBody = false; BodyContentType = None; SecuritySchemeIds = [ "api_key" ]; AuthProfileNames = [] }
+        "get_health", { Method = "GET"; PathTemplate = "/health"; Parameters = []; HasBody = false; BodyContentType = None; SecuritySchemeIds = []; AuthProfileNames = [] }
     ]
 
 let schemes : Map<string, SchemeSpec> =
@@ -56,6 +58,69 @@ let schemeSecret (secrets: JsonElement option) (schemeId: string) (key: string) 
             match entry.TryGetProperty(key) with
             | true, v -> Some (v.GetString())
             | false, _ -> None
+
+let authConfigPath = IO.Path.Combine(__SOURCE_DIRECTORY__, "..", "auth.json")
+
+let loadAuthConfig () : JsonElement option =
+    if IO.File.Exists(authConfigPath) then
+        try
+            use doc = JsonDocument.Parse(IO.File.ReadAllText(authConfigPath))
+            Some (doc.RootElement.Clone())
+        with :? JsonException as ex ->
+            raise (AuthResolutionException (sprintf "auth.json is not valid JSON (%s)." ex.Message))
+    else
+        None
+
+let getProp (el: JsonElement) (name: string) : string =
+    match el.TryGetProperty(name) with
+    | true, v -> (match v.GetString() with | null -> "" | s -> s)
+    | false, _ -> ""
+
+let findProfile (profiles: JsonElement option) (name: string) : JsonElement option =
+    match profiles with
+    | Some arr when arr.ValueKind = JsonValueKind.Array ->
+        arr.EnumerateArray()
+        |> Seq.tryFind (fun p -> match p.TryGetProperty("name") with | true, n -> n.GetString() = name | false, _ -> false)
+    | _ -> None
+
+let resolveSecretOrLiteral (raw: string) (secrets: JsonElement option) : string =
+    if raw.StartsWith("{secret:") && raw.EndsWith("}") then
+        let key = raw.Substring(8, raw.Length - 9)
+        let found =
+            match secrets with
+            | None -> None
+            | Some root ->
+                match root.TryGetProperty(key) with
+                | true, value when value.GetString() <> null -> Some (value.GetString())
+                | _ -> None
+        match found with
+        | Some s -> s
+        | None -> raise (AuthResolutionException (sprintf "secrets.json has no value for \"%s\" (referenced by auth.json)." key))
+    else
+        raw
+
+let applyExplicitProfile (profile: JsonElement) (secrets: JsonElement option) (query: ResizeArray<string>) (headers: ResizeArray<string * string>) : unit =
+    let profType = getProp profile "type"
+    match profType with
+    | "bearer" ->
+        let token = resolveSecretOrLiteral (getProp profile "token") secrets
+        let value = if token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) then token else sprintf "Bearer %s" token
+        headers.Add(("Authorization", value))
+    | "basic" ->
+        let user = resolveSecretOrLiteral (getProp profile "username") secrets
+        let pass = resolveSecretOrLiteral (getProp profile "password") secrets
+        let encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(sprintf "%s:%s" user pass))
+        headers.Add(("Authorization", sprintf "Basic %s" encoded))
+    | "custom" ->
+        match profile.TryGetProperty("headers") with
+        | true, headersEl when headersEl.ValueKind = JsonValueKind.Array ->
+            for h in headersEl.EnumerateArray() do
+                let name = getProp h "name"
+                let value = resolveSecretOrLiteral (getProp h "value") secrets
+                headers.Add((name, value))
+        | _ -> ()
+    | other ->
+        raise (AuthResolutionException (sprintf "Auth profile type '%s' is not supported by this generated dispatcher yet." other))
 
 let parseArgs (rest: string[]) : Dictionary<string, string> * string option =
     let values = Dictionary<string, string>()
@@ -196,10 +261,21 @@ let run (args: string[]) : Task<int> =
 
         try
             let tokenCache = Dictionary<string, string>()
-            for schemeId in op.SecuritySchemeIds do
-                match schemes.TryFind(schemeId) with
-                | None -> ()
-                | Some scheme -> do! applyAuth http scheme secrets query headers tokenCache
+            if not (List.isEmpty op.AuthProfileNames) then
+                let authConfig = loadAuthConfig ()
+                let profilesEl =
+                    match authConfig with
+                    | Some cfg -> (match cfg.TryGetProperty("profiles") with | true, p -> Some p | false, _ -> None)
+                    | None -> None
+                for profileName in op.AuthProfileNames do
+                    match findProfile profilesEl profileName with
+                    | None -> raise (AuthResolutionException (sprintf "auth.json has no profile named '%s' (referenced by operation '%s')." profileName operationId))
+                    | Some profile -> applyExplicitProfile profile secrets query headers
+            else
+                for schemeId in op.SecuritySchemeIds do
+                    match schemes.TryFind(schemeId) with
+                    | None -> ()
+                    | Some scheme -> do! applyAuth http scheme secrets query headers tokenCache
 
             let url =
                 baseUrl.TrimEnd('/') + path +
@@ -231,6 +307,9 @@ let run (args: string[]) : Task<int> =
             else
                 return 0
         with
+        | AuthResolutionException msg ->
+            eprintfn "%s" msg
+            return 2
         | :? HttpRequestException as ex ->
             eprintfn "Network error calling %s: %s" baseUrl ex.Message
             return 3

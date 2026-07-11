@@ -43,8 +43,10 @@ public sealed class FsxEmitter : IScriptEmitter
         sb.AppendLine();
 
         sb.AppendLine("type ParamSpec = { Name: string; Location: string }");
-        sb.AppendLine("type OperationSpec = { Method: string; PathTemplate: string; Parameters: ParamSpec list; HasBody: bool; BodyContentType: string option; SecuritySchemeIds: string list }");
+        sb.AppendLine("type OperationSpec = { Method: string; PathTemplate: string; Parameters: ParamSpec list; HasBody: bool; BodyContentType: string option; SecuritySchemeIds: string list; AuthProfileNames: string list }");
         sb.AppendLine("type SchemeSpec = { Id: string; Kind: string; ApiKeyName: string option; ApiKeyLocation: string option; OAuthTokenUrl: string option }");
+        sb.AppendLine();
+        sb.AppendLine("exception AuthResolutionException of string");
         sb.AppendLine();
 
         AppendOperationsMap(sb, model);
@@ -83,6 +85,69 @@ public sealed class FsxEmitter : IScriptEmitter
         sb.AppendLine("            | false, _ -> None");
         sb.AppendLine();
 
+        sb.AppendLine("let authConfigPath = IO.Path.Combine(__SOURCE_DIRECTORY__, \"..\", \"auth.json\")");
+        sb.AppendLine();
+        sb.AppendLine("let loadAuthConfig () : JsonElement option =");
+        sb.AppendLine("    if IO.File.Exists(authConfigPath) then");
+        sb.AppendLine("        try");
+        sb.AppendLine("            use doc = JsonDocument.Parse(IO.File.ReadAllText(authConfigPath))");
+        sb.AppendLine("            Some (doc.RootElement.Clone())");
+        sb.AppendLine("        with :? JsonException as ex ->");
+        sb.AppendLine("            raise (AuthResolutionException (sprintf \"auth.json is not valid JSON (%s).\" ex.Message))");
+        sb.AppendLine("    else");
+        sb.AppendLine("        None");
+        sb.AppendLine();
+        sb.AppendLine("let getProp (el: JsonElement) (name: string) : string =");
+        sb.AppendLine("    match el.TryGetProperty(name) with");
+        sb.AppendLine("    | true, v -> (match v.GetString() with | null -> \"\" | s -> s)");
+        sb.AppendLine("    | false, _ -> \"\"");
+        sb.AppendLine();
+        sb.AppendLine("let findProfile (profiles: JsonElement option) (name: string) : JsonElement option =");
+        sb.AppendLine("    match profiles with");
+        sb.AppendLine("    | Some arr when arr.ValueKind = JsonValueKind.Array ->");
+        sb.AppendLine("        arr.EnumerateArray()");
+        sb.AppendLine("        |> Seq.tryFind (fun p -> match p.TryGetProperty(\"name\") with | true, n -> n.GetString() = name | false, _ -> false)");
+        sb.AppendLine("    | _ -> None");
+        sb.AppendLine();
+        sb.AppendLine("let resolveSecretOrLiteral (raw: string) (secrets: JsonElement option) : string =");
+        sb.AppendLine("    if raw.StartsWith(\"{secret:\") && raw.EndsWith(\"}\") then");
+        sb.AppendLine("        let key = raw.Substring(8, raw.Length - 9)");
+        sb.AppendLine("        let found =");
+        sb.AppendLine("            match secrets with");
+        sb.AppendLine("            | None -> None");
+        sb.AppendLine("            | Some root ->");
+        sb.AppendLine("                match root.TryGetProperty(key) with");
+        sb.AppendLine("                | true, value when value.GetString() <> null -> Some (value.GetString())");
+        sb.AppendLine("                | _ -> None");
+        sb.AppendLine("        match found with");
+        sb.AppendLine("        | Some s -> s");
+        sb.AppendLine("        | None -> raise (AuthResolutionException (sprintf \"secrets.json has no value for \\\"%s\\\" (referenced by auth.json).\" key))");
+        sb.AppendLine("    else");
+        sb.AppendLine("        raw");
+        sb.AppendLine();
+        sb.AppendLine("let applyExplicitProfile (profile: JsonElement) (secrets: JsonElement option) (query: ResizeArray<string>) (headers: ResizeArray<string * string>) : unit =");
+        sb.AppendLine("    let profType = getProp profile \"type\"");
+        sb.AppendLine("    match profType with");
+        sb.AppendLine("    | \"bearer\" ->");
+        sb.AppendLine("        let token = resolveSecretOrLiteral (getProp profile \"token\") secrets");
+        sb.AppendLine("        let value = if token.StartsWith(\"Bearer \", StringComparison.OrdinalIgnoreCase) then token else sprintf \"Bearer %s\" token");
+        sb.AppendLine("        headers.Add((\"Authorization\", value))");
+        sb.AppendLine("    | \"basic\" ->");
+        sb.AppendLine("        let user = resolveSecretOrLiteral (getProp profile \"username\") secrets");
+        sb.AppendLine("        let pass = resolveSecretOrLiteral (getProp profile \"password\") secrets");
+        sb.AppendLine("        let encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(sprintf \"%s:%s\" user pass))");
+        sb.AppendLine("        headers.Add((\"Authorization\", sprintf \"Basic %s\" encoded))");
+        sb.AppendLine("    | \"custom\" ->");
+        sb.AppendLine("        match profile.TryGetProperty(\"headers\") with");
+        sb.AppendLine("        | true, headersEl when headersEl.ValueKind = JsonValueKind.Array ->");
+        sb.AppendLine("            for h in headersEl.EnumerateArray() do");
+        sb.AppendLine("                let name = getProp h \"name\"");
+        sb.AppendLine("                let value = resolveSecretOrLiteral (getProp h \"value\") secrets");
+        sb.AppendLine("                headers.Add((name, value))");
+        sb.AppendLine("        | _ -> ()");
+        sb.AppendLine("    | other ->");
+        sb.AppendLine("        raise (AuthResolutionException (sprintf \"Auth profile type '%s' is not supported by this generated dispatcher yet.\" other))");
+        sb.AppendLine();
         sb.AppendLine("let parseArgs (rest: string[]) : Dictionary<string, string> * string option =");
         sb.AppendLine("    let values = Dictionary<string, string>()");
         sb.AppendLine("    let mutable body : string option = None");
@@ -154,6 +219,9 @@ public sealed class FsxEmitter : IScriptEmitter
                 var schemeIds = op.SecuritySchemeIds.Count == 0
                     ? "[]"
                     : "[ " + string.Join("; ", op.SecuritySchemeIds.Select(Literal)) + " ]";
+                var authProfileNames = op.AuthProfileNames.Count == 0
+                    ? "[]"
+                    : "[ " + string.Join("; ", op.AuthProfileNames.Select(Literal)) + " ]";
                 var bodyContentType = op.RequestBody?.ContentType is { } ct ? $"Some {Literal(ct)}" : "None";
 
                 sb.Append("        ").Append(Literal(op.OperationId)).Append(", { Method = ").Append(Literal(op.Method.Method))
@@ -162,6 +230,7 @@ public sealed class FsxEmitter : IScriptEmitter
                   .Append("; HasBody = ").Append(op.RequestBody is not null ? "true" : "false")
                   .Append("; BodyContentType = ").Append(bodyContentType)
                   .Append("; SecuritySchemeIds = ").Append(schemeIds)
+                  .Append("; AuthProfileNames = ").Append(authProfileNames)
                   .Append(" }")
                   .AppendLine();
             }
@@ -292,10 +361,21 @@ public sealed class FsxEmitter : IScriptEmitter
         sb.AppendLine();
         sb.AppendLine("        try");
         sb.AppendLine("            let tokenCache = Dictionary<string, string>()");
-        sb.AppendLine("            for schemeId in op.SecuritySchemeIds do");
-        sb.AppendLine("                match schemes.TryFind(schemeId) with");
-        sb.AppendLine("                | None -> ()");
-        sb.AppendLine("                | Some scheme -> do! applyAuth http scheme secrets query headers tokenCache");
+        sb.AppendLine("            if not (List.isEmpty op.AuthProfileNames) then");
+        sb.AppendLine("                let authConfig = loadAuthConfig ()");
+        sb.AppendLine("                let profilesEl =");
+        sb.AppendLine("                    match authConfig with");
+        sb.AppendLine("                    | Some cfg -> (match cfg.TryGetProperty(\"profiles\") with | true, p -> Some p | false, _ -> None)");
+        sb.AppendLine("                    | None -> None");
+        sb.AppendLine("                for profileName in op.AuthProfileNames do");
+        sb.AppendLine("                    match findProfile profilesEl profileName with");
+        sb.AppendLine("                    | None -> raise (AuthResolutionException (sprintf \"auth.json has no profile named '%s' (referenced by operation '%s').\" profileName operationId))");
+        sb.AppendLine("                    | Some profile -> applyExplicitProfile profile secrets query headers");
+        sb.AppendLine("            else");
+        sb.AppendLine("                for schemeId in op.SecuritySchemeIds do");
+        sb.AppendLine("                    match schemes.TryFind(schemeId) with");
+        sb.AppendLine("                    | None -> ()");
+        sb.AppendLine("                    | Some scheme -> do! applyAuth http scheme secrets query headers tokenCache");
         sb.AppendLine();
         sb.AppendLine("            let url =");
         sb.AppendLine("                baseUrl.TrimEnd('/') + path +");
@@ -327,6 +407,9 @@ public sealed class FsxEmitter : IScriptEmitter
         sb.AppendLine("            else");
         sb.AppendLine("                return 0");
         sb.AppendLine("        with");
+        sb.AppendLine("        | AuthResolutionException msg ->");
+        sb.AppendLine("            eprintfn \"%s\" msg");
+        sb.AppendLine("            return 2");
         sb.AppendLine("        | :? HttpRequestException as ex ->");
         sb.AppendLine("            eprintfn \"Network error calling %s: %s\" baseUrl ex.Message");
         sb.AppendLine("            return 3");

@@ -1,4 +1,5 @@
 using System.Text;
+using Api2Skill.Auth;
 using Api2Skill.Model;
 
 namespace Api2Skill.Emit;
@@ -48,7 +49,7 @@ public static class SkillMdWriter
 
         if (model.SecuritySchemes.Count > 0)
         {
-            sb.AppendLine("## Auth");
+            sb.AppendLine("## Auth (from the spec)");
             sb.AppendLine();
             sb.AppendLine("| scheme | kind | secrets.json keys |");
             sb.AppendLine("|---|---|---|");
@@ -56,6 +57,24 @@ public static class SkillMdWriter
             {
                 var keys = scheme.SecretKeys.Count > 0 ? string.Join(", ", scheme.SecretKeys) : "(none — manual auth required)";
                 sb.AppendLine($"| `{scheme.Id}` | {scheme.Kind} | {keys} |");
+            }
+            sb.AppendLine();
+        }
+
+        if (model.AuthConfig is { Profiles.Count: > 0 } authConfig)
+        {
+            sb.AppendLine("## Explicit auth profiles (auth.json)");
+            sb.AppendLine();
+            sb.AppendLine("This skill's auth is explicitly configured in the committed `auth.json`, overriding the spec-derived auth above for any operation an attached profile covers. Referenced `{secret:NAME}` values are resolved from `secrets.json` at call time — never commit real values.");
+            sb.AppendLine();
+            sb.AppendLine("| profile | type | attach | notes |");
+            sb.AppendLine("|---|---|---|---|");
+            foreach (var profile in authConfig.Profiles)
+            {
+                var attach = profile.Attach.Scope == AttachScope.Global
+                    ? "global"
+                    : $"tags: {string.Join(", ", profile.Attach.Tags)}";
+                sb.AppendLine($"| `{profile.Name}` | {ProfileTypeLabel(profile.Type)} | {attach} | {ProfileNotes(profile)} |");
             }
             sb.AppendLine();
         }
@@ -112,4 +131,24 @@ public static class SkillMdWriter
     private static string EscapeYamlString(string value) => value.Replace("\"", "'").Replace("\n", " ").Trim();
 
     private static string EscapeTableCell(string value) => value.Replace("|", "\\|").Replace("\n", " ").Trim();
+
+    private static string ProfileTypeLabel(AuthType type) => type switch
+    {
+        AuthType.Bearer => "bearer",
+        AuthType.Basic => "basic",
+        AuthType.Custom => "custom",
+        AuthType.Script => "script",
+        AuthType.OAuth2 => "oauth2",
+        _ => type.ToString(),
+    };
+
+    private static string ProfileNotes(AuthProfile profile) => profile.Type switch
+    {
+        AuthType.Bearer => "Set the token in `secrets.json`; `Bearer ` is added automatically if missing.",
+        AuthType.Basic => "Set `username`/`password` in `secrets.json`; sent as `Authorization: Basic ...`.",
+        AuthType.Custom => $"Sends {profile.Custom!.Headers.Count} header(s): {string.Join(", ", profile.Custom.Headers.Select(h => h.Name))}. Set the referenced values in `secrets.json`.",
+        AuthType.Script => $"Runs `{profile.Script!.Command}` on every call; its trimmed stdout becomes the `{profile.Script.Header}` header. **Not yet executed by this generated dispatcher version.**",
+        AuthType.OAuth2 => "OAuth2 profile (see `auth.json` for endpoints/scopes). **Interactive login is not yet executed by this generated dispatcher version.**",
+        _ => string.Empty,
+    };
 }

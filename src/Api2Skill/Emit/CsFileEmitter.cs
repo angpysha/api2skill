@@ -114,17 +114,36 @@ public sealed class CsFileEmitter : IScriptEmitter
         sb.AppendLine("    using var http = new HttpClient(handler);");
         sb.AppendLine();
         sb.AppendLine("    // Auth: resolved into `query`/`headers` BEFORE the URL is built, since apiKey");
-        sb.AppendLine("    // auth may live in the query string.");
+        sb.AppendLine("    // auth may live in the query string. An operation covered by explicit auth.json");
+        sb.AppendLine("    // profiles (AuthProfileNames non-empty) uses those, overriding spec-derived auth for");
+        sb.AppendLine("    // this operation entirely (FR-006); otherwise spec-derived schemes apply as before.");
         sb.AppendLine("    var oauthTokenCache = new Dictionary<string, string>(StringComparer.Ordinal);");
         sb.AppendLine("    try");
         sb.AppendLine("    {");
-        sb.AppendLine("        foreach (var schemeId in op.SecuritySchemeIds)");
+        sb.AppendLine("        if (op.AuthProfileNames.Length > 0)");
         sb.AppendLine("        {");
-        sb.AppendLine("            if (!schemes.TryGetValue(schemeId, out var scheme))");
+        sb.AppendLine("            var authConfig = LoadAuthConfig();");
+        sb.AppendLine("            var profiles = authConfig is { } cfg && cfg.TryGetProperty(\"profiles\", out var profilesEl) ? profilesEl : (JsonElement?)null;");
+        sb.AppendLine("            foreach (var profileName in op.AuthProfileNames)");
         sb.AppendLine("            {");
-        sb.AppendLine("                continue;");
+        sb.AppendLine("                var profile = FindProfile(profiles, profileName);");
+        sb.AppendLine("                if (profile is null)");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    throw new AuthResolutionException($\"auth.json has no profile named '{profileName}' (referenced by operation '{operationId}').\");");
+        sb.AppendLine("                }");
+        sb.AppendLine("                ApplyExplicitProfile(profile.Value, secrets, query, headers);");
         sb.AppendLine("            }");
-        sb.AppendLine("            await ApplyAuthAsync(http, scheme, secrets, query, headers, oauthTokenCache);");
+        sb.AppendLine("        }");
+        sb.AppendLine("        else");
+        sb.AppendLine("        {");
+        sb.AppendLine("            foreach (var schemeId in op.SecuritySchemeIds)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                if (!schemes.TryGetValue(schemeId, out var scheme))");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    continue;");
+        sb.AppendLine("                }");
+        sb.AppendLine("                await ApplyAuthAsync(http, scheme, secrets, query, headers, oauthTokenCache);");
+        sb.AppendLine("            }");
         sb.AppendLine("        }");
         sb.AppendLine();
         sb.AppendLine("        var url = baseUrl.TrimEnd('/') + path + (query.Count > 0 ? \"?\" + string.Join(\"&\", query) : \"\");");
@@ -160,6 +179,11 @@ public sealed class CsFileEmitter : IScriptEmitter
         sb.AppendLine("        }");
         sb.AppendLine("        return 0;");
         sb.AppendLine("    }");
+        sb.AppendLine("    catch (AuthResolutionException ex)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        Console.Error.WriteLine(ex.Message);");
+        sb.AppendLine("        return 2;");
+        sb.AppendLine("    }");
         sb.AppendLine("    catch (HttpRequestException ex)");
         sb.AppendLine("    {");
         sb.AppendLine("        Console.Error.WriteLine($\"Network error calling {baseUrl}: {ex.Message}\");");
@@ -191,6 +215,109 @@ public sealed class CsFileEmitter : IScriptEmitter
         sb.AppendLine("    {");
         sb.AppendLine("        Console.Error.WriteLine($\"warning: secrets.json is not valid JSON ({ex.Message}); proceeding as if no secrets were configured.\");");
         sb.AppendLine("        return null;");
+        sb.AppendLine("    }");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        // Explicit auth.json profiles (FR-006..FR-021a): a distinct code path from the
+        // spec-derived schemes above. Raised as a typed exception (caught in Run) rather than a
+        // printed warning, since an unresolved secret or unknown profile/type must FAIL the
+        // call, never send a partial/unauthenticated request silently (contracts/dispatcher-auth.md).
+        // NOTE: the AuthResolutionException *type declaration* itself is emitted at the very end
+        // of the file (AppendDataTables), not here — in a file-based app's top-level-statement
+        // region, once ANY type declaration appears, every local function after it becomes
+        // illegal (CS8803: top-level statements must precede type declarations). All local
+        // functions using it below only *reference* the type; that's fine anywhere.
+        sb.AppendLine("static JsonElement? LoadAuthConfig([CallerFilePath] string callerPath = \"\")");
+        sb.AppendLine("{");
+        sb.AppendLine("    var scriptDir = Path.GetDirectoryName(callerPath) ?? \".\";");
+        sb.AppendLine("    var authConfigPath = Path.Combine(scriptDir, \"..\", \"auth.json\");");
+        sb.AppendLine("    if (!File.Exists(authConfigPath))");
+        sb.AppendLine("    {");
+        sb.AppendLine("        return null;");
+        sb.AppendLine("    }");
+        sb.AppendLine("    try");
+        sb.AppendLine("    {");
+        sb.AppendLine("        using var doc = JsonDocument.Parse(File.ReadAllText(authConfigPath));");
+        sb.AppendLine("        return doc.RootElement.Clone();");
+        sb.AppendLine("    }");
+        sb.AppendLine("    catch (JsonException ex)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        throw new AuthResolutionException($\"auth.json is not valid JSON ({ex.Message}).\");");
+        sb.AppendLine("    }");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        sb.AppendLine("static JsonElement? FindProfile(JsonElement? profiles, string name)");
+        sb.AppendLine("{");
+        sb.AppendLine("    if (profiles is not { } arr || arr.ValueKind != JsonValueKind.Array)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        return null;");
+        sb.AppendLine("    }");
+        sb.AppendLine("    foreach (var p in arr.EnumerateArray())");
+        sb.AppendLine("    {");
+        sb.AppendLine("        if (p.TryGetProperty(\"name\", out var n) && n.GetString() == name)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            return p;");
+        sb.AppendLine("        }");
+        sb.AppendLine("    }");
+        sb.AppendLine("    return null;");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        sb.AppendLine("static string ResolveSecretOrLiteral(string raw, JsonElement? secrets)");
+        sb.AppendLine("{");
+        sb.AppendLine("    if (raw.StartsWith(\"{secret:\", StringComparison.Ordinal) && raw.EndsWith('}'))");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var key = raw[8..^1];");
+        sb.AppendLine("        if (secrets is { } root && root.TryGetProperty(key, out var value) && value.GetString() is { } s)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            return s;");
+        sb.AppendLine("        }");
+        sb.AppendLine("        throw new AuthResolutionException($\"secrets.json has no value for \\\"{key}\\\" (referenced by auth.json).\");");
+        sb.AppendLine("    }");
+        sb.AppendLine("    return raw;");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        sb.AppendLine("static string GetProp(JsonElement el, string name) => el.TryGetProperty(name, out var v) ? v.GetString() ?? \"\" : \"\";");
+        sb.AppendLine();
+
+        sb.AppendLine("static void ApplyExplicitProfile(JsonElement profile, JsonElement? secrets, List<string> query, List<(string Name, string Value)> headers)");
+        sb.AppendLine("{");
+        sb.AppendLine("    var type = GetProp(profile, \"type\");");
+        sb.AppendLine("    switch (type)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        case \"bearer\":");
+        sb.AppendLine("        {");
+        sb.AppendLine("            var token = ResolveSecretOrLiteral(GetProp(profile, \"token\"), secrets);");
+        sb.AppendLine("            var value = token.StartsWith(\"Bearer \", StringComparison.OrdinalIgnoreCase) ? token : $\"Bearer {token}\";");
+        sb.AppendLine("            headers.Add((\"Authorization\", value));");
+        sb.AppendLine("            break;");
+        sb.AppendLine("        }");
+        sb.AppendLine("        case \"basic\":");
+        sb.AppendLine("        {");
+        sb.AppendLine("            var user = ResolveSecretOrLiteral(GetProp(profile, \"username\"), secrets);");
+        sb.AppendLine("            var pass = ResolveSecretOrLiteral(GetProp(profile, \"password\"), secrets);");
+        sb.AppendLine("            var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes($\"{user}:{pass}\"));");
+        sb.AppendLine("            headers.Add((\"Authorization\", $\"Basic {encoded}\"));");
+        sb.AppendLine("            break;");
+        sb.AppendLine("        }");
+        sb.AppendLine("        case \"custom\":");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (profile.TryGetProperty(\"headers\", out var headersEl) && headersEl.ValueKind == JsonValueKind.Array)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                foreach (var h in headersEl.EnumerateArray())");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    var name = GetProp(h, \"name\");");
+        sb.AppendLine("                    var value = ResolveSecretOrLiteral(GetProp(h, \"value\"), secrets);");
+        sb.AppendLine("                    headers.Add((name, value));");
+        sb.AppendLine("                }");
+        sb.AppendLine("            }");
+        sb.AppendLine("            break;");
+        sb.AppendLine("        }");
+        sb.AppendLine("        default:");
+        sb.AppendLine("            throw new AuthResolutionException($\"Auth profile type '{type}' is not supported by this generated dispatcher yet.\");");
         sb.AppendLine("    }");
         sb.AppendLine("}");
         sb.AppendLine();
@@ -331,6 +458,8 @@ public sealed class CsFileEmitter : IScriptEmitter
                   .Append(op.RequestBody is not null ? "true" : "false").Append(", ")
                   .Append(op.RequestBody?.ContentType is { } ct ? Literal(ct) : "null").Append(", [")
                   .Append(string.Join(", ", op.SecuritySchemeIds.Select(Literal)))
+                  .Append("], [")
+                  .Append(string.Join(", ", op.AuthProfileNames.Select(Literal)))
                   .Append("]),")
                   .AppendLine();
             }
@@ -355,8 +484,9 @@ public sealed class CsFileEmitter : IScriptEmitter
         sb.AppendLine();
 
         sb.AppendLine("sealed record ParamSpec(string Name, string Location);");
-        sb.AppendLine("sealed record OperationSpec(string Method, string PathTemplate, ParamSpec[] Parameters, bool HasBody, string? BodyContentType, string[] SecuritySchemeIds);");
+        sb.AppendLine("sealed record OperationSpec(string Method, string PathTemplate, ParamSpec[] Parameters, bool HasBody, string? BodyContentType, string[] SecuritySchemeIds, string[] AuthProfileNames);");
         sb.AppendLine("sealed record SchemeSpec(string Id, string Kind, string? ApiKeyName, string? ApiKeyLocation, string? OAuthTokenUrl);");
+        sb.AppendLine("sealed class AuthResolutionException(string message) : Exception(message);");
     }
 
     private static string LocationKey(ParameterLocation location) => location switch

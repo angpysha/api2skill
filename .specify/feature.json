@@ -1,1 +1,3 @@
-{"feature_directory":"specs/001-openapi-to-skill"}
+{
+  "feature_directory": "specs/002-explicit-auth-config"
+}

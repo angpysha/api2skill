@@ -1,4 +1,5 @@
 using System.CommandLine;
+using Api2Skill.Auth;
 using Api2Skill.Emit;
 using Api2Skill.Input;
 using Api2Skill.Model;
@@ -15,6 +16,7 @@ public static class ExitCodes
     public const int UsageError = 2;
     public const int OutputExists = 3;
     public const int AcquisitionFailure = 4;
+    public const int AuthConfigError = 5;
 }
 
 /// <summary>
@@ -70,6 +72,18 @@ public static class GenerateCommand
         {
             Description = "Base URL to use when the spec has no `servers` entry.",
         };
+        var authConfigOption = new Option<string?>("--auth-config")
+        {
+            Description = "Path to an auth.json (explicit auth profiles) — contracts/auth-config.md. Mutually exclusive with --auth.",
+        };
+        var authOption = new Option<string?>("--auth")
+        {
+            Description = "Shorthand: scaffold a single global auth profile of type bearer|basic|custom. oauth2/entra need --auth-config. Mutually exclusive with --auth-config.",
+        };
+        var loginOption = new Option<bool>("--login")
+        {
+            Description = "After writing the skill, run interactive login for each authorization_code auth profile.",
+        };
 
         var command = new Command("generate", "Generate a Claude Skill from an OpenAPI/Swagger document")
         {
@@ -83,6 +97,9 @@ public static class GenerateCommand
             insecureOption,
             formatOption,
             baseUrlOption,
+            authConfigOption,
+            authOption,
+            loginOption,
         };
 
         command.SetAction(async (parseResult, cancellationToken) =>
@@ -97,7 +114,10 @@ public static class GenerateCommand
                 Force: parseResult.GetValue(forceOption),
                 Insecure: parseResult.GetValue(insecureOption),
                 Format: parseResult.GetValue(formatOption),
-                BaseUrl: parseResult.GetValue(baseUrlOption));
+                BaseUrl: parseResult.GetValue(baseUrlOption),
+                AuthConfigPath: parseResult.GetValue(authConfigOption),
+                AuthShorthand: parseResult.GetValue(authOption),
+                Login: parseResult.GetValue(loginOption));
 
             return await RunAsync(options, cancellationToken).ConfigureAwait(false);
         });
@@ -117,6 +137,45 @@ public static class GenerateCommand
 
     internal static async Task<int> RunAsync(GenerateOptions options, CancellationToken cancellationToken)
     {
+        if (options.AuthConfigPath is { Length: > 0 } && options.AuthShorthand is { Length: > 0 })
+        {
+            Console.Error.WriteLine("--auth and --auth-config are mutually exclusive. Pass one or the other.");
+            return ExitCodes.UsageError;
+        }
+
+        AuthConfig? authConfig = null;
+        string? authConfigJson = null;
+        if (options.AuthConfigPath is { Length: > 0 } authConfigPath)
+        {
+            try
+            {
+                authConfig = AuthConfigLoader.LoadFromFile(authConfigPath, out authConfigJson);
+            }
+            catch (FileNotFoundException ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                return ExitCodes.AcquisitionFailure;
+            }
+            catch (AuthConfigException ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                return ExitCodes.AuthConfigError;
+            }
+        }
+        else if (options.AuthShorthand is { Length: > 0 } authShorthand)
+        {
+            try
+            {
+                authConfig = AuthConfigLoader.CreateShorthand(authShorthand);
+                authConfigJson = AuthConfigLoader.Serialize(authConfig);
+            }
+            catch (AuthShorthandUnsupportedException ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                return ExitCodes.UsageError;
+            }
+        }
+
         MemoryStream stream;
         string format;
         try
@@ -170,9 +229,19 @@ public static class GenerateCommand
             IncludeSelectors: options.Include,
             ExcludeSelectors: options.Exclude,
             BaseUrlOverride: options.BaseUrl,
-            InsecureDefault: options.Insecure);
+            InsecureDefault: options.Insecure,
+            AuthConfig: authConfig);
 
-        var model = SkillModelBuilder.Build(loaded.Document, loaded.SpecVersion, buildOptions);
+        SkillModel model;
+        try
+        {
+            model = SkillModelBuilder.Build(loaded.Document, loaded.SpecVersion, buildOptions);
+        }
+        catch (AuthConfigCollisionException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return ExitCodes.AuthConfigError;
+        }
 
         IScriptEmitter? emitter = options.ScriptKind switch
         {
@@ -192,7 +261,7 @@ public static class GenerateCommand
         DirectoryInfo written;
         try
         {
-            written = SkillWriter.Write(model, outputDirectory, options.Force, emitter);
+            written = SkillWriter.Write(model, outputDirectory, options.Force, emitter, authConfigJson);
         }
         catch (SkillDirectoryExistsException ex)
         {

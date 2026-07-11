@@ -17,4 +17,20 @@ public sealed record OperationModel(
     IReadOnlyList<ParameterModel> Parameters,
     RequestBodyModel? RequestBody,
     IReadOnlyList<string> SecuritySchemeIds,
-    IReadOnlyList<ResponseModel> Responses);
+    IReadOnlyList<ResponseModel> Responses,
+    IReadOnlyList<string> AuthProfileNames)
+{
+    public OperationModel(
+        string OperationId,
+        HttpMethod Method,
+        string PathTemplate,
+        string? Summary,
+        string? Description,
+        IReadOnlyList<ParameterModel> Parameters,
+        RequestBodyModel? RequestBody,
+        IReadOnlyList<string> SecuritySchemeIds,
+        IReadOnlyList<ResponseModel> Responses)
+        : this(OperationId, Method, PathTemplate, Summary, Description, Parameters, RequestBody, SecuritySchemeIds, Responses, [])
+    {
+    }
+}

@@ -1,3 +1,5 @@
+using Api2Skill.Auth;
+
 namespace Api2Skill.Model;
 
 /// <summary>
@@ -28,7 +30,8 @@ public sealed record SkillModel(
     IReadOnlyList<SecuritySchemeModel> SecuritySchemes,
     IReadOnlyList<TagGroup> Tags,
     IReadOnlyList<string> Warnings,
-    bool InsecureDefault = false);
+    bool InsecureDefault = false,
+    AuthConfig? AuthConfig = null);
 
 /// <summary>A tag-grouped bucket of operations for the SKILL.md operation index (D6).</summary>
 public sealed record TagGroup(

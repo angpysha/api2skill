@@ -1,3 +1,4 @@
+using Api2Skill.Auth;
 using Microsoft.OpenApi;
 // Both Microsoft.OpenApi and this namespace declare a `ParameterLocation` enum; alias the
 // OpenAPI one explicitly everywhere it's read from the parsed document so bare
@@ -13,7 +14,8 @@ public sealed record BuildOptions(
     IReadOnlyList<string>? IncludeSelectors = null,
     IReadOnlyList<string>? ExcludeSelectors = null,
     string? BaseUrlOverride = null,
-    bool InsecureDefault = false);
+    bool InsecureDefault = false,
+    AuthConfig? AuthConfig = null);
 
 /// <summary>
 /// Maps a parsed <see cref="OpenApiDocument"/> to the emitter-agnostic <see cref="SkillModel"/>
@@ -84,8 +86,9 @@ public static class SkillModelBuilder
         }
 
         var filtered = ApplyFilters(tagged, options.IncludeSelectors, options.ExcludeSelectors);
+        var bakedFiltered = ResolveExplicitAuth(filtered, options.AuthConfig, warnings);
 
-        var tagGroups = filtered
+        var tagGroups = bakedFiltered
             .GroupBy(x => x.Tag, StringComparer.Ordinal)
             .OrderBy(g => TagOrder(g.Key, document))
             .Select(g => new TagGroup(g.Key, TagSummary(g.Key, document), [.. g.Select(x => x.Op)]))
@@ -126,7 +129,49 @@ public static class SkillModelBuilder
             SecuritySchemes: usedSchemes,
             Tags: tagGroups,
             Warnings: warnings,
-            InsecureDefault: options.InsecureDefault);
+            InsecureDefault: options.InsecureDefault,
+            AuthConfig: options.AuthConfig);
+    }
+
+    /// <summary>
+    /// Runs <see cref="AttachmentResolver"/> (when an explicit <see cref="AuthConfig"/> was
+    /// supplied) and bakes each operation's resolved <c>AuthProfileNames</c> onto its
+    /// <see cref="OperationModel"/> (FR-006). An operation can appear under multiple tags — the
+    /// same <paramref name="filtered"/> operation is resolved exactly once and every occurrence
+    /// is rewritten to the identical resulting instance, so every <see cref="TagGroup"/> agrees.
+    /// </summary>
+    private static List<(string Tag, string OperationId, OperationModel Op)> ResolveExplicitAuth(
+        List<(string Tag, string OperationId, OperationModel Op)> filtered,
+        AuthConfig? authConfig,
+        List<string> warnings)
+    {
+        if (authConfig is null)
+        {
+            return filtered;
+        }
+
+        var operationTags = filtered
+            .GroupBy(x => x.OperationId, StringComparer.Ordinal)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<string>)g.Select(x => x.Tag).Distinct(StringComparer.Ordinal).ToList(),
+                StringComparer.Ordinal);
+
+        var resolved = AttachmentResolver.Resolve(authConfig, operationTags);
+        warnings.AddRange(resolved.Warnings);
+
+        var bakedById = new Dictionary<string, OperationModel>(StringComparer.Ordinal);
+        return [.. filtered.Select(x =>
+        {
+            if (!bakedById.TryGetValue(x.OperationId, out var op))
+            {
+                op = resolved.ProfileNamesByOperationId.TryGetValue(x.OperationId, out var names)
+                    ? x.Op with { AuthProfileNames = names }
+                    : x.Op;
+                bakedById[x.OperationId] = op;
+            }
+            return (x.Tag, x.OperationId, Op: op);
+        })];
     }
 
     private static SpecVersionKind MapSpecVersion(OpenApiSpecVersion version) => version switch

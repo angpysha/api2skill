@@ -164,4 +164,91 @@ public class ExitCodeTests : IDisposable
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.True(File.Exists(Path.Combine(outDir, "SKILL.md")));
     }
+
+    // --- Explicit auth (T028/T043): contracts/cli.md exit codes ---
+
+    [Fact]
+    public async Task AuthAndAuthConfigTogether_ExitsTwo()
+    {
+        var outDir = Path.Combine(_workDir, "out-auth-conflict");
+        var options = Options(FixturePath("petstore.json"), outDir) with { AuthConfigPath = "auth.json", AuthShorthand = "bearer" };
+
+        var exitCode = await GenerateCommand.RunAsync(options, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.UsageError, exitCode);
+        Assert.False(Directory.Exists(outDir));
+    }
+
+    [Fact]
+    public async Task AuthOAuth2Shorthand_ExitsTwo()
+    {
+        var outDir = Path.Combine(_workDir, "out-auth-oauth2-shorthand");
+        var options = Options(FixturePath("petstore.json"), outDir) with { AuthShorthand = "oauth2" };
+
+        var exitCode = await GenerateCommand.RunAsync(options, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.UsageError, exitCode);
+        Assert.False(Directory.Exists(outDir));
+    }
+
+    [Fact]
+    public async Task MissingAuthConfigFile_ExitsFour()
+    {
+        var outDir = Path.Combine(_workDir, "out-auth-missing");
+        var options = Options(FixturePath("petstore.json"), outDir)
+            with
+            { AuthConfigPath = Path.Combine(_workDir, "does-not-exist-auth.json") };
+
+        var exitCode = await GenerateCommand.RunAsync(options, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.AcquisitionFailure, exitCode);
+        Assert.False(Directory.Exists(outDir));
+    }
+
+    [Fact]
+    public async Task MalformedAuthConfig_ExitsFive_AndWritesNoOutputDirectory()
+    {
+        var authConfigPath = Path.Combine(_workDir, "bad-auth.json");
+        await File.WriteAllTextAsync(authConfigPath, "{ not valid json");
+        var outDir = Path.Combine(_workDir, "out-auth-malformed");
+        var options = Options(FixturePath("petstore.json"), outDir) with { AuthConfigPath = authConfigPath };
+
+        var exitCode = await GenerateCommand.RunAsync(options, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.AuthConfigError, exitCode);
+        Assert.False(Directory.Exists(outDir));
+    }
+
+    [Fact]
+    public async Task AuthProfileHeaderCollision_ExitsFive_AndWritesNoOutputDirectory()
+    {
+        var authConfigPath = Path.Combine(_workDir, "collision-auth.json");
+        await File.WriteAllTextAsync(authConfigPath, """
+            { "profiles": [
+              { "name": "a", "type": "bearer", "token": "{secret:A}" },
+              { "name": "b", "type": "custom", "headers": [ { "name": "Authorization", "value": "{secret:B}" } ] }
+            ] }
+            """);
+        var outDir = Path.Combine(_workDir, "out-auth-collision");
+        var options = Options(FixturePath("petstore.json"), outDir) with { AuthConfigPath = authConfigPath };
+
+        var exitCode = await GenerateCommand.RunAsync(options, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.AuthConfigError, exitCode);
+        Assert.False(Directory.Exists(outDir));
+    }
+
+    [Fact]
+    public async Task AuthBearerShorthand_ExitsZero_AndWritesAuthJsonAndScaffoldedSecret()
+    {
+        var outDir = Path.Combine(_workDir, "out-auth-bearer");
+        var options = Options(FixturePath("petstore.json"), outDir) with { AuthShorthand = "bearer" };
+
+        var exitCode = await GenerateCommand.RunAsync(options, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.True(File.Exists(Path.Combine(outDir, "auth.json")));
+        var secretsExample = await File.ReadAllTextAsync(Path.Combine(outDir, "secrets.example.json"));
+        Assert.Contains("BEARER_TOKEN", secretsExample, StringComparison.Ordinal);
+    }
 }
