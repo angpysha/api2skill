@@ -1,4 +1,5 @@
 using System.CommandLine;
+using Api2Skill.Emit;
 using Api2Skill.Input;
 using Api2Skill.Model;
 using Api2Skill.Output;
@@ -17,11 +18,10 @@ public static class ExitCodes
 }
 
 /// <summary>
-/// Builds the <c>generate</c> command (contracts/cli.md). Foundational (T005) wires the file
-/// input path end-to-end; URL/stdin acquisition (T029, US3) and the three script emitters
-/// (T017/T033/T034, US1/US4) plug into this same command later without changing its shape —
-/// SkillWriter already accepts an <see cref="Emit.IScriptEmitter"/>, this command just doesn't
-/// have one to pass yet.
+/// Builds the <c>generate</c> command (contracts/cli.md). Wires the file input path end-to-end
+/// through the <see cref="CsFileEmitter"/> (D3 default). URL/stdin acquisition (T029, US3) and
+/// the <c>.fsx</c>/<c>.csx</c> emitters (T033/T034, US4) plug into this same command without
+/// changing its shape.
 /// </summary>
 public static class GenerateCommand
 {
@@ -162,14 +162,20 @@ public static class GenerateCommand
 
         var model = SkillModelBuilder.Build(loaded.Document, loaded.SpecVersion, buildOptions);
 
+        // Only the .cs emitter exists so far — .fsx/.csx land in US4 (T033/T034).
+        if (options.ScriptKind is not "cs")
+        {
+            Console.Error.WriteLine($"--script {options.ScriptKind} is not implemented yet (planned: US4). Only 'cs' is available.");
+            return ExitCodes.UsageError;
+        }
+        IScriptEmitter emitter = new CsFileEmitter();
+
         var outputDirectory = options.OutputDirectory is { Length: > 0 } o ? o : Path.Combine(".", name);
 
         DirectoryInfo written;
         try
         {
-            // No emitter is wired up yet (Foundational) — this creates the directory only.
-            // SKILL.md/reference/dispatcher content lands with the emitters in US1/US4.
-            written = SkillWriter.Write(model, outputDirectory, options.Force, emitter: null);
+            written = SkillWriter.Write(model, outputDirectory, options.Force, emitter);
         }
         catch (SkillDirectoryExistsException ex)
         {

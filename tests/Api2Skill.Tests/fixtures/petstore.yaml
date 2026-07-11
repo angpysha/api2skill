@@ -1,0 +1,89 @@
+openapi: "3.0.3"
+info:
+  title: Swagger Petstore
+  description: A sample API that uses a petstore as an example to demonstrate api2skill.
+  version: "1.0.0"
+servers:
+  - url: https://petstore.example.com/v2
+tags:
+  - name: pet
+    description: Everything about your Pets
+  - name: store
+    description: Access to Petstore orders
+paths:
+  /pet/{petId}:
+    get:
+      tags: [pet]
+      operationId: getPetById
+      summary: Find pet by ID
+      description: Returns a single pet.
+      security:
+        - api_key: []
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          description: ID of pet to return
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: successful operation
+        "404":
+          description: Pet not found
+
+  /pet:
+    post:
+      tags: [pet]
+      operationId: addPet
+      summary: Add a new pet to the store
+      security:
+        - petstore_auth: ["write:pets"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                status:
+                  type: string
+              required: [name]
+      responses:
+        "200":
+          description: successful operation
+
+  /store/inventory:
+    get:
+      tags: [store]
+      summary: Returns pet inventories by status
+      security:
+        - api_key: []
+      responses:
+        "200":
+          description: successful operation
+
+  /health:
+    get:
+      summary: Health check (no tag, no auth)
+      responses:
+        "200":
+          description: ok
+
+components:
+  securitySchemes:
+    api_key:
+      type: apiKey
+      name: api_key
+      in: header
+    petstore_auth:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: https://petstore.example.com/oauth/token
+          scopes:
+            "write:pets": modify pets in your account
+            "read:pets": read your pets
