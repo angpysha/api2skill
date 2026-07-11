@@ -114,15 +114,15 @@ operations carry both while others carry only the global one (quickstart.md Scen
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T042 [P] [US2] Integration test: a tag-scoped profile applies only to operations in that tag; a global profile applies to all in `tests/Api2Skill.Tests/Integration/DispatcherAuthTagScopeTests.cs`
-- [ ] T043 [P] [US2] Unit test: two attached profiles setting the same header on one operation → generation fails with exit `5`, naming the header and both profiles, in `tests/Api2Skill.Tests/Cli/ExitCodeTests.cs` (extend)
-- [ ] T044 [P] [US2] Unit test: an attachment to a tag with no operations produces a warning and generation still succeeds in `tests/Api2Skill.Tests/Auth/AttachmentResolverTests.cs` (extend)
+- [x] T042 [P] [US2] Integration test: a tag-scoped profile applies only to operations in that tag; a global profile applies to all in `tests/Api2Skill.Tests/Integration/DispatcherAuthTagScopeTests.cs`
+- [x] T043 [P] [US2] Unit test: two attached profiles setting the same header on one operation → generation fails with exit `5`, naming the header and both profiles, in `tests/Api2Skill.Tests/Cli/ExitCodeTests.cs` (extend)
+- [x] T044 [P] [US2] Unit test: an attachment to a tag with no operations produces a warning and generation still succeeds in `tests/Api2Skill.Tests/Auth/AttachmentResolverTests.cs` (extend)
 
 ### Implementation for User Story 2
 
-- [ ] T045 [US2] Complete `AttachmentResolver` stacking semantics for three or more profiles applying to one operation (depends on T010; driven to green by T042–T044)
-- [ ] T046 [US2] Surface collision errors and unused-tag warnings through `GenerateCommand` console output in `src/Api2Skill/Cli/GenerateCommand.cs` (depends on T015, T045)
-- [ ] T047 [US2] Run quickstart.md Scenario C — manual validation
+- [x] T045 [US2] Complete `AttachmentResolver` stacking semantics for three or more profiles applying to one operation (depends on T010; driven to green by T042–T044)
+- [x] T046 [US2] Surface collision errors and unused-tag warnings through `GenerateCommand` console output in `src/Api2Skill/Cli/GenerateCommand.cs` (depends on T015, T045)
+- [x] T047 [US2] Run quickstart.md Scenario C — manual validation
 
 **Checkpoint**: User Stories 1 and 2 both work independently.
 
