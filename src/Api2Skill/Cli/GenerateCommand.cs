@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Diagnostics;
 using Api2Skill.Auth;
 using Api2Skill.Emit;
 using Api2Skill.Input;
@@ -276,6 +277,41 @@ public static class GenerateCommand
 
         var opCount = model.Tags.Sum(t => t.Operations.Count);
         Console.WriteLine($"{written.FullName} ({opCount} operation(s), {model.Tags.Count} tag(s))");
+
+        if (options.Login && authConfig is not null)
+        {
+            await RunLoginForAuthorizationCodeProfilesAsync(authConfig, emitter, written, cancellationToken);
+        }
+
         return ExitCodes.Success;
+    }
+
+    /// <summary>
+    /// FR-017/T064: <c>--login</c> runs the interactive login once per <c>authorization_code</c>
+    /// profile right after a successful write, priming <c>.auth-cache.json</c>. Generation stays
+    /// fully non-interactive without this flag.
+    /// </summary>
+    private static async Task RunLoginForAuthorizationCodeProfilesAsync(
+        AuthConfig authConfig, IScriptEmitter emitter, DirectoryInfo written, CancellationToken cancellationToken)
+    {
+        // RunnerDescription looks like "dotnet run scripts/call.cs --" / "dotnet fsi scripts/call.fsx --" /
+        // "dotnet script scripts/call.csx --" — always "dotnet <rest>".
+        var runnerArgs = emitter.RunnerDescription["dotnet ".Length..];
+
+        foreach (var profile in authConfig.Profiles.Where(p => p.Type == AuthType.OAuth2 && p.OAuth!.Grant == OAuthGrant.AuthorizationCode))
+        {
+            Console.WriteLine($"--login: running interactive login for profile '{profile.Name}'...");
+            var psi = new ProcessStartInfo("dotnet", $"{runnerArgs} login {profile.Name}")
+            {
+                WorkingDirectory = written.FullName,
+                UseShellExecute = false,
+            };
+            using var process = Process.Start(psi)!;
+            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            if (process.ExitCode != 0)
+            {
+                Console.Error.WriteLine($"--login: login for profile '{profile.Name}' failed (exit {process.ExitCode}).");
+            }
+        }
     }
 }

@@ -54,6 +54,7 @@ public class AuthEngineGoldenTests : IDisposable
         Assert.Contains("case \"custom\":", text, StringComparison.Ordinal);
         Assert.Contains("\"default\"", text, StringComparison.Ordinal); // baked AuthProfileNames entry
         Assert.Contains("AuthResolutionException", text, StringComparison.Ordinal);
+        AssertOAuthEngineMarkers_Cs(text);
     }
 
     [Fact]
@@ -65,9 +66,10 @@ public class AuthEngineGoldenTests : IDisposable
 
         var text = await File.ReadAllTextAsync(Path.Combine(outDir, "scripts", "call.csx"));
         Assert.Contains("LoadAuthConfig", text, StringComparison.Ordinal);
-        Assert.Contains("ApplyExplicitProfile", text, StringComparison.Ordinal);
+        Assert.Contains("ApplyExplicitProfileAsync", text, StringComparison.Ordinal);
         Assert.Contains("case \"bearer\":", text, StringComparison.Ordinal);
         Assert.Contains("\"default\"", text, StringComparison.Ordinal);
+        AssertOAuthEngineMarkers_Cs(text);
     }
 
     [Fact]
@@ -79,12 +81,28 @@ public class AuthEngineGoldenTests : IDisposable
 
         var text = await File.ReadAllTextAsync(Path.Combine(outDir, "scripts", "call.fsx"));
         Assert.Contains("loadAuthConfig", text, StringComparison.Ordinal);
-        Assert.Contains("applyExplicitProfile", text, StringComparison.Ordinal);
+        Assert.Contains("applyExplicitProfileAsync", text, StringComparison.Ordinal);
         Assert.Contains("\"bearer\" ->", text, StringComparison.Ordinal);
         Assert.Contains("\"basic\" ->", text, StringComparison.Ordinal);
         Assert.Contains("\"custom\" ->", text, StringComparison.Ordinal);
         Assert.Contains("\"default\"", text, StringComparison.Ordinal);
         Assert.Contains("AuthResolutionException", text, StringComparison.Ordinal);
+        Assert.Contains("generatePkce", text, StringComparison.Ordinal);
+        Assert.Contains("generateState", text, StringComparison.Ordinal);
+        Assert.Contains("loginAsync", text, StringComparison.Ordinal);
+        Assert.Contains("code_challenge_method=S256", text, StringComparison.Ordinal);
+        Assert.Contains("withTokenCacheLockAsync", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>Shared OAuth2 engine markers for the two C# emitters (cs/csx share near-identical text).</summary>
+    private static void AssertOAuthEngineMarkers_Cs(string text)
+    {
+        Assert.Contains("GeneratePkce", text, StringComparison.Ordinal);
+        Assert.Contains("GenerateState", text, StringComparison.Ordinal);
+        Assert.Contains("LoginAsync", text, StringComparison.Ordinal);
+        Assert.Contains("code_challenge_method=S256", text, StringComparison.Ordinal);
+        Assert.Contains("WithTokenCacheLockAsync", text, StringComparison.Ordinal);
+        Assert.Contains("case \"oauth2\":", text, StringComparison.Ordinal);
     }
 
     [Fact]

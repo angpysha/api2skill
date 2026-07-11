@@ -140,28 +140,28 @@ sign-in, then invoke an operation using the acquired token with no further brows
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T048 [P] [US3] Unit test: oauth2 grant validation — `authorization_code` requires `authUrl`+`callbackUrl`, `client_credentials` requires `tokenUrl`, `login` on a `client_credentials` profile is flagged not-applicable — in `tests/Api2Skill.Tests/Auth/AuthConfigLoaderTests.cs` (extend)
-- [ ] T049 [P] [US3] Integration test: stub IdP + generated dispatcher `login <profile>` completes a full PKCE + `state` authorization-code exchange and writes `.auth-cache.json` in `tests/Api2Skill.Tests/Integration/DispatcherOAuthLoginTests.cs`
-- [ ] T050 [P] [US3] Integration test: a `state` mismatch on the callback is rejected and no token is stored in `tests/Api2Skill.Tests/Integration/DispatcherOAuthLoginTests.cs` (extend)
-- [ ] T051 [P] [US3] Integration test: a valid cached token is used without a browser or network call; an expired token with a refresh token refreshes silently; an expired token with no usable refresh token fails the call with a re-login message and launches no browser in `tests/Api2Skill.Tests/Integration/DispatcherOAuthTokenLifecycleTests.cs`
-- [ ] T052 [P] [US3] Integration test: `client_credentials` tokens are fetched on demand at call time and cached in `tests/Api2Skill.Tests/Integration/DispatcherOAuthClientCredentialsTests.cs`
-- [ ] T053 [P] [US3] Integration test: concurrent operation calls racing an expired token cause exactly one refresh and no cache corruption (file lock + post-lock re-check) in `tests/Api2Skill.Tests/Integration/DispatcherOAuthConcurrencyTests.cs`
-- [ ] T054 [P] [US3] Integration test: headless login (no launchable browser) prints the authorize URL and still completes on redirect in `tests/Api2Skill.Tests/Integration/DispatcherOAuthLoginTests.cs` (extend)
-- [ ] T055 [P] [US3] Integration test: an occupied callback port reports the conflict with guidance to change `callbackUrl` — including the case where **two configured interactive profiles share the same callback port** (spec edge case) — in `tests/Api2Skill.Tests/Integration/DispatcherOAuthLoginTests.cs` (extend)
+- [x] T048 [P] [US3] Unit test: oauth2 grant validation — `authorization_code` requires `authUrl`+`callbackUrl`, `client_credentials` requires `tokenUrl`, `login` on a `client_credentials` profile is flagged not-applicable — in `tests/Api2Skill.Tests/Auth/AuthConfigLoaderTests.cs` (extend)
+- [x] T049 [P] [US3] Integration test: stub IdP + generated dispatcher `login <profile>` completes a full PKCE + `state` authorization-code exchange and writes `.auth-cache.json` in `tests/Api2Skill.Tests/Integration/DispatcherOAuthLoginTests.cs`
+- [x] T050 [P] [US3] Integration test: a `state` mismatch on the callback is rejected and no token is stored in `tests/Api2Skill.Tests/Integration/DispatcherOAuthLoginTests.cs` (extend)
+- [x] T051 [P] [US3] Integration test: a valid cached token is used without a browser or network call; an expired token with a refresh token refreshes silently; an expired token with no usable refresh token fails the call with a re-login message and launches no browser in `tests/Api2Skill.Tests/Integration/DispatcherOAuthTokenLifecycleTests.cs`
+- [x] T052 [P] [US3] Integration test: `client_credentials` tokens are fetched on demand at call time and cached in `tests/Api2Skill.Tests/Integration/DispatcherOAuthClientCredentialsTests.cs`
+- [x] T053 [P] [US3] Integration test: concurrent operation calls racing an expired token cause exactly one refresh and no cache corruption (file lock + post-lock re-check) in `tests/Api2Skill.Tests/Integration/DispatcherOAuthConcurrencyTests.cs`
+- [x] T054 [P] [US3] Integration test: headless login (no launchable browser) prints the authorize URL and still completes on redirect in `tests/Api2Skill.Tests/Integration/DispatcherOAuthLoginTests.cs` (extend)
+- [x] T055 [P] [US3] Integration test: an occupied callback port reports the conflict with guidance to change `callbackUrl` — including the case where **two configured interactive profiles share the same callback port** (spec edge case) — in `tests/Api2Skill.Tests/Integration/DispatcherOAuthLoginTests.cs` (extend)
 
 ### Implementation for User Story 3
 
-- [ ] T056 [US3] Implement PKCE (`code_verifier`/`code_challenge` S256) and `state` generation helpers in `AuthEngine.Cs.cs` and `AuthEngine.Fsx.cs` (depends on T018, T019)
-- [ ] T057 [US3] Implement the `HttpListener`-based loopback callback plus browser launch, headless URL-print fallback, and port-conflict reporting in `AuthEngine.Cs.cs` and `AuthEngine.Fsx.cs` (depends on T056)
-- [ ] T058 [US3] Implement authorize-request construction (URL, `authorizeRequest` custom headers/body, `state`, PKCE challenge) in `AuthEngine.Cs.cs` and `AuthEngine.Fsx.cs` (depends on T057)
-- [ ] T059 [US3] Implement token-exchange and refresh POST requests (`clientAuth` body/basic, `tokenRequest` custom headers/body) in `AuthEngine.Cs.cs` and `AuthEngine.Fsx.cs` (depends on T058)
-- [ ] T060 [US3] Implement `.auth-cache.json` read/write with `0600` permission (POSIX) and atomic temp-file-then-move in `AuthEngine.Cs.cs` and `AuthEngine.Fsx.cs` (depends on T059)
-- [ ] T061 [US3] Implement the inter-process file lock (`.auth-cache.json.lock`, `FileShare.None`, bounded retry) with post-lock validity re-check in `AuthEngine.Cs.cs` and `AuthEngine.Fsx.cs` (FR-019a; depends on T060)
-- [ ] T062 [US3] Implement the `login <profile>` subcommand dispatch, including the "not applicable" message for `client_credentials` profiles and unknown-profile listing, in `src/Api2Skill/Emit/CsFileEmitter.cs`, `CsxEmitter.cs`, `FsxEmitter.cs` (depends on T057)
-- [ ] T063 [US3] Implement per-call oauth2 token resolution — valid/refresh/fail-with-relogin-message, never launching a browser — wired into the auth dispatch loop in `AuthEngine.Cs.cs` and `AuthEngine.Fsx.cs` (depends on T061)
-- [ ] T064 [US3] Add the opt-in generator `--login` flag: after a successful write, run login for each `authorization_code` profile in `src/Api2Skill/Cli/GenerateCommand.cs` (depends on T014, T062)
-- [ ] T065 [US3] Update `SKILL.md` auth-setup docs for `oauth2` + the `entra` preset + login instructions in `src/Api2Skill/Emit/SkillMdWriter.cs` (depends on T023)
-- [ ] T066 [US3] Run quickstart.md Scenario D — manual validation against a stub or real Entra app registration
+- [x] T056 [US3] Implement PKCE (`code_verifier`/`code_challenge` S256) and `state` generation helpers in `AuthEngine.Cs.cs` and `AuthEngine.Fsx.cs` (depends on T018, T019)
+- [x] T057 [US3] Implement the `HttpListener`-based loopback callback plus browser launch, headless URL-print fallback, and port-conflict reporting in `AuthEngine.Cs.cs` and `AuthEngine.Fsx.cs` (depends on T056)
+- [x] T058 [US3] Implement authorize-request construction (URL, `authorizeRequest` custom headers/body, `state`, PKCE challenge) in `AuthEngine.Cs.cs` and `AuthEngine.Fsx.cs` (depends on T057)
+- [x] T059 [US3] Implement token-exchange and refresh POST requests (`clientAuth` body/basic, `tokenRequest` custom headers/body) in `AuthEngine.Cs.cs` and `AuthEngine.Fsx.cs` (depends on T058)
+- [x] T060 [US3] Implement `.auth-cache.json` read/write with `0600` permission (POSIX) and atomic temp-file-then-move in `AuthEngine.Cs.cs` and `AuthEngine.Fsx.cs` (depends on T059)
+- [x] T061 [US3] Implement the inter-process file lock (`.auth-cache.json.lock`, `FileShare.None`, bounded retry) with post-lock validity re-check in `AuthEngine.Cs.cs` and `AuthEngine.Fsx.cs` (FR-019a; depends on T060)
+- [x] T062 [US3] Implement the `login <profile>` subcommand dispatch, including the "not applicable" message for `client_credentials` profiles and unknown-profile listing, in `src/Api2Skill/Emit/CsFileEmitter.cs`, `CsxEmitter.cs`, `FsxEmitter.cs` (depends on T057)
+- [x] T063 [US3] Implement per-call oauth2 token resolution — valid/refresh/fail-with-relogin-message, never launching a browser — wired into the auth dispatch loop in `AuthEngine.Cs.cs` and `AuthEngine.Fsx.cs` (depends on T061)
+- [x] T064 [US3] Add the opt-in generator `--login` flag: after a successful write, run login for each `authorization_code` profile in `src/Api2Skill/Cli/GenerateCommand.cs` (depends on T014, T062)
+- [x] T065 [US3] Update `SKILL.md` auth-setup docs for `oauth2` + the `entra` preset + login instructions in `src/Api2Skill/Emit/SkillMdWriter.cs` (depends on T023)
+- [x] T066 [US3] Run quickstart.md Scenario D — manual validation against a stub or real Entra app registration
 
 **Checkpoint**: User Stories 1, 2, and 3 all work independently.
 

@@ -2,14 +2,19 @@
 // Usage: dotnet fsi call.fsx -- <operationId> [--<param> <value> ...] [--body <json|@file>]
 open System
 open System.Collections.Generic
+open System.Diagnostics
+open System.Net
 open System.Net.Http
+open System.Security.Cryptography
 open System.Text
 open System.Text.Json
+open System.Text.Json.Nodes
 open System.Threading.Tasks
 
 type ParamSpec = { Name: string; Location: string }
 type OperationSpec = { Method: string; PathTemplate: string; Parameters: ParamSpec list; HasBody: bool; BodyContentType: string option; SecuritySchemeIds: string list; AuthProfileNames: string list }
 type SchemeSpec = { Id: string; Kind: string; ApiKeyName: string option; ApiKeyLocation: string option; OAuthTokenUrl: string option }
+type TokenResponse = { AccessToken: string; RefreshToken: string option; ExpiresIn: int }
 
 exception AuthResolutionException of string
 
@@ -99,29 +104,6 @@ let resolveSecretOrLiteral (raw: string) (secrets: JsonElement option) : string 
     else
         raw
 
-let applyExplicitProfile (profile: JsonElement) (secrets: JsonElement option) (query: ResizeArray<string>) (headers: ResizeArray<string * string>) : unit =
-    let profType = getProp profile "type"
-    match profType with
-    | "bearer" ->
-        let token = resolveSecretOrLiteral (getProp profile "token") secrets
-        let value = if token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) then token else sprintf "Bearer %s" token
-        headers.Add(("Authorization", value))
-    | "basic" ->
-        let user = resolveSecretOrLiteral (getProp profile "username") secrets
-        let pass = resolveSecretOrLiteral (getProp profile "password") secrets
-        let encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(sprintf "%s:%s" user pass))
-        headers.Add(("Authorization", sprintf "Basic %s" encoded))
-    | "custom" ->
-        match profile.TryGetProperty("headers") with
-        | true, headersEl when headersEl.ValueKind = JsonValueKind.Array ->
-            for h in headersEl.EnumerateArray() do
-                let name = getProp h "name"
-                let value = resolveSecretOrLiteral (getProp h "value") secrets
-                headers.Add((name, value))
-        | _ -> ()
-    | other ->
-        raise (AuthResolutionException (sprintf "Auth profile type '%s' is not supported by this generated dispatcher yet." other))
-
 let parseArgs (rest: string[]) : Dictionary<string, string> * string option =
     let values = Dictionary<string, string>()
     let mutable body : string option = None
@@ -206,8 +188,423 @@ let applyAuth (http: HttpClient) (scheme: SchemeSpec) (secrets: JsonElement opti
         | _ -> eprintfn "warning: scheme '%s' (%s) is not a supported auth kind — sending unauthenticated." scheme.Id scheme.Kind
     }
 
+let generatePkce () : string * string =
+    let bytes = Array.zeroCreate<byte> 32
+    RandomNumberGenerator.Fill(bytes)
+    let verifier = Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+    let challengeBytes = SHA256.HashData(Encoding.ASCII.GetBytes(verifier))
+    let challenge = Convert.ToBase64String(challengeBytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+    (verifier, challenge)
+
+let generateState () : string =
+    let bytes = Array.zeroCreate<byte> 16
+    RandomNumberGenerator.Fill(bytes)
+    Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+
+let parseQuery (query: string) : Dictionary<string, string> =
+    let result = Dictionary<string, string>(StringComparer.Ordinal)
+    let q = query.TrimStart('?')
+    if q.Length > 0 then
+        for pair in q.Split('&') do
+            let idx = pair.IndexOf('=')
+            if idx < 0 then
+                result.[Uri.UnescapeDataString(pair)] <- ""
+            else
+                result.[Uri.UnescapeDataString(pair.Substring(0, idx))] <- Uri.UnescapeDataString(pair.Substring(idx + 1))
+    result
+
+let tryLaunchBrowser (url: string) : bool =
+    try
+        Process.Start(ProcessStartInfo(url, UseShellExecute = true)) |> ignore
+        true
+    with _ ->
+        try
+            if OperatingSystem.IsMacOS() then
+                Process.Start("open", url) |> ignore
+                true
+            elif OperatingSystem.IsLinux() then
+                Process.Start("xdg-open", url) |> ignore
+                true
+            elif OperatingSystem.IsWindows() then
+                Process.Start(ProcessStartInfo("cmd", sprintf "/c start %s" url, CreateNoWindow = true)) |> ignore
+                true
+            else
+                false
+        with _ ->
+            false
+
+let waitForCallbackAsync (callbackUrl: string) : Task<Dictionary<string, string>> =
+    task {
+        let uri = Uri(callbackUrl)
+        let prefix = sprintf "%s://%s:%d/" uri.Scheme uri.Host uri.Port
+        use listener = new HttpListener()
+        listener.Prefixes.Add(prefix)
+        try
+            listener.Start()
+        with :? HttpListenerException as ex ->
+            raise (AuthResolutionException (sprintf "Could not start the local OAuth callback listener on %s (%s). Another process may be using this port \u2014 try a different callbackUrl in auth.json." prefix ex.Message))
+        let! context = listener.GetContextAsync()
+        let queryString = if isNull (box context.Request.Url) then "" else context.Request.Url.Query
+        let result = parseQuery queryString
+        let page = Encoding.UTF8.GetBytes("<html><body>Login complete \u2014 you can close this window and return to the terminal.</body></html>")
+        context.Response.ContentType <- "text/html"
+        context.Response.ContentLength64 <- int64 page.Length
+        context.Response.OutputStream.Write(page, 0, page.Length)
+        context.Response.OutputStream.Close()
+        listener.Stop()
+        return result
+    }
+
+let resolveOAuthEndpoints (profile: JsonElement) : string option * string option * string list =
+    let preset = getProp profile "preset"
+    let tenant = getProp profile "tenant"
+    let explicitAuthUrl = match profile.TryGetProperty("authUrl") with | true, v -> Some (v.GetString()) | false, _ -> None
+    let explicitTokenUrl = match profile.TryGetProperty("tokenUrl") with | true, v -> Some (v.GetString()) | false, _ -> None
+    let scopes =
+        match profile.TryGetProperty("scopes") with
+        | true, scopesEl when scopesEl.ValueKind = JsonValueKind.Array ->
+            scopesEl.EnumerateArray() |> Seq.choose (fun s -> match s.GetString() with | null -> None | sv -> Some sv) |> List.ofSeq
+        | _ -> []
+    if String.Equals(preset, "entra", StringComparison.OrdinalIgnoreCase) then
+        let authUrl = explicitAuthUrl |> Option.orElseWith (fun () -> if tenant.Length > 0 then Some (sprintf "https://login.microsoftonline.com/%s/oauth2/v2.0/authorize" tenant) else None)
+        let tokenUrl = explicitTokenUrl |> Option.orElseWith (fun () -> if tenant.Length > 0 then Some (sprintf "https://login.microsoftonline.com/%s/oauth2/v2.0/token" tenant) else None)
+        let scopesWithOffline = if List.contains "offline_access" scopes then scopes else scopes @ ["offline_access"]
+        (authUrl, tokenUrl, scopesWithOffline)
+    else
+        (explicitAuthUrl, explicitTokenUrl, scopes)
+
+let buildAuthorizeUrl (authUrl: string) (clientId: string) (callbackUrl: string) (scopes: string list) (challenge: string) (state: string) (profile: JsonElement) : string =
+    let qs = ResizeArray<string>()
+    qs.Add("response_type=code")
+    qs.Add(sprintf "client_id=%s" (Uri.EscapeDataString(clientId)))
+    qs.Add(sprintf "redirect_uri=%s" (Uri.EscapeDataString(callbackUrl)))
+    qs.Add(sprintf "code_challenge=%s" (Uri.EscapeDataString(challenge)))
+    qs.Add("code_challenge_method=S256")
+    qs.Add(sprintf "state=%s" (Uri.EscapeDataString(state)))
+    if not (List.isEmpty scopes) then
+        qs.Add(sprintf "scope=%s" (Uri.EscapeDataString(String.concat " " scopes)))
+    match profile.TryGetProperty("authorizeRequest") with
+    | true, arEl ->
+        match arEl.TryGetProperty("body") with
+        | true, bodyEl when bodyEl.ValueKind = JsonValueKind.Object ->
+            for prop in bodyEl.EnumerateObject() do
+                qs.Add(sprintf "%s=%s" (Uri.EscapeDataString(prop.Name)) (Uri.EscapeDataString(match prop.Value.GetString() with | null -> "" | s -> s)))
+        | _ -> ()
+    | _ -> ()
+    let sep = if authUrl.Contains('?') then "&" else "?"
+    authUrl + sep + String.concat "&" qs
+
+let postTokenRequestAsync (http: HttpClient) (profile: JsonElement) (tokenUrl: string) (clientId: string) (form: Dictionary<string, string>) (secrets: JsonElement option) : Task<TokenResponse option> =
+    task {
+        let clientAuth = getProp profile "clientAuth"
+        let clientSecretRaw = match profile.TryGetProperty("clientSecret") with | true, v -> (match v.GetString() with | null -> None | s -> Some s) | false, _ -> None
+        let clientSecret =
+            match clientSecretRaw with
+            | Some raw when raw.Length > 0 -> Some (resolveSecretOrLiteral raw secrets)
+            | _ -> None
+
+        use request = new HttpRequestMessage(HttpMethod.Post, tokenUrl)
+        match clientAuth, clientSecret with
+        | "basic", Some cs ->
+            form.Remove("client_id") |> ignore
+            let basic = Convert.ToBase64String(Encoding.UTF8.GetBytes(sprintf "%s:%s" clientId cs))
+            request.Headers.TryAddWithoutValidation("Authorization", sprintf "Basic %s" basic) |> ignore
+        | _, Some cs ->
+            form.["client_secret"] <- cs
+        | _ -> ()
+
+        match profile.TryGetProperty("tokenRequest") with
+        | true, trEl ->
+            match trEl.TryGetProperty("headers") with
+            | true, hEl when hEl.ValueKind = JsonValueKind.Object ->
+                for prop in hEl.EnumerateObject() do
+                    request.Headers.TryAddWithoutValidation(prop.Name, (match prop.Value.GetString() with | null -> "" | s -> s)) |> ignore
+            | _ -> ()
+            match trEl.TryGetProperty("body") with
+            | true, bEl when bEl.ValueKind = JsonValueKind.Object ->
+                for prop in bEl.EnumerateObject() do
+                    form.[prop.Name] <- (match prop.Value.GetString() with | null -> "" | s -> s)
+            | _ -> ()
+        | _ -> ()
+
+        request.Content <- new FormUrlEncodedContent(form)
+        let! response = http.SendAsync(request)
+        let! text = response.Content.ReadAsStringAsync()
+        if not response.IsSuccessStatusCode then
+            return None
+        else
+            try
+                use doc = JsonDocument.Parse(text)
+                let root = doc.RootElement
+                match root.TryGetProperty("access_token") with
+                | true, atEl when atEl.GetString() <> null ->
+                    let accessToken = atEl.GetString()
+                    let refreshToken = match root.TryGetProperty("refresh_token") with | true, rtEl -> (match rtEl.GetString() with | null -> None | s -> Some s) | false, _ -> None
+                    let expiresIn = match root.TryGetProperty("expires_in") with | true, eiEl -> (match eiEl.TryGetInt32() with | true, ei -> ei | false, _ -> 3600) | false, _ -> 3600
+                    return Some { AccessToken = accessToken; RefreshToken = refreshToken; ExpiresIn = expiresIn }
+                | _ -> return None
+            with :? JsonException ->
+                return None
+    }
+
+let exchangeCodeForTokenAsync (http: HttpClient) (profile: JsonElement) (tokenUrl: string) (clientId: string) (code: string) (verifier: string) (callbackUrl: string) (secrets: JsonElement option) : Task<TokenResponse option> =
+    let form = Dictionary<string, string>(StringComparer.Ordinal)
+    form.["grant_type"] <- "authorization_code"
+    form.["code"] <- code
+    form.["redirect_uri"] <- callbackUrl
+    form.["code_verifier"] <- verifier
+    form.["client_id"] <- clientId
+    postTokenRequestAsync http profile tokenUrl clientId form secrets
+
+let fetchClientCredentialsTokenAsync (http: HttpClient) (profile: JsonElement) (tokenUrl: string) (clientId: string) (secrets: JsonElement option) : Task<TokenResponse option> =
+    let form = Dictionary<string, string>(StringComparer.Ordinal)
+    form.["grant_type"] <- "client_credentials"
+    form.["client_id"] <- clientId
+    postTokenRequestAsync http profile tokenUrl clientId form secrets
+
+let refreshOAuthTokenAsync (http: HttpClient) (profile: JsonElement) (tokenUrl: string) (clientId: string) (refreshToken: string) (secrets: JsonElement option) : Task<TokenResponse option> =
+    let form = Dictionary<string, string>(StringComparer.Ordinal)
+    form.["grant_type"] <- "refresh_token"
+    form.["refresh_token"] <- refreshToken
+    form.["client_id"] <- clientId
+    postTokenRequestAsync http profile tokenUrl clientId form secrets
+
+let tokenCachePath = IO.Path.Combine(__SOURCE_DIRECTORY__, "..", ".auth-cache.json")
+
+let readTokenCacheAsync (path: string) : Task<Dictionary<string, JsonElement>> =
+    task {
+        let result = Dictionary<string, JsonElement>(StringComparer.Ordinal)
+        if IO.File.Exists(path) then
+            try
+                let! text = IO.File.ReadAllTextAsync(path)
+                use doc = JsonDocument.Parse(text)
+                for prop in doc.RootElement.EnumerateObject() do
+                    result.[prop.Name] <- prop.Value.Clone()
+            with :? JsonException -> ()
+        return result
+    }
+
+let writeTokenCacheAsync (path: string) (cache: Dictionary<string, JsonElement>) : Task<unit> =
+    task {
+        let obj = JsonObject()
+        for kv in cache do
+            obj.[kv.Key] <- JsonNode.Parse(kv.Value.GetRawText())
+        let tmpPath = path + ".tmp-" + Guid.NewGuid().ToString("N")
+        do! IO.File.WriteAllTextAsync(tmpPath, obj.ToJsonString(JsonSerializerOptions(WriteIndented = true)))
+        if not (OperatingSystem.IsWindows()) then
+            IO.File.SetUnixFileMode(tmpPath, IO.UnixFileMode.UserRead ||| IO.UnixFileMode.UserWrite)
+        IO.File.Move(tmpPath, path, true)
+    }
+
+let storeTokenInCache (cache: Dictionary<string, JsonElement>) (profileName: string) (token: TokenResponse) : unit =
+    let obj = JsonObject()
+    obj.["access_token"] <- JsonValue.Create(token.AccessToken)
+    obj.["expires_at"] <- JsonValue.Create(DateTimeOffset.UtcNow.AddSeconds(float token.ExpiresIn).ToString("o"))
+    (match token.RefreshToken with
+     | Some rt -> obj.["refresh_token"] <- JsonValue.Create(rt)
+     | None -> ())
+    cache.[profileName] <- JsonDocument.Parse(obj.ToJsonString()).RootElement.Clone()
+
+let withTokenCacheLockAsync<'T> (action: unit -> Task<'T>) : Task<'T> =
+    task {
+        let lockPath = tokenCachePath + ".lock"
+        let mutable lockStream : IO.FileStream option = None
+        let mutable attempt = 0
+        while lockStream.IsNone && attempt < 100 do
+            try
+                lockStream <- Some (new IO.FileStream(lockPath, IO.FileMode.OpenOrCreate, IO.FileAccess.ReadWrite, IO.FileShare.None))
+            with :? IO.IOException ->
+                do! Task.Delay(50)
+            attempt <- attempt + 1
+        if lockStream.IsNone then
+            raise (AuthResolutionException "Could not acquire the token cache lock (.auth-cache.json.lock) after multiple attempts \u2014 another process may be stuck holding it.")
+        let stream = lockStream.Value
+        try
+            return! action ()
+        finally
+            stream.Dispose()
+    }
+
+let tryClientCredentialsOrFail (http: HttpClient) (profile: JsonElement) (profileName: string) (tokenUrl: string) (clientId: string) (grant: string) (secrets: JsonElement option) (cache: Dictionary<string, JsonElement>) : Task<string> =
+    task {
+        if grant = "client_credentials" then
+            let! fetched = fetchClientCredentialsTokenAsync http profile tokenUrl clientId secrets
+            match fetched with
+            | Some tr ->
+                storeTokenInCache cache profileName tr
+                do! writeTokenCacheAsync tokenCachePath cache
+                return tr.AccessToken
+            | None ->
+                return raise (AuthResolutionException (sprintf "Failed to obtain a client_credentials token for auth profile '%s'." profileName))
+        else
+            return raise (AuthResolutionException (sprintf "No valid or refreshable token for auth profile '%s'. Run: dotnet fsi scripts/call.fsx -- login %s" profileName profileName))
+    }
+
+let resolveOAuthAccessTokenAsync (http: HttpClient) (profile: JsonElement) (profileName: string) (secrets: JsonElement option) : Task<string> =
+    task {
+        let (_, tokenUrlOpt, _) = resolveOAuthEndpoints profile
+        match tokenUrlOpt with
+        | None ->
+            return raise (AuthResolutionException (sprintf "Auth profile '%s' (oauth2) has no tokenUrl configured (directly or via a preset)." profileName))
+        | Some tokenUrl ->
+
+        let clientId = resolveSecretOrLiteral (getProp profile "clientId") secrets
+        let grant = getProp profile "grant"
+
+        return! withTokenCacheLockAsync (fun () ->
+            task {
+                let! cache = readTokenCacheAsync tokenCachePath
+                match cache.TryGetValue(profileName) with
+                | false, _ ->
+                    return! tryClientCredentialsOrFail http profile profileName tokenUrl clientId grant secrets cache
+                | true, entry ->
+                    let expiresAt =
+                        match entry.TryGetProperty("expires_at") with
+                        | true, eaEl -> (match DateTimeOffset.TryParse(eaEl.GetString()) with | true, ea -> ea | false, _ -> DateTimeOffset.MinValue)
+                        | false, _ -> DateTimeOffset.MinValue
+                    let cachedToken = match entry.TryGetProperty("access_token") with | true, atEl -> (match atEl.GetString() with | null -> None | s -> Some s) | false, _ -> None
+                    match cachedToken with
+                    | Some token when expiresAt > DateTimeOffset.UtcNow.AddSeconds(30.0) ->
+                        return token
+                    | _ ->
+                        let refreshToken = match entry.TryGetProperty("refresh_token") with | true, rtEl -> (match rtEl.GetString() with | null -> None | s -> Some s) | false, _ -> None
+                        match refreshToken with
+                        | None ->
+                            return! tryClientCredentialsOrFail http profile profileName tokenUrl clientId grant secrets cache
+                        | Some rt ->
+                            let! refreshed = refreshOAuthTokenAsync http profile tokenUrl clientId rt secrets
+                            match refreshed with
+                            | Some tr ->
+                                storeTokenInCache cache profileName tr
+                                do! writeTokenCacheAsync tokenCachePath cache
+                                return tr.AccessToken
+                            | None ->
+                                return! tryClientCredentialsOrFail http profile profileName tokenUrl clientId grant secrets cache
+            })
+    }
+
+let applyExplicitProfileAsync (http: HttpClient) (profile: JsonElement) (profileName: string) (secrets: JsonElement option) (query: ResizeArray<string>) (headers: ResizeArray<string * string>) : Task<unit> =
+    task {
+        let profType = getProp profile "type"
+        match profType with
+        | "bearer" ->
+            let token = resolveSecretOrLiteral (getProp profile "token") secrets
+            let value = if token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) then token else sprintf "Bearer %s" token
+            headers.Add(("Authorization", value))
+        | "basic" ->
+            let user = resolveSecretOrLiteral (getProp profile "username") secrets
+            let pass = resolveSecretOrLiteral (getProp profile "password") secrets
+            let encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(sprintf "%s:%s" user pass))
+            headers.Add(("Authorization", sprintf "Basic %s" encoded))
+        | "custom" ->
+            match profile.TryGetProperty("headers") with
+            | true, headersEl when headersEl.ValueKind = JsonValueKind.Array ->
+                for h in headersEl.EnumerateArray() do
+                    let name = getProp h "name"
+                    let value = resolveSecretOrLiteral (getProp h "value") secrets
+                    headers.Add((name, value))
+            | _ -> ()
+        | "oauth2" ->
+            let! accessToken = resolveOAuthAccessTokenAsync http profile profileName secrets
+            headers.Add(("Authorization", sprintf "Bearer %s" accessToken))
+        | other ->
+            raise (AuthResolutionException (sprintf "Auth profile type '%s' is not supported by this generated dispatcher yet." other))
+    }
+
+let loginAsync (profileName: string) : Task<int> =
+    task {
+        try
+            let authConfig = loadAuthConfig ()
+            let profilesEl =
+                match authConfig with
+                | Some cfg -> (match cfg.TryGetProperty("profiles") with | true, p -> Some p | false, _ -> None)
+                | None -> None
+            match findProfile profilesEl profileName with
+            | None ->
+                eprintfn "No auth profile named '%s' in auth.json." profileName
+                return 2
+            | Some profile ->
+
+            let profType = getProp profile "type"
+            if profType <> "oauth2" then
+                eprintfn "Profile '%s' is type '%s', not 'oauth2' \u2014 login is only applicable to oauth2 profiles." profileName profType
+                return 2
+            else
+
+            let grant = getProp profile "grant"
+            if grant = "client_credentials" then
+                printfn "Profile '%s' uses client_credentials \u2014 not applicable: no interactive login is needed, a token is obtained automatically at call time." profileName
+                return 0
+            else
+
+            let (authUrlOpt, tokenUrlOpt, scopes) = resolveOAuthEndpoints profile
+            match authUrlOpt, tokenUrlOpt with
+            | None, _ | _, None ->
+                eprintfn "Profile '%s' is missing authUrl/tokenUrl (directly or via a preset)." profileName
+                return 2
+            | Some authUrl, Some tokenUrl ->
+
+            let callbackUrlRaw = getProp profile "callbackUrl"
+            let callbackUrl = if callbackUrlRaw.Length = 0 then "http://localhost:8400/callback" else callbackUrlRaw
+            let secrets = loadSecrets ()
+            let clientId = resolveSecretOrLiteral (getProp profile "clientId") secrets
+
+            let (verifier, challenge) = generatePkce ()
+            let state = generateState ()
+            let authorizeUrl = buildAuthorizeUrl authUrl clientId callbackUrl scopes challenge state profile
+
+            printfn "Opening your browser to sign in for profile '%s'..." profileName
+            let browserLaunched = tryLaunchBrowser authorizeUrl
+            printfn "%s" (if browserLaunched then "If it did not open, visit this URL to sign in:" else "Could not launch a browser automatically. Open this URL to sign in:")
+            printfn "%s" authorizeUrl
+
+            let! callbackParams = waitForCallbackAsync callbackUrl
+
+            let stateMatches = match callbackParams.TryGetValue("state") with | true, returnedState -> returnedState = state | false, _ -> false
+            if not stateMatches then
+                eprintfn "The callback's state did not match what was sent \u2014 rejecting (possible CSRF/mix-up). No token was stored. Run login again."
+                return 2
+            else
+
+            match callbackParams.TryGetValue("code") with
+            | false, _ ->
+                let err = match callbackParams.TryGetValue("error") with | true, e -> e | false, _ -> "no authorization code was returned"
+                eprintfn "Login failed: %s" err
+                return 2
+            | true, code ->
+
+            use http = new HttpClient()
+            let! tokenResponse = exchangeCodeForTokenAsync http profile tokenUrl clientId code verifier callbackUrl secrets
+            match tokenResponse with
+            | None ->
+                eprintfn "Failed to exchange the authorization code for a token."
+                return 2
+            | Some tr ->
+
+            do! withTokenCacheLockAsync (fun () ->
+                task {
+                    let! cache = readTokenCacheAsync tokenCachePath
+                    storeTokenInCache cache profileName tr
+                    do! writeTokenCacheAsync tokenCachePath cache
+                })
+
+            printfn "Login succeeded for profile '%s'. You can now call operations that use it." profileName
+            return 0
+        with AuthResolutionException msg ->
+            eprintfn "%s" msg
+            return 2
+    }
+
 let run (args: string[]) : Task<int> =
     task {
+        if args.Length > 0 && args.[0] = "login" then
+            if args.Length < 2 then
+                eprintfn "Usage: dotnet fsi call.fsx -- login <profile>"
+                return 2
+            else
+                return! loginAsync args.[1]
+        else
+
         if args.Length = 0 || args.[0] = "-h" || args.[0] = "--help" then
             eprintfn "Usage: dotnet fsi call.fsx -- <operationId> [--<param> <value> ...] [--body <json|@file>]"
             eprintfn "Known operations: %s" (String.concat ", " (operations.Keys |> Seq.sort))
@@ -270,7 +667,7 @@ let run (args: string[]) : Task<int> =
                 for profileName in op.AuthProfileNames do
                     match findProfile profilesEl profileName with
                     | None -> raise (AuthResolutionException (sprintf "auth.json has no profile named '%s' (referenced by operation '%s')." profileName operationId))
-                    | Some profile -> applyExplicitProfile profile secrets query headers
+                    | Some profile -> do! applyExplicitProfileAsync http profile profileName secrets query headers
             else
                 for schemeId in op.SecuritySchemeIds do
                     match schemes.TryFind(schemeId) with
