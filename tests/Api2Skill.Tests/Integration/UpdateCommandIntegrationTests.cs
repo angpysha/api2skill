@@ -118,4 +118,87 @@ public class UpdateCommandIntegrationTests : IDisposable
         var manifest = SkillManifestIo.TryLoad(skillDir);
         Assert.Equal(specPath, manifest!.SpecSource); // unchanged — no new source was given
     }
+
+    /// <summary>T007/US1 (specs/004-skill-rename-move-on-update): rename-only preserves credential/cache files in place.</summary>
+    [Fact]
+    public async Task Update_WithNameOnly_PreservesSecretsAuthJsonAndTokenCache()
+    {
+        var skillDir = await GenerateWithNonDefaultOptionsAsync(FixturePath("petstore.json"));
+        await File.WriteAllTextAsync(Path.Combine(skillDir, "secrets.json"), """{"apiKeyAuth":{"apiKey":"REAL-SECRET"}}""");
+        await File.WriteAllTextAsync(Path.Combine(skillDir, "auth.json"), """{"profiles":[{"name":"default","type":"bearer"}]}""");
+        await File.WriteAllTextAsync(Path.Combine(skillDir, ".auth-cache.json"), """{"aad":{"access_token":"LIVE-TOKEN"}}""");
+        var newSpecPath = await CreateMutatedSpecAsync();
+
+        var exitCode = await UpdateCommand.RunAsync(skillDir, newSpecPath, CancellationToken.None, newName: "mypets-v2");
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Equal("""{"apiKeyAuth":{"apiKey":"REAL-SECRET"}}""", await File.ReadAllTextAsync(Path.Combine(skillDir, "secrets.json")));
+        Assert.Equal("""{"profiles":[{"name":"default","type":"bearer"}]}""", await File.ReadAllTextAsync(Path.Combine(skillDir, "auth.json")));
+        Assert.Equal("""{"aad":{"access_token":"LIVE-TOKEN"}}""", await File.ReadAllTextAsync(Path.Combine(skillDir, ".auth-cache.json")));
+        var manifest = SkillManifestIo.TryLoad(skillDir);
+        Assert.Equal("mypets-v2", manifest!.Name);
+    }
+
+    /// <summary>T011/US2: --out moves the skill, preserves credentials at the new location, and removes the old directory.</summary>
+    [Fact]
+    public async Task Update_WithOut_MovesSkill_PreservesCredentials_AndDeletesSourceDirectory()
+    {
+        var skillDir = await GenerateWithNonDefaultOptionsAsync(FixturePath("petstore.json"));
+        await File.WriteAllTextAsync(Path.Combine(skillDir, "secrets.json"), """{"apiKeyAuth":{"apiKey":"REAL-SECRET"}}""");
+        await File.WriteAllTextAsync(Path.Combine(skillDir, "auth.json"), """{"profiles":[{"name":"default","type":"bearer"}]}""");
+        await File.WriteAllTextAsync(Path.Combine(skillDir, ".auth-cache.json"), """{"aad":{"access_token":"LIVE-TOKEN"}}""");
+        var newSpecPath = await CreateMutatedSpecAsync();
+        var newDir = Path.Combine(_workDir, "apis", "petstore-moved");
+
+        var exitCode = await UpdateCommand.RunAsync(skillDir, newSpecPath, CancellationToken.None, newOutputDirectory: newDir);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.False(Directory.Exists(skillDir)); // old location removed
+        Assert.True(File.Exists(Path.Combine(newDir, "scripts", "call.fsx"))); // still fsx — honored from manifest
+        Assert.Equal("""{"apiKeyAuth":{"apiKey":"REAL-SECRET"}}""", await File.ReadAllTextAsync(Path.Combine(newDir, "secrets.json")));
+        Assert.Equal("""{"profiles":[{"name":"default","type":"bearer"}]}""", await File.ReadAllTextAsync(Path.Combine(newDir, "auth.json")));
+        Assert.Equal("""{"aad":{"access_token":"LIVE-TOKEN"}}""", await File.ReadAllTextAsync(Path.Combine(newDir, ".auth-cache.json")));
+        var manifest = SkillManifestIo.TryLoad(newDir);
+        Assert.NotNull(manifest);
+        Assert.Equal(newSpecPath, manifest.SpecSource);
+    }
+
+    /// <summary>T012/US2: --out normalizing to the same path as skill-path behaves as a plain in-place update.</summary>
+    [Fact]
+    public async Task Update_WithOutEqualToSkillPath_BehavesAsInPlaceUpdate()
+    {
+        var skillDir = await GenerateWithNonDefaultOptionsAsync(FixturePath("petstore.json"));
+        await File.WriteAllTextAsync(Path.Combine(skillDir, "secrets.json"), """{"apiKeyAuth":{"apiKey":"REAL-SECRET"}}""");
+        var newSpecPath = await CreateMutatedSpecAsync();
+
+        // Not textually identical to skillDir, but normalizes (Path.GetFullPath) to the same directory.
+        var sameDirDifferentSpelling = Path.Combine(skillDir, "..", Path.GetFileName(skillDir));
+
+        var exitCode = await UpdateCommand.RunAsync(skillDir, newSpecPath, CancellationToken.None, newOutputDirectory: sameDirDifferentSpelling);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.True(Directory.Exists(skillDir));
+        Assert.Equal("""{"apiKeyAuth":{"apiKey":"REAL-SECRET"}}""", await File.ReadAllTextAsync(Path.Combine(skillDir, "secrets.json")));
+    }
+
+    /// <summary>T015/US3: --name and --out combined in one invocation.</summary>
+    [Fact]
+    public async Task Update_WithNameAndOut_ProducesRenamedSkillAtNewLocation_WithPreservedCredentials_AndNoSourceDir()
+    {
+        var skillDir = await GenerateWithNonDefaultOptionsAsync(FixturePath("petstore.json"));
+        await File.WriteAllTextAsync(Path.Combine(skillDir, "secrets.json"), """{"apiKeyAuth":{"apiKey":"REAL-SECRET"}}""");
+        var newSpecPath = await CreateMutatedSpecAsync();
+        var newDir = Path.Combine(_workDir, "apis", "renamed");
+
+        var exitCode = await UpdateCommand.RunAsync(
+            skillDir, newSpecPath, CancellationToken.None, newName: "renamed", newOutputDirectory: newDir);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.False(Directory.Exists(skillDir));
+        Assert.Equal("""{"apiKeyAuth":{"apiKey":"REAL-SECRET"}}""", await File.ReadAllTextAsync(Path.Combine(newDir, "secrets.json")));
+        var manifest = SkillManifestIo.TryLoad(newDir);
+        Assert.NotNull(manifest);
+        Assert.Equal("renamed", manifest.Name);
+        Assert.Equal(newSpecPath, manifest.SpecSource);
+    }
 }

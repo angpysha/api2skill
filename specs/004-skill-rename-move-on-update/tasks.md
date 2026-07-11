@@ -12,8 +12,8 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 [P] Confirm feature branch `feature/004-skill-rename-move-on-update` and update `.specify/feature.json` → `specs/004-skill-rename-move-on-update`
-- [ ] T002 [P] Link beads parent `api2skill-4zx` to this spec (comment + child implementation issue)
+- [x] T001 [P] Confirm feature branch `feature/004-skill-rename-move-on-update` and update `.specify/feature.json` → `specs/004-skill-rename-move-on-update`
+- [x] T002 [P] Link beads parent `api2skill-4zx` to this spec (comment + child implementation issue)
 
 ---
 
@@ -23,12 +23,12 @@
 
 ### Tests for Foundational ⚠️
 
-- [ ] T003 [P] Unit test: when `SkillWriter.Write` target dir ≠ preserve source dir, `secrets.json`/`auth.json`/`.auth-cache.json` bytes from source appear in final output in `tests/Api2Skill.Tests/Output/SkillWriterTests.cs` (new or extend existing if present)
+- [x] T003 [P] Unit test: when `SkillWriter.Write` target dir ≠ preserve source dir, `secrets.json`/`auth.json`/`.auth-cache.json` bytes from source appear in final output in `tests/Api2Skill.Tests/Output/SkillWriterTests.cs` (new or extend existing if present)
 
 ### Implementation for Foundational
 
-- [ ] T004 Extend `SkillWriter.Write` to accept optional preserve-from-source directory (or explicit preserved byte buffers from caller) so cross-directory moves copy credential files before atomic finalize in `src/Api2Skill/Output/SkillWriter.cs` (depends on T003)
-- [ ] T005 Add internal helper on `UpdateCommand` (or small `SkillRelocate` type in `Output/`) to resolve/normalize source vs target paths and pre-read preserve set when paths differ in `src/Api2Skill/Cli/UpdateCommand.cs` (depends on T004)
+- [x] T004 Extend `SkillWriter.Write` to accept optional preserve-from-source directory (or explicit preserved byte buffers from caller) so cross-directory moves copy credential files before atomic finalize in `src/Api2Skill/Output/SkillWriter.cs` (depends on T003)
+- [x] T005 Add internal helper on `UpdateCommand` (or small `SkillRelocate` type in `Output/`) to resolve/normalize source vs target paths and pre-read preserve set when paths differ in `src/Api2Skill/Cli/UpdateCommand.cs` (depends on T004)
 
 **Checkpoint**: Cross-directory byte preservation works in isolation.
 
@@ -42,13 +42,13 @@
 
 ### Tests for User Story 1 ⚠️
 
-- [ ] T006 [P] [US1] CLI test: `update --name` with no `--out` succeeds and rewrites manifest name in `tests/Api2Skill.Tests/Cli/UpdateCommandTests.cs`
-- [ ] T007 [P] [US1] Integration test: rename-only preserves `secrets.json`, `auth.json`, `.auth-cache.json` byte-identical in `tests/Api2Skill.Tests/Integration/UpdateCommandIntegrationTests.cs`
+- [x] T006 [P] [US1] CLI test: `update --name` with no `--out` succeeds and rewrites manifest name in `tests/Api2Skill.Tests/Cli/UpdateCommandTests.cs`
+- [x] T007 [P] [US1] Integration test: rename-only preserves `secrets.json`, `auth.json`, `.auth-cache.json` byte-identical in `tests/Api2Skill.Tests/Integration/UpdateCommandIntegrationTests.cs`
 
 ### Implementation for User Story 1
 
-- [ ] T008 [US1] Add `--name` option to `UpdateCommand.Create()`; pass resolved name into `GenerateOptions` in `RunAsync` in `src/Api2Skill/Cli/UpdateCommand.cs` (depends on T005)
-- [ ] T009 [US1] Regression test: `update` without `--name`/`--out` still matches 003 behavior in `tests/Api2Skill.Tests/Integration/UpdateCommandIntegrationTests.cs` (depends on T008)
+- [x] T008 [US1] Add `--name` option to `UpdateCommand.Create()`; pass resolved name into `GenerateOptions` in `RunAsync` in `src/Api2Skill/Cli/UpdateCommand.cs` (depends on T005)
+- [x] T009 [US1] Regression test: `update` without `--name`/`--out` still matches 003 behavior in `tests/Api2Skill.Tests/Integration/UpdateCommandIntegrationTests.cs` (depends on T008)
 
 **Checkpoint**: Rename-only works; 003 regression green.
 
@@ -62,14 +62,14 @@
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T010 [P] [US2] CLI test: `--out` collision with existing foreign directory fails clearly in `tests/Api2Skill.Tests/Cli/UpdateCommandTests.cs`
-- [ ] T011 [P] [US2] Integration test: move preserves credentials and deletes source directory in `tests/Api2Skill.Tests/Integration/UpdateCommandIntegrationTests.cs`
-- [ ] T012 [P] [US2] Integration test: `--out` equal to `<skill-path>` (normalized) behaves as in-place update in `tests/Api2Skill.Tests/Integration/UpdateCommandIntegrationTests.cs`
+- [x] T010 [P] [US2] CLI test: `--out` collision with existing foreign directory fails clearly in `tests/Api2Skill.Tests/Cli/UpdateCommandTests.cs`
+- [x] T011 [P] [US2] Integration test: move preserves credentials and deletes source directory in `tests/Api2Skill.Tests/Integration/UpdateCommandIntegrationTests.cs`
+- [x] T012 [P] [US2] Integration test: `--out` equal to `<skill-path>` (normalized) behaves as in-place update in `tests/Api2Skill.Tests/Integration/UpdateCommandIntegrationTests.cs`
 
 ### Implementation for User Story 2
 
-- [ ] T013 [US2] Add `--out` option to `UpdateCommand.Create()`; wire relocate orchestration (pre-flight, generate to target, source delete) in `RunAsync` in `src/Api2Skill/Cli/UpdateCommand.cs` (depends on T004, T005)
-- [ ] T014 [US2] Surface best-effort warning when source delete fails after successful write (edge case) in `src/Api2Skill/Cli/UpdateCommand.cs` (depends on T013)
+- [x] T013 [US2] Add `--out` option to `UpdateCommand.Create()`; wire relocate orchestration (pre-flight, generate to target, source delete) in `RunAsync` in `src/Api2Skill/Cli/UpdateCommand.cs` (depends on T004, T005)
+- [x] T014 [US2] Surface best-effort warning when source delete fails after successful write (edge case) in `src/Api2Skill/Cli/UpdateCommand.cs` (depends on T013)
 
 **Checkpoint**: Move works independently; US1 + US2 both green.
 
@@ -81,11 +81,11 @@
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T015 [P] [US3] Integration test: combined `--name` + `--out` produces correct name at new path with preserved credentials and no source dir in `tests/Api2Skill.Tests/Integration/UpdateCommandIntegrationTests.cs`
+- [x] T015 [P] [US3] Integration test: combined `--name` + `--out` produces correct name at new path with preserved credentials and no source dir in `tests/Api2Skill.Tests/Integration/UpdateCommandIntegrationTests.cs`
 
 ### Implementation for User Story 3
 
-- [ ] T016 [US3] Verify combined flags path uses both resolved name and target dir (likely already covered by T008+T013 — add explicit test-first gate, fix gaps only) in `src/Api2Skill/Cli/UpdateCommand.cs` (depends on T013)
+- [x] T016 [US3] Verify combined flags path uses both resolved name and target dir (likely already covered by T008+T013 — add explicit test-first gate, fix gaps only) in `src/Api2Skill/Cli/UpdateCommand.cs` (depends on T013)
 
 **Checkpoint**: All three user stories independently testable.
 
@@ -93,9 +93,9 @@
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T017 [P] Update `README.md` with `update --name` / `update --out` examples
-- [ ] T018 [P] Close or update beads `api2skill-4zx` when implementation merges (keep open until then)
-- [ ] T019 Run full test suite + dev gate; confirm zero new warnings
+- [x] T017 [P] Update `README.md` with `update --name` / `update --out` examples
+- [x] T018 [P] Close or update beads `api2skill-4zx` when implementation merges (keep open until then)
+- [x] T019 Run full test suite + dev gate; confirm zero new warnings
 
 ---
 

@@ -4,7 +4,7 @@
 
 **Created**: 2026-07-12
 
-**Status**: Draft
+**Status**: Implemented
 
 **Input**: Deferred follow-up from feature 003 (beads `api2skill-4zx`, specs/003 T020): allow changing `--name` or output path during `update` without orphaning `secrets.json`, `auth.json`, or `.auth-cache.json`.
 

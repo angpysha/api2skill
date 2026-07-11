@@ -64,6 +64,12 @@ api2skill generate ./petstore.json --name my-petstore --out ./skills/my-petstore
 api2skill update ./skills/my-petstore ./petstore-v2.json
 # Or re-read/re-fetch the manifest's original source:
 api2skill update ./skills/my-petstore
+
+# Rename and/or relocate while updating — secrets.json, auth.json, and .auth-cache.json
+# move with it, and the old directory is removed once the new one is complete.
+api2skill update ./skills/my-petstore ./petstore-v2.json --name petstore-prod
+api2skill update ./skills/my-petstore ./petstore-v2.json --out ./apis/petstore
+api2skill update ./skills/my-petstore ./petstore-v2.json --name petstore-prod --out ./apis/petstore
 ```
 
 Then, inside the generated skill directory:

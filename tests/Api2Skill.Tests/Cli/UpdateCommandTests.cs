@@ -86,4 +86,61 @@ public class UpdateCommandTests : IDisposable
         Assert.NotNull(manifest);
         Assert.Equal(newSpecPath, manifest.SpecSource);
     }
+
+    /// <summary>T008/US1 (specs/004-skill-rename-move-on-update): --name alone regenerates in place under the new name.</summary>
+    [Fact]
+    public async Task Update_WithNameOnly_RegeneratesInPlaceAndRewritesManifestName()
+    {
+        var skillDir = Path.Combine(_workDir, "skill");
+        var generateOptions = new GenerateOptions(
+            SpecSource: FixturePath("petstore.json"),
+            OutputDirectory: skillDir,
+            Name: "petstore",
+            ScriptKind: "cs",
+            Include: [],
+            Exclude: [],
+            Force: false,
+            Insecure: false,
+            Format: null,
+            BaseUrl: null);
+        Assert.Equal(ExitCodes.Success, await GenerateCommand.RunAsync(generateOptions, CancellationToken.None));
+
+        var exitCode = await UpdateCommand.RunAsync(skillDir, null, CancellationToken.None, newName: "petstore-v2");
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.True(Directory.Exists(skillDir)); // in place — no move
+        var manifest = SkillManifestIo.TryLoad(skillDir);
+        Assert.NotNull(manifest);
+        Assert.Equal("petstore-v2", manifest.Name);
+    }
+
+    /// <summary>T010/US2: --out pointing at an existing non-empty foreign directory fails clearly and touches nothing.</summary>
+    [Fact]
+    public async Task Update_WithOutCollidingWithNonEmptyForeignDirectory_ExitsTwo_WritesNothingEitherSide()
+    {
+        var skillDir = Path.Combine(_workDir, "skill");
+        var generateOptions = new GenerateOptions(
+            SpecSource: FixturePath("petstore.json"),
+            OutputDirectory: skillDir,
+            Name: "petstore",
+            ScriptKind: "cs",
+            Include: [],
+            Exclude: [],
+            Force: false,
+            Insecure: false,
+            Format: null,
+            BaseUrl: null);
+        Assert.Equal(ExitCodes.Success, await GenerateCommand.RunAsync(generateOptions, CancellationToken.None));
+
+        var foreignDir = Path.Combine(_workDir, "foreign");
+        Directory.CreateDirectory(foreignDir);
+        await File.WriteAllTextAsync(Path.Combine(foreignDir, "unrelated.txt"), "not an api2skill skill");
+
+        var exitCode = await UpdateCommand.RunAsync(skillDir, null, CancellationToken.None, newOutputDirectory: foreignDir);
+
+        Assert.Equal(ExitCodes.UsageError, exitCode);
+        Assert.True(Directory.Exists(skillDir)); // source untouched
+        Assert.True(File.Exists(Path.Combine(foreignDir, "unrelated.txt"))); // destination untouched
+        Assert.Single(Directory.GetFileSystemEntries(foreignDir)); // nothing new written into it
+    }
 }

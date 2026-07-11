@@ -136,7 +136,12 @@ public static class GenerateCommand
             ? []
             : [.. raw.SelectMany(v => v.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))];
 
-    internal static async Task<int> RunAsync(GenerateOptions options, CancellationToken cancellationToken)
+    /// <param name="preserveFromDirectory">
+    /// specs/004-skill-rename-move-on-update: when set (by <c>UpdateCommand</c>'s relocate path),
+    /// forwarded to <see cref="SkillWriter.Write"/> so credential/cache files are preserved from
+    /// this directory instead of <c>options.OutputDirectory</c>. Not exposed as a CLI flag.
+    /// </param>
+    internal static async Task<int> RunAsync(GenerateOptions options, CancellationToken cancellationToken, string? preserveFromDirectory = null)
     {
         if (options.AuthConfigPath is { Length: > 0 } && options.AuthShorthand is { Length: > 0 })
         {
@@ -274,7 +279,7 @@ public static class GenerateCommand
         DirectoryInfo written;
         try
         {
-            written = SkillWriter.Write(model, outputDirectory, options.Force, emitter, authConfigJson, manifestJson);
+            written = SkillWriter.Write(model, outputDirectory, options.Force, emitter, authConfigJson, manifestJson, preserveFromDirectory);
         }
         catch (SkillDirectoryExistsException ex)
         {

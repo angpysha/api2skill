@@ -26,6 +26,11 @@ public sealed class SkillDirectoryExistsException(string path)
 /// <c>.api2skill.json</c> generation manifest (specs/003-skill-update-command) is always
 /// (re)written when supplied — it has no preservation logic, since it should always reflect the
 /// most recent invocation.
+///
+/// <c>preserveFromDirectory</c> (specs/004-skill-rename-move-on-update) lets a caller preserve
+/// credential/cache files from a directory other than <paramref name="outputDirectory"/> —
+/// used when <c>update --out</c> relocates a skill and the old files live at the source path,
+/// not the (possibly not-yet-existing) target path.
 /// </summary>
 public static class SkillWriter
 {
@@ -33,7 +38,7 @@ public static class SkillWriter
 
     public static DirectoryInfo Write(
         SkillModel model, string outputDirectory, bool force, IScriptEmitter emitter,
-        string? authConfigJson = null, string? manifestJson = null)
+        string? authConfigJson = null, string? manifestJson = null, string? preserveFromDirectory = null)
     {
         var targetDir = new DirectoryInfo(Path.GetFullPath(outputDirectory));
         byte[]? preservedSecrets = null;
@@ -41,26 +46,34 @@ public static class SkillWriter
         byte[]? preservedTokenCache = null;
         byte[]? preservedTokenCacheLock = null;
 
-        if (targetDir.Exists)
+        if (targetDir.Exists && !force)
         {
-            if (!force)
-            {
-                throw new SkillDirectoryExistsException(outputDirectory);
-            }
+            throw new SkillDirectoryExistsException(outputDirectory);
+        }
 
-            var secretsPath = Path.Combine(targetDir.FullName, SecretsScaffold.RealSecretsFileName);
+        // specs/004-skill-rename-move-on-update: when `update --out` relocates a skill,
+        // credential/cache files must be read from the *old* directory even though the
+        // *new* directory (targetDir) doesn't exist yet — preserveFromDirectory lets the
+        // caller point preservation at that source directory instead of targetDir.
+        var preserveSourceDir = preserveFromDirectory is { Length: > 0 }
+            ? new DirectoryInfo(Path.GetFullPath(preserveFromDirectory))
+            : targetDir;
+
+        if (preserveSourceDir.Exists)
+        {
+            var secretsPath = Path.Combine(preserveSourceDir.FullName, SecretsScaffold.RealSecretsFileName);
             if (File.Exists(secretsPath))
             {
                 preservedSecrets = File.ReadAllBytes(secretsPath);
             }
 
-            var authConfigPath = Path.Combine(targetDir.FullName, AuthConfigFileName);
+            var authConfigPath = Path.Combine(preserveSourceDir.FullName, AuthConfigFileName);
             if (authConfigJson is null && File.Exists(authConfigPath))
             {
                 preservedAuthConfig = File.ReadAllBytes(authConfigPath);
             }
 
-            var tokenCachePath = Path.Combine(targetDir.FullName, SecretsScaffold.TokenCacheFileName);
+            var tokenCachePath = Path.Combine(preserveSourceDir.FullName, SecretsScaffold.TokenCacheFileName);
             if (File.Exists(tokenCachePath))
             {
                 preservedTokenCache = File.ReadAllBytes(tokenCachePath);
