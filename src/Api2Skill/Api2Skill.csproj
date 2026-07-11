@@ -9,10 +9,30 @@
     <RootNamespace>Api2Skill</RootNamespace>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <AssemblyName>api2skill</AssemblyName>
+    <PackageId>api2skill</PackageId>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>api2skill</ToolCommandName>
+    <Version>0.1.0</Version>
+    <Authors>angpysha</Authors>
+    <Description>Converts an OpenAPI/Swagger document into a self-contained Claude Agent Skill (SKILL.md + a runnable .cs/.fsx/.csx dispatcher + reference docs + a secrets scaffold) so an existing REST API becomes something Claude can call correctly, with authentication.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/angpysha/api2skill</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/angpysha/api2skill</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>openapi;swagger;claude;claude-agent-skill;codegen;cli;dotnet-tool</PackageTags>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.OpenApi" Version="3.8.0" />
     <PackageReference Include="Microsoft.OpenApi.YamlReader" Version="3.8.0" />
     <PackageReference Include="System.CommandLine" Version="2.0.9" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <ItemGroup>

@@ -23,9 +23,15 @@ Writing a correct, well-documented Claude Skill for an API by hand is repetitive
 parameter docs, auth handling, and example requests all have to be derived from the API's own
 OpenAPI spec anyway. api2skill automates that derivation.
 
-## Install / build
+## Install
 
-Requires the **.NET 10 SDK** (this repo pins it via `global.json`).
+Requires the **.NET 10 SDK**.
+
+```bash
+dotnet tool install --global api2skill
+```
+
+Or build from source (this repo pins the SDK version via `global.json`):
 
 ```bash
 dotnet build --configuration Release
