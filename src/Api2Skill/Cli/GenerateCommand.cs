@@ -18,10 +18,10 @@ public static class ExitCodes
 }
 
 /// <summary>
-/// Builds the <c>generate</c> command (contracts/cli.md). Wires the file input path end-to-end
-/// through the <see cref="CsFileEmitter"/> (D3 default). URL/stdin acquisition (T029, US3) and
-/// the <c>.fsx</c>/<c>.csx</c> emitters (T033/T034, US4) plug into this same command without
-/// changing its shape.
+/// Builds the <c>generate</c> command (contracts/cli.md). Accepts a file, URL, or stdin
+/// (<c>-</c>) spec source via <see cref="SpecSource.AcquireAsync"/>, and emits through
+/// whichever of the three <see cref="IScriptEmitter"/> implementations <c>--script</c> selects
+/// (<see cref="CsFileEmitter"/> default, <see cref="FsxEmitter"/>, <see cref="CsxEmitter"/>).
 /// </summary>
 public static class GenerateCommand
 {
@@ -111,22 +111,23 @@ public static class GenerateCommand
         string format;
         try
         {
-            // Foundational wires the file source only; URL ("http.../https://...") and stdin
-            // ("-") arrive in US3 (T029). Fail clearly rather than mis-report a generic
-            // file-not-found for a source kind that simply isn't implemented yet.
-            if (options.SpecSource == "-" || options.SpecSource.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
-                || options.SpecSource.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-            {
-                Console.Error.WriteLine("URL and stdin spec sources are not implemented yet (planned: US3).");
-                return ExitCodes.AcquisitionFailure;
-            }
-
-            (stream, format) = await SpecSource.AcquireFileAsync(options.SpecSource, options.Format, cancellationToken)
+            (stream, format) = await SpecSource.AcquireAsync(options.SpecSource, options.Format, options.Insecure, cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (FileNotFoundException ex)
         {
             Console.Error.WriteLine(ex.Message);
+            return ExitCodes.AcquisitionFailure;
+        }
+        catch (HttpRequestException ex)
+        {
+            // Covers connection failures, DNS failures, and TLS certificate errors when
+            // --insecure was not passed (EC-8).
+            Console.Error.WriteLine($"Failed to fetch spec from {options.SpecSource}: {ex.Message}");
+            if (!options.Insecure)
+            {
+                Console.Error.WriteLine("If the server uses a self-signed/untrusted certificate, pass --insecure (dev-only).");
+            }
             return ExitCodes.AcquisitionFailure;
         }
 
@@ -158,17 +159,23 @@ public static class GenerateCommand
             Name: name,
             IncludeSelectors: options.Include,
             ExcludeSelectors: options.Exclude,
-            BaseUrlOverride: options.BaseUrl);
+            BaseUrlOverride: options.BaseUrl,
+            InsecureDefault: options.Insecure);
 
         var model = SkillModelBuilder.Build(loaded.Document, loaded.SpecVersion, buildOptions);
 
-        // Only the .cs emitter exists so far — .fsx/.csx land in US4 (T033/T034).
-        if (options.ScriptKind is not "cs")
+        IScriptEmitter? emitter = options.ScriptKind switch
         {
-            Console.Error.WriteLine($"--script {options.ScriptKind} is not implemented yet (planned: US4). Only 'cs' is available.");
+            "cs" => new CsFileEmitter(),
+            "fsx" => new FsxEmitter(),
+            "csx" => new CsxEmitter(),
+            _ => null,
+        };
+        if (emitter is null)
+        {
+            Console.Error.WriteLine($"Unknown --script '{options.ScriptKind}'. Valid values: cs, fsx, csx.");
             return ExitCodes.UsageError;
         }
-        IScriptEmitter emitter = new CsFileEmitter();
 
         var outputDirectory = options.OutputDirectory is { Length: > 0 } o ? o : Path.Combine(".", name);
 

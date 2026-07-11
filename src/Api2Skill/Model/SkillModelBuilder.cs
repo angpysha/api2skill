@@ -12,7 +12,8 @@ public sealed record BuildOptions(
     string Name,
     IReadOnlyList<string>? IncludeSelectors = null,
     IReadOnlyList<string>? ExcludeSelectors = null,
-    string? BaseUrlOverride = null);
+    string? BaseUrlOverride = null,
+    bool InsecureDefault = false);
 
 /// <summary>
 /// Maps a parsed <see cref="OpenApiDocument"/> to the emitter-agnostic <see cref="SkillModel"/>
@@ -119,7 +120,8 @@ public static class SkillModelBuilder
             SpecVersion: MapSpecVersion(specVersion),
             SecuritySchemes: usedSchemes,
             Tags: tagGroups,
-            Warnings: warnings);
+            Warnings: warnings,
+            InsecureDefault: options.InsecureDefault);
     }
 
     private static SpecVersionKind MapSpecVersion(OpenApiSpecVersion version) => version switch

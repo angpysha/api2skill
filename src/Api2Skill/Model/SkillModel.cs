@@ -27,7 +27,8 @@ public sealed record SkillModel(
     SpecVersionKind SpecVersion,
     IReadOnlyList<SecuritySchemeModel> SecuritySchemes,
     IReadOnlyList<TagGroup> Tags,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings,
+    bool InsecureDefault = false);
 
 /// <summary>A tag-grouped bucket of operations for the SKILL.md operation index (D6).</summary>
 public sealed record TagGroup(
