@@ -15,4 +15,10 @@
     <PackageReference Include="System.CommandLine" Version="2.0.9" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Lets the test project call GenerateCommand.RunAsync directly for exit-code tests,
+         instead of spawning a subprocess per scenario. -->
+    <InternalsVisibleTo Include="Api2Skill.Tests" />
+  </ItemGroup>
+
 </Project>

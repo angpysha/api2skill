@@ -12,44 +12,70 @@ public sealed class SkillDirectoryExistsException(string path)
 /// exists/--force policy (preserving a real <c>secrets.json</c> across regeneration — FR-009,
 /// NFR-1), and the shared content writers (SkillMdWriter, ReferenceWriter, SecretsScaffold)
 /// plus the selected <see cref="IScriptEmitter"/>.
+///
+/// Generation happens entirely in a sibling staging directory, moved into place only once
+/// every writer has succeeded (FR-010/EC-1's "no partial output" extended to <c>--force</c>
+/// too — T039). Without this, a failure partway through a <c>--force</c> regeneration would
+/// have already deleted the old skill dir (including any real, unrecoverable
+/// <c>secrets.json</c>, which is only held in memory until the very end) and left an
+/// incomplete directory in its place.
 /// </summary>
 public static class SkillWriter
 {
     public static DirectoryInfo Write(SkillModel model, string outputDirectory, bool force, IScriptEmitter emitter)
     {
-        var dir = new DirectoryInfo(outputDirectory);
+        var targetDir = new DirectoryInfo(Path.GetFullPath(outputDirectory));
         byte[]? preservedSecrets = null;
 
-        if (dir.Exists)
+        if (targetDir.Exists)
         {
             if (!force)
             {
                 throw new SkillDirectoryExistsException(outputDirectory);
             }
 
-            var secretsPath = Path.Combine(dir.FullName, SecretsScaffold.RealSecretsFileName);
+            var secretsPath = Path.Combine(targetDir.FullName, SecretsScaffold.RealSecretsFileName);
             if (File.Exists(secretsPath))
             {
                 preservedSecrets = File.ReadAllBytes(secretsPath);
             }
-
-            dir.Delete(recursive: true);
         }
 
-        dir.Create();
+        var stagingDir = new DirectoryInfo(Path.Combine(
+            targetDir.Parent?.FullName ?? Directory.GetCurrentDirectory(),
+            $".{targetDir.Name}.api2skill-staging-{Guid.NewGuid():N}"));
+        stagingDir.Create();
 
-        SkillMdWriter.Write(model, dir, emitter);
-        ReferenceWriter.Write(model, dir);
-        SecretsScaffold.Write(model, dir);
-        emitter.Emit(model, dir);
-
-        if (preservedSecrets is not null)
+        try
         {
-            // Never parsed/embedded — copied back byte-for-byte, after every generated file is
-            // already written, so a real credential is never read during generation itself.
-            File.WriteAllBytes(Path.Combine(dir.FullName, SecretsScaffold.RealSecretsFileName), preservedSecrets);
+            SkillMdWriter.Write(model, stagingDir, emitter);
+            ReferenceWriter.Write(model, stagingDir);
+            SecretsScaffold.Write(model, stagingDir);
+            emitter.Emit(model, stagingDir);
+
+            if (preservedSecrets is not null)
+            {
+                // Never parsed/embedded — copied back byte-for-byte, after every generated
+                // file is already staged, so a real credential is never read during
+                // generation itself.
+                File.WriteAllBytes(Path.Combine(stagingDir.FullName, SecretsScaffold.RealSecretsFileName), preservedSecrets);
+            }
+
+            if (targetDir.Exists)
+            {
+                targetDir.Delete(recursive: true);
+            }
+            Directory.Move(stagingDir.FullName, targetDir.FullName);
+        }
+        catch
+        {
+            if (stagingDir.Exists)
+            {
+                stagingDir.Delete(recursive: true);
+            }
+            throw;
         }
 
-        return dir;
+        return targetDir;
     }
 }
