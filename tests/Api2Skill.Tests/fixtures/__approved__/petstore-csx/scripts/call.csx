@@ -2,10 +2,14 @@
 // Requires: dotnet tool install -g dotnet-script
 // Usage: dotnet script call.csx -- <operationId> [--<param> <value> ...] [--body <json|@file>]
 #nullable enable
+using System.Diagnostics;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 var scriptDir = Path.GetDirectoryName(GetScriptPath());
 return await Run(Args.ToArray(), scriptDir!);
@@ -14,6 +18,16 @@ string GetScriptPath([System.Runtime.CompilerServices.CallerFilePath] string pat
 
 async Task<int> Run(string[] args, string scriptDir)
 {
+    if (args.Length > 0 && args[0] == "login")
+    {
+        if (args.Length < 2)
+        {
+            Console.Error.WriteLine("Usage: dotnet script call.csx -- login <profile>");
+            return 2;
+        }
+        return await LoginAsync(args[1], scriptDir);
+    }
+
     var operations = BuildOperations();
     var schemes = BuildSchemes();
 
@@ -69,13 +83,30 @@ async Task<int> Run(string[] args, string scriptDir)
     try
     {
         var oauthTokenCache = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var schemeId in op.SecuritySchemeIds)
+        if (op.AuthProfileNames.Length > 0)
         {
-            if (!schemes.TryGetValue(schemeId, out var scheme))
+            var authConfig = LoadAuthConfig(scriptDir);
+            var profiles = authConfig is { } cfg && cfg.TryGetProperty("profiles", out var profilesEl) ? profilesEl : (JsonElement?)null;
+            foreach (var profileName in op.AuthProfileNames)
             {
-                continue;
+                var profile = FindProfile(profiles, profileName);
+                if (profile is null)
+                {
+                    throw new AuthResolutionException($"auth.json has no profile named '{profileName}' (referenced by operation '{operationId}').");
+                }
+                await ApplyExplicitProfileAsync(http, profile.Value, profileName, secrets, query, headers, scriptDir);
             }
-            await ApplyAuthAsync(http, scheme, secrets, query, headers, oauthTokenCache);
+        }
+        else
+        {
+            foreach (var schemeId in op.SecuritySchemeIds)
+            {
+                if (!schemes.TryGetValue(schemeId, out var scheme))
+                {
+                    continue;
+                }
+                await ApplyAuthAsync(http, scheme, secrets, query, headers, oauthTokenCache);
+            }
         }
 
         var url = baseUrl.TrimEnd('/') + path + (query.Count > 0 ? "?" + string.Join("&", query) : "");
@@ -111,6 +142,11 @@ async Task<int> Run(string[] args, string scriptDir)
         }
         return 0;
     }
+    catch (AuthResolutionException ex)
+    {
+        Console.Error.WriteLine(ex.Message);
+        return 2;
+    }
     catch (HttpRequestException ex)
     {
         Console.Error.WriteLine($"Network error calling {baseUrl}: {ex.Message}");
@@ -135,6 +171,497 @@ JsonElement? LoadSecrets(string scriptDir)
         Console.Error.WriteLine($"warning: secrets.json is not valid JSON ({ex.Message}); proceeding as if no secrets were configured.");
         return null;
     }
+}
+
+JsonElement? LoadAuthConfig(string scriptDir)
+{
+    var authConfigPath = Path.Combine(scriptDir, "..", "auth.json");
+    if (!File.Exists(authConfigPath))
+    {
+        return null;
+    }
+    try
+    {
+        using var doc = JsonDocument.Parse(File.ReadAllText(authConfigPath));
+        return doc.RootElement.Clone();
+    }
+    catch (JsonException ex)
+    {
+        throw new AuthResolutionException($"auth.json is not valid JSON ({ex.Message}).");
+    }
+}
+
+JsonElement? FindProfile(JsonElement? profiles, string name)
+{
+    if (profiles is not { } arr || arr.ValueKind != JsonValueKind.Array)
+    {
+        return null;
+    }
+    foreach (var p in arr.EnumerateArray())
+    {
+        if (p.TryGetProperty("name", out var n) && n.GetString() == name)
+        {
+            return p;
+        }
+    }
+    return null;
+}
+
+string ResolveSecretOrLiteral(string raw, JsonElement? secrets)
+{
+    if (raw.StartsWith("{secret:", StringComparison.Ordinal) && raw.EndsWith('}'))
+    {
+        var key = raw[8..^1];
+        if (secrets is { } root && root.TryGetProperty(key, out var value) && value.GetString() is { } s)
+        {
+            return s;
+        }
+        throw new AuthResolutionException($"secrets.json has no value for \"{key}\" (referenced by auth.json).");
+    }
+    return raw;
+}
+
+string GetProp(JsonElement el, string name) => el.TryGetProperty(name, out var v) ? v.GetString() ?? "" : "";
+
+async Task<(int ExitCode, string Stdout, string Stderr)> RunScriptCommandAsync(string command)
+{
+    var psi = new ProcessStartInfo
+    {
+        RedirectStandardOutput = true,
+        RedirectStandardError = true,
+        UseShellExecute = false,
+    };
+    if (OperatingSystem.IsWindows())
+    {
+        psi.FileName = "cmd.exe";
+        psi.ArgumentList.Add("/c");
+        psi.ArgumentList.Add(command);
+    }
+    else
+    {
+        psi.FileName = "/bin/sh";
+        psi.ArgumentList.Add("-c");
+        psi.ArgumentList.Add(command);
+    }
+    using var process = Process.Start(psi)!;
+    var stdoutTask = process.StandardOutput.ReadToEndAsync();
+    var stderrTask = process.StandardError.ReadToEndAsync();
+    await process.WaitForExitAsync();
+    return (process.ExitCode, await stdoutTask, await stderrTask);
+}
+
+async Task ApplyExplicitProfileAsync(HttpClient http, JsonElement profile, string profileName, JsonElement? secrets, List<string> query, List<(string Name, string Value)> headers, string scriptDir)
+{
+    var type = GetProp(profile, "type");
+    switch (type)
+    {
+        case "bearer":
+        {
+            var token = ResolveSecretOrLiteral(GetProp(profile, "token"), secrets);
+            var value = token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) ? token : $"Bearer {token}";
+            headers.Add(("Authorization", value));
+            break;
+        }
+        case "basic":
+        {
+            var user = ResolveSecretOrLiteral(GetProp(profile, "username"), secrets);
+            var pass = ResolveSecretOrLiteral(GetProp(profile, "password"), secrets);
+            var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{user}:{pass}"));
+            headers.Add(("Authorization", $"Basic {encoded}"));
+            break;
+        }
+        case "custom":
+        {
+            if (profile.TryGetProperty("headers", out var headersEl) && headersEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var h in headersEl.EnumerateArray())
+                {
+                    var name = GetProp(h, "name");
+                    var value = ResolveSecretOrLiteral(GetProp(h, "value"), secrets);
+                    headers.Add((name, value));
+                }
+            }
+            break;
+        }
+        case "oauth2":
+        {
+            var accessToken = await ResolveOAuthAccessTokenAsync(http, profile, profileName, secrets, scriptDir);
+            headers.Add(("Authorization", $"Bearer {accessToken}"));
+            break;
+        }
+        case "script":
+        {
+            var command = GetProp(profile, "command");
+            var headerName = GetProp(profile, "header");
+            if (string.IsNullOrEmpty(headerName)) headerName = "Authorization";
+            var bearerPrefix = profile.TryGetProperty("bearerPrefix", out var bpEl) && bpEl.ValueKind == JsonValueKind.True;
+            var (exitCode, stdout, stderr) = await RunScriptCommandAsync(command);
+            if (exitCode != 0)
+                throw new AuthResolutionException($"Script command for auth profile '{profileName}' exited with code {exitCode}: {stderr.Trim()}");
+            var token = stdout.Trim();
+            if (bearerPrefix && !token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                token = $"Bearer {token}";
+            headers.Add((headerName, token));
+            break;
+        }
+        default:
+            throw new AuthResolutionException($"Auth profile type '{type}' is not supported by this generated dispatcher yet.");
+    }
+}
+
+(string Verifier, string Challenge) GeneratePkce()
+{
+    var bytes = new byte[32];
+    RandomNumberGenerator.Fill(bytes);
+    var verifier = Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+    var challengeBytes = SHA256.HashData(Encoding.ASCII.GetBytes(verifier));
+    var challenge = Convert.ToBase64String(challengeBytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+    return (verifier, challenge);
+}
+
+string GenerateState()
+{
+    var bytes = new byte[16];
+    RandomNumberGenerator.Fill(bytes);
+    return Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+}
+
+Dictionary<string, string> ParseQuery(string query)
+{
+    var result = new Dictionary<string, string>(StringComparer.Ordinal);
+    var q = query.TrimStart('?');
+    if (q.Length == 0) return result;
+    foreach (var pair in q.Split('&'))
+    {
+        var idx = pair.IndexOf('=');
+        if (idx < 0) { result[Uri.UnescapeDataString(pair)] = ""; continue; }
+        result[Uri.UnescapeDataString(pair[..idx])] = Uri.UnescapeDataString(pair[(idx + 1)..]);
+    }
+    return result;
+}
+
+bool TryLaunchBrowser(string url)
+{
+    try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); return true; }
+    catch
+    {
+        try
+        {
+            if (OperatingSystem.IsMacOS()) { Process.Start("open", url); return true; }
+            if (OperatingSystem.IsLinux()) { Process.Start("xdg-open", url); return true; }
+            if (OperatingSystem.IsWindows()) { Process.Start(new ProcessStartInfo("cmd", $"/c start {url}") { CreateNoWindow = true }); return true; }
+        }
+        catch { }
+        return false;
+    }
+}
+
+async Task<Dictionary<string, string>> WaitForCallbackAsync(string callbackUrl)
+{
+    var uri = new Uri(callbackUrl);
+    var prefix = $"{uri.Scheme}://{uri.Host}:{uri.Port}/";
+    using var listener = new HttpListener();
+    listener.Prefixes.Add(prefix);
+    try
+    {
+        listener.Start();
+    }
+    catch (HttpListenerException ex)
+    {
+        throw new AuthResolutionException($"Could not start the local OAuth callback listener on {prefix} ({ex.Message}). Another process may be using this port \u2014 try a different callbackUrl in auth.json.");
+    }
+    var context = await listener.GetContextAsync();
+    var result = ParseQuery(context.Request.Url?.Query ?? "");
+    var page = Encoding.UTF8.GetBytes("<html><body>Login complete \u2014 you can close this window and return to the terminal.</body></html>");
+    context.Response.ContentType = "text/html";
+    context.Response.ContentLength64 = page.Length;
+    context.Response.OutputStream.Write(page, 0, page.Length);
+    context.Response.OutputStream.Close();
+    listener.Stop();
+    return result;
+}
+
+(string? AuthUrl, string? TokenUrl, List<string> Scopes) ResolveOAuthEndpoints(JsonElement profile)
+{
+    var preset = GetProp(profile, "preset");
+    var tenant = GetProp(profile, "tenant");
+    string? authUrl = profile.TryGetProperty("authUrl", out var a) ? a.GetString() : null;
+    string? tokenUrl = profile.TryGetProperty("tokenUrl", out var t) ? t.GetString() : null;
+    var scopes = new List<string>();
+    if (profile.TryGetProperty("scopes", out var scopesEl) && scopesEl.ValueKind == JsonValueKind.Array)
+    {
+        foreach (var s in scopesEl.EnumerateArray()) { if (s.GetString() is { } sv) scopes.Add(sv); }
+    }
+    if (string.Equals(preset, "entra", StringComparison.OrdinalIgnoreCase))
+    {
+        authUrl ??= tenant.Length > 0 ? $"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize" : null;
+        tokenUrl ??= tenant.Length > 0 ? $"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token" : null;
+        if (!scopes.Contains("offline_access", StringComparer.Ordinal)) scopes.Add("offline_access");
+    }
+    return (authUrl, tokenUrl, scopes);
+}
+
+string BuildAuthorizeUrl(string authUrl, string clientId, string callbackUrl, List<string> scopes, string challenge, string state, JsonElement profile)
+{
+    var qs = new List<string>
+    {
+        "response_type=code",
+        $"client_id={Uri.EscapeDataString(clientId)}",
+        $"redirect_uri={Uri.EscapeDataString(callbackUrl)}",
+        $"code_challenge={Uri.EscapeDataString(challenge)}",
+        "code_challenge_method=S256",
+        $"state={Uri.EscapeDataString(state)}",
+    };
+    if (scopes.Count > 0) qs.Add($"scope={Uri.EscapeDataString(string.Join(' ', scopes))}");
+    if (profile.TryGetProperty("authorizeRequest", out var arEl) && arEl.TryGetProperty("body", out var bodyEl) && bodyEl.ValueKind == JsonValueKind.Object)
+    {
+        foreach (var prop in bodyEl.EnumerateObject())
+        {
+            qs.Add($"{Uri.EscapeDataString(prop.Name)}={Uri.EscapeDataString(prop.Value.GetString() ?? "")}");
+        }
+    }
+    var sep = authUrl.Contains('?') ? "&" : "?";
+    return authUrl + sep + string.Join("&", qs);
+}
+
+async Task<(string AccessToken, string? RefreshToken, int ExpiresIn)?> PostTokenRequestAsync(HttpClient http, JsonElement profile, string tokenUrl, string clientId, Dictionary<string, string> form, JsonElement? secrets)
+{
+    var clientAuth = GetProp(profile, "clientAuth");
+    var clientSecretRaw = profile.TryGetProperty("clientSecret", out var csEl) ? csEl.GetString() : null;
+    var clientSecret = clientSecretRaw is { Length: > 0 } ? ResolveSecretOrLiteral(clientSecretRaw, secrets) : null;
+
+    using var request = new HttpRequestMessage(HttpMethod.Post, tokenUrl);
+    if (clientAuth == "basic" && clientSecret is not null)
+    {
+        form.Remove("client_id");
+        var basic = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{clientId}:{clientSecret}"));
+        request.Headers.TryAddWithoutValidation("Authorization", $"Basic {basic}");
+    }
+    else if (clientSecret is not null)
+    {
+        form["client_secret"] = clientSecret;
+    }
+
+    if (profile.TryGetProperty("tokenRequest", out var trEl))
+    {
+        if (trEl.TryGetProperty("headers", out var hEl) && hEl.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var prop in hEl.EnumerateObject()) request.Headers.TryAddWithoutValidation(prop.Name, prop.Value.GetString() ?? "");
+        }
+        if (trEl.TryGetProperty("body", out var bEl) && bEl.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var prop in bEl.EnumerateObject()) form[prop.Name] = prop.Value.GetString() ?? "";
+        }
+    }
+
+    request.Content = new FormUrlEncodedContent(form);
+    using var response = await http.SendAsync(request);
+    var text = await response.Content.ReadAsStringAsync();
+    if (!response.IsSuccessStatusCode) return null;
+    try
+    {
+        using var doc = JsonDocument.Parse(text);
+        var root = doc.RootElement;
+        if (!root.TryGetProperty("access_token", out var atEl) || atEl.GetString() is not { } accessToken) return null;
+        var refreshToken = root.TryGetProperty("refresh_token", out var rtEl) ? rtEl.GetString() : null;
+        var expiresIn = root.TryGetProperty("expires_in", out var eiEl) && eiEl.TryGetInt32(out var ei) ? ei : 3600;
+        return (accessToken, refreshToken, expiresIn);
+    }
+    catch (JsonException)
+    {
+        return null;
+    }
+}
+
+Task<(string AccessToken, string? RefreshToken, int ExpiresIn)?> ExchangeCodeForTokenAsync(HttpClient http, JsonElement profile, string tokenUrl, string clientId, string code, string verifier, string callbackUrl, JsonElement? secrets) =>
+    PostTokenRequestAsync(http, profile, tokenUrl, clientId, new Dictionary<string, string> { ["grant_type"] = "authorization_code", ["code"] = code, ["redirect_uri"] = callbackUrl, ["code_verifier"] = verifier, ["client_id"] = clientId }, secrets);
+
+Task<(string AccessToken, string? RefreshToken, int ExpiresIn)?> FetchClientCredentialsTokenAsync(HttpClient http, JsonElement profile, string tokenUrl, string clientId, JsonElement? secrets) =>
+    PostTokenRequestAsync(http, profile, tokenUrl, clientId, new Dictionary<string, string> { ["grant_type"] = "client_credentials", ["client_id"] = clientId }, secrets);
+
+Task<(string AccessToken, string? RefreshToken, int ExpiresIn)?> RefreshOAuthTokenAsync(HttpClient http, JsonElement profile, string tokenUrl, string clientId, string refreshToken, JsonElement? secrets) =>
+    PostTokenRequestAsync(http, profile, tokenUrl, clientId, new Dictionary<string, string> { ["grant_type"] = "refresh_token", ["refresh_token"] = refreshToken, ["client_id"] = clientId }, secrets);
+
+string TokenCachePath(string scriptDir) => Path.Combine(scriptDir, "..", ".auth-cache.json");
+
+async Task<Dictionary<string, JsonElement>> ReadTokenCacheAsync(string path)
+{
+    var result = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+    if (!File.Exists(path)) return result;
+    try
+    {
+        using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(path));
+        foreach (var prop in doc.RootElement.EnumerateObject()) result[prop.Name] = prop.Value.Clone();
+    }
+    catch (JsonException) { }
+    return result;
+}
+
+async Task WriteTokenCacheAsync(string path, Dictionary<string, JsonElement> cache)
+{
+    var obj = new JsonObject();
+    foreach (var (key, value) in cache) obj[key] = JsonNode.Parse(value.GetRawText());
+    var tmpPath = path + ".tmp-" + Guid.NewGuid().ToString("N");
+    await File.WriteAllTextAsync(tmpPath, obj.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+    if (!OperatingSystem.IsWindows())
+    {
+        File.SetUnixFileMode(tmpPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+    }
+    File.Move(tmpPath, path, overwrite: true);
+}
+
+void StoreTokenInCache(Dictionary<string, JsonElement> cache, string profileName, (string AccessToken, string? RefreshToken, int ExpiresIn) token)
+{
+    var obj = new JsonObject { ["access_token"] = token.AccessToken, ["expires_at"] = DateTimeOffset.UtcNow.AddSeconds(token.ExpiresIn).ToString("o") };
+    if (token.RefreshToken is not null) obj["refresh_token"] = token.RefreshToken;
+    cache[profileName] = JsonDocument.Parse(obj.ToJsonString()).RootElement.Clone();
+}
+
+async Task<T> WithTokenCacheLockAsync<T>(string scriptDir, Func<Task<T>> action)
+{
+    var lockPath = TokenCachePath(scriptDir) + ".lock";
+    FileStream? lockStream = null;
+    for (var attempt = 0; attempt < 100 && lockStream is null; attempt++)
+    {
+        try { lockStream = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
+        catch (IOException) { await Task.Delay(50); }
+    }
+    if (lockStream is null)
+    {
+        throw new AuthResolutionException("Could not acquire the token cache lock (.auth-cache.json.lock) after multiple attempts \u2014 another process may be stuck holding it.");
+    }
+    try { return await action(); }
+    finally { lockStream.Dispose(); }
+}
+
+async Task<string> ResolveOAuthAccessTokenAsync(HttpClient http, JsonElement profile, string profileName, JsonElement? secrets, string scriptDir)
+{
+    var (_, tokenUrl, _) = ResolveOAuthEndpoints(profile);
+    if (tokenUrl is null) throw new AuthResolutionException($"Auth profile '{profileName}' (oauth2) has no tokenUrl configured (directly or via a preset).");
+    var clientId = ResolveSecretOrLiteral(GetProp(profile, "clientId"), secrets);
+    var grant = GetProp(profile, "grant");
+    var cachePath = TokenCachePath(scriptDir);
+
+    return await WithTokenCacheLockAsync(scriptDir, async () =>
+    {
+        var cache = await ReadTokenCacheAsync(cachePath);
+        if (cache.TryGetValue(profileName, out var entry))
+        {
+            var expiresAt = entry.TryGetProperty("expires_at", out var eaEl) && DateTimeOffset.TryParse(eaEl.GetString(), out var ea) ? ea : DateTimeOffset.MinValue;
+            var cachedToken = entry.TryGetProperty("access_token", out var atEl) ? atEl.GetString() : null;
+            if (cachedToken is not null && expiresAt > DateTimeOffset.UtcNow.AddSeconds(30))
+            {
+                return cachedToken;
+            }
+            var refreshToken = entry.TryGetProperty("refresh_token", out var rtEl) ? rtEl.GetString() : null;
+            if (refreshToken is not null)
+            {
+                var refreshed = await RefreshOAuthTokenAsync(http, profile, tokenUrl, clientId, refreshToken, secrets);
+                if (refreshed is not null)
+                {
+                    StoreTokenInCache(cache, profileName, refreshed.Value);
+                    await WriteTokenCacheAsync(cachePath, cache);
+                    return refreshed.Value.AccessToken;
+                }
+            }
+        }
+
+        if (grant == "client_credentials")
+        {
+            var fetched = await FetchClientCredentialsTokenAsync(http, profile, tokenUrl, clientId, secrets);
+            if (fetched is not null)
+            {
+                StoreTokenInCache(cache, profileName, fetched.Value);
+                await WriteTokenCacheAsync(cachePath, cache);
+                return fetched.Value.AccessToken;
+            }
+            throw new AuthResolutionException($"Failed to obtain a client_credentials token for auth profile '{profileName}'.");
+        }
+
+        throw new AuthResolutionException($"No valid or refreshable token for auth profile '{profileName}'. Run: dotnet script scripts/call.csx -- login {profileName}");
+    });
+}
+
+async Task<int> LoginAsync(string profileName, string scriptDir)
+{
+    var authConfig = LoadAuthConfig(scriptDir);
+    var profiles = authConfig is { } cfg && cfg.TryGetProperty("profiles", out var profilesEl) ? profilesEl : (JsonElement?)null;
+    var profile = FindProfile(profiles, profileName);
+    if (profile is null)
+    {
+        Console.Error.WriteLine($"No auth profile named '{profileName}' in auth.json.");
+        return 2;
+    }
+    var type = GetProp(profile.Value, "type");
+    if (type != "oauth2")
+    {
+        Console.Error.WriteLine($"Profile '{profileName}' is type '{type}', not 'oauth2' \u2014 login is only applicable to oauth2 profiles.");
+        return 2;
+    }
+    var grant = GetProp(profile.Value, "grant");
+    if (grant == "client_credentials")
+    {
+        Console.WriteLine($"Profile '{profileName}' uses client_credentials \u2014 not applicable: no interactive login is needed, a token is obtained automatically at call time.");
+        return 0;
+    }
+
+    var (authUrl, tokenUrl, scopes) = ResolveOAuthEndpoints(profile.Value);
+    if (authUrl is null || tokenUrl is null)
+    {
+        Console.Error.WriteLine($"Profile '{profileName}' is missing authUrl/tokenUrl (directly or via a preset).");
+        return 2;
+    }
+    var callbackUrl = GetProp(profile.Value, "callbackUrl");
+    if (callbackUrl.Length == 0) callbackUrl = "http://localhost:8400/callback";
+    var secrets = LoadSecrets(scriptDir);
+    var clientId = ResolveSecretOrLiteral(GetProp(profile.Value, "clientId"), secrets);
+
+    var (verifier, challenge) = GeneratePkce();
+    var state = GenerateState();
+    var authorizeUrl = BuildAuthorizeUrl(authUrl, clientId, callbackUrl, scopes, challenge, state, profile.Value);
+
+    Console.WriteLine($"Opening your browser to sign in for profile '{profileName}'...");
+    var browserLaunched = TryLaunchBrowser(authorizeUrl);
+    Console.WriteLine(browserLaunched
+        ? "If it did not open, visit this URL to sign in:"
+        : "Could not launch a browser automatically. Open this URL to sign in:");
+    Console.WriteLine(authorizeUrl);
+
+    Dictionary<string, string> callbackParams;
+    try { callbackParams = await WaitForCallbackAsync(callbackUrl); }
+    catch (AuthResolutionException ex) { Console.Error.WriteLine(ex.Message); return 2; }
+
+    if (!callbackParams.TryGetValue("state", out var returnedState) || returnedState != state)
+    {
+        Console.Error.WriteLine("The callback's state did not match what was sent \u2014 rejecting (possible CSRF/mix-up). No token was stored. Run login again.");
+        return 2;
+    }
+    if (!callbackParams.TryGetValue("code", out var code))
+    {
+        var err = callbackParams.TryGetValue("error", out var e) ? e : "no authorization code was returned";
+        Console.Error.WriteLine($"Login failed: {err}");
+        return 2;
+    }
+
+    using var http = new HttpClient();
+    var tokenResponse = await ExchangeCodeForTokenAsync(http, profile.Value, tokenUrl, clientId, code, verifier, callbackUrl, secrets);
+    if (tokenResponse is null)
+    {
+        Console.Error.WriteLine("Failed to exchange the authorization code for a token.");
+        return 2;
+    }
+
+    await WithTokenCacheLockAsync(scriptDir, async () =>
+    {
+        var cachePath = TokenCachePath(scriptDir);
+        var cache = await ReadTokenCacheAsync(cachePath);
+        StoreTokenInCache(cache, profileName, tokenResponse.Value);
+        await WriteTokenCacheAsync(cachePath, cache);
+        return true;
+    });
+
+    Console.WriteLine($"Login succeeded for profile '{profileName}'. You can now call operations that use it.");
+    return 0;
 }
 
 string? SecretValue(JsonElement? secrets, string schemeId, string key)
@@ -248,10 +775,10 @@ async Task<string?> FetchOAuth2TokenAsync(HttpClient http, string tokenUrl, stri
 
 Dictionary<string, OperationSpec> BuildOperations() => new()
 {
-    ["getPetById"] = new("GET", "/pet/{petId}", [new("petId", "path")], false, null, ["api_key"]),
-    ["addPet"] = new("POST", "/pet", [], true, "application/json", ["petstore_auth"]),
-    ["get_store_inventory"] = new("GET", "/store/inventory", [], false, null, ["api_key"]),
-    ["get_health"] = new("GET", "/health", [], false, null, []),
+    ["getPetById"] = new("GET", "/pet/{petId}", [new("petId", "path")], false, null, ["api_key"], []),
+    ["addPet"] = new("POST", "/pet", [], true, "application/json", ["petstore_auth"], []),
+    ["get_store_inventory"] = new("GET", "/store/inventory", [], false, null, ["api_key"], []),
+    ["get_health"] = new("GET", "/health", [], false, null, [], []),
 };
 
 Dictionary<string, SchemeSpec> BuildSchemes() => new()
@@ -261,5 +788,6 @@ Dictionary<string, SchemeSpec> BuildSchemes() => new()
 };
 
 record ParamSpec(string Name, string Location);
-record OperationSpec(string Method, string PathTemplate, ParamSpec[] Parameters, bool HasBody, string? BodyContentType, string[] SecuritySchemeIds);
+record OperationSpec(string Method, string PathTemplate, ParamSpec[] Parameters, bool HasBody, string? BodyContentType, string[] SecuritySchemeIds, string[] AuthProfileNames);
 record SchemeSpec(string Id, string Kind, string? ApiKeyName, string? ApiKeyLocation, string? OAuthTokenUrl);
+sealed class AuthResolutionException(string message) : Exception(message);

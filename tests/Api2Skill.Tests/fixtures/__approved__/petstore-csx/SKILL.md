@@ -19,7 +19,7 @@ Copy `secrets.example.json` to `secrets.json` and fill in real credentials befor
 
 Untrusted HTTPS (self-signed/invalid certificates) is **off by default**. Set `API2SKILL_INSECURE=1` to accept them — **dev/local use only**, never in production.
 
-## Auth
+## Auth (from the spec)
 
 | scheme | kind | secrets.json keys |
 |---|---|---|

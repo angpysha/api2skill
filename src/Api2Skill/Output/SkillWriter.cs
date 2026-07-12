@@ -19,25 +19,70 @@ public sealed class SkillDirectoryExistsException(string path)
 /// have already deleted the old skill dir (including any real, unrecoverable
 /// <c>secrets.json</c>, which is only held in memory until the very end) and left an
 /// incomplete directory in its place.
+///
+/// <c>--force</c> also preserves an existing <c>auth.json</c> (unless this run supplies a new
+/// one via <c>--auth</c>/<c>--auth-config</c>) and always preserves <c>.auth-cache.json</c>
+/// (+ its lock file), since that cache holds live OAuth sessions (contracts/cli.md). The
+/// <c>.api2skill.json</c> generation manifest (specs/003-skill-update-command) is always
+/// (re)written when supplied — it has no preservation logic, since it should always reflect the
+/// most recent invocation.
+///
+/// <c>preserveFromDirectory</c> (specs/004-skill-rename-move-on-update) lets a caller preserve
+/// credential/cache files from a directory other than <paramref name="outputDirectory"/> —
+/// used when <c>update --out</c> relocates a skill and the old files live at the source path,
+/// not the (possibly not-yet-existing) target path.
 /// </summary>
 public static class SkillWriter
 {
-    public static DirectoryInfo Write(SkillModel model, string outputDirectory, bool force, IScriptEmitter emitter)
+    private const string AuthConfigFileName = "auth.json";
+
+    public static DirectoryInfo Write(
+        SkillModel model, string outputDirectory, bool force, IScriptEmitter emitter,
+        string? authConfigJson = null, string? manifestJson = null, string? preserveFromDirectory = null)
     {
         var targetDir = new DirectoryInfo(Path.GetFullPath(outputDirectory));
         byte[]? preservedSecrets = null;
+        byte[]? preservedAuthConfig = null;
+        byte[]? preservedTokenCache = null;
+        byte[]? preservedTokenCacheLock = null;
 
-        if (targetDir.Exists)
+        if (targetDir.Exists && !force)
         {
-            if (!force)
-            {
-                throw new SkillDirectoryExistsException(outputDirectory);
-            }
+            throw new SkillDirectoryExistsException(outputDirectory);
+        }
 
-            var secretsPath = Path.Combine(targetDir.FullName, SecretsScaffold.RealSecretsFileName);
+        // specs/004-skill-rename-move-on-update: when `update --out` relocates a skill,
+        // credential/cache files must be read from the *old* directory even though the
+        // *new* directory (targetDir) doesn't exist yet — preserveFromDirectory lets the
+        // caller point preservation at that source directory instead of targetDir.
+        var preserveSourceDir = preserveFromDirectory is { Length: > 0 }
+            ? new DirectoryInfo(Path.GetFullPath(preserveFromDirectory))
+            : targetDir;
+
+        if (preserveSourceDir.Exists)
+        {
+            var secretsPath = Path.Combine(preserveSourceDir.FullName, SecretsScaffold.RealSecretsFileName);
             if (File.Exists(secretsPath))
             {
                 preservedSecrets = File.ReadAllBytes(secretsPath);
+            }
+
+            var authConfigPath = Path.Combine(preserveSourceDir.FullName, AuthConfigFileName);
+            if (authConfigJson is null && File.Exists(authConfigPath))
+            {
+                preservedAuthConfig = File.ReadAllBytes(authConfigPath);
+            }
+
+            var tokenCachePath = Path.Combine(preserveSourceDir.FullName, SecretsScaffold.TokenCacheFileName);
+            if (File.Exists(tokenCachePath))
+            {
+                preservedTokenCache = File.ReadAllBytes(tokenCachePath);
+            }
+
+            var tokenCacheLockPath = tokenCachePath + ".lock";
+            if (File.Exists(tokenCacheLockPath))
+            {
+                preservedTokenCacheLock = File.ReadAllBytes(tokenCacheLockPath);
             }
         }
 
@@ -59,6 +104,31 @@ public static class SkillWriter
                 // file is already staged, so a real credential is never read during
                 // generation itself.
                 File.WriteAllBytes(Path.Combine(stagingDir.FullName, SecretsScaffold.RealSecretsFileName), preservedSecrets);
+            }
+
+            if (authConfigJson is not null)
+            {
+                File.WriteAllText(Path.Combine(stagingDir.FullName, AuthConfigFileName), authConfigJson);
+            }
+            else if (preservedAuthConfig is not null)
+            {
+                File.WriteAllBytes(Path.Combine(stagingDir.FullName, AuthConfigFileName), preservedAuthConfig);
+            }
+
+            if (preservedTokenCache is not null)
+            {
+                File.WriteAllBytes(Path.Combine(stagingDir.FullName, SecretsScaffold.TokenCacheFileName), preservedTokenCache);
+            }
+            if (preservedTokenCacheLock is not null)
+            {
+                File.WriteAllBytes(Path.Combine(stagingDir.FullName, SecretsScaffold.TokenCacheFileName + ".lock"), preservedTokenCacheLock);
+            }
+
+            if (manifestJson is not null)
+            {
+                // Always overwritten (unlike auth.json) — the manifest should always reflect
+                // the most recent invocation's options (spec.md FR-007).
+                File.WriteAllText(Path.Combine(stagingDir.FullName, SkillManifestIo.FileName), manifestJson);
             }
 
             if (targetDir.Exists)

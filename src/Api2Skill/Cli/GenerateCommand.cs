@@ -1,4 +1,6 @@
 using System.CommandLine;
+using System.Diagnostics;
+using Api2Skill.Auth;
 using Api2Skill.Emit;
 using Api2Skill.Input;
 using Api2Skill.Model;
@@ -15,6 +17,7 @@ public static class ExitCodes
     public const int UsageError = 2;
     public const int OutputExists = 3;
     public const int AcquisitionFailure = 4;
+    public const int AuthConfigError = 5;
 }
 
 /// <summary>
@@ -70,6 +73,18 @@ public static class GenerateCommand
         {
             Description = "Base URL to use when the spec has no `servers` entry.",
         };
+        var authConfigOption = new Option<string?>("--auth-config")
+        {
+            Description = "Path to an auth.json (explicit auth profiles) — contracts/auth-config.md. Mutually exclusive with --auth.",
+        };
+        var authOption = new Option<string?>("--auth")
+        {
+            Description = "Shorthand: scaffold a single global auth profile of type bearer|basic|custom. oauth2/entra need --auth-config. Mutually exclusive with --auth-config.",
+        };
+        var loginOption = new Option<bool>("--login")
+        {
+            Description = "After writing the skill, run interactive login for each authorization_code auth profile.",
+        };
 
         var command = new Command("generate", "Generate a Claude Skill from an OpenAPI/Swagger document")
         {
@@ -83,6 +98,9 @@ public static class GenerateCommand
             insecureOption,
             formatOption,
             baseUrlOption,
+            authConfigOption,
+            authOption,
+            loginOption,
         };
 
         command.SetAction(async (parseResult, cancellationToken) =>
@@ -97,7 +115,10 @@ public static class GenerateCommand
                 Force: parseResult.GetValue(forceOption),
                 Insecure: parseResult.GetValue(insecureOption),
                 Format: parseResult.GetValue(formatOption),
-                BaseUrl: parseResult.GetValue(baseUrlOption));
+                BaseUrl: parseResult.GetValue(baseUrlOption),
+                AuthConfigPath: parseResult.GetValue(authConfigOption),
+                AuthShorthand: parseResult.GetValue(authOption),
+                Login: parseResult.GetValue(loginOption));
 
             return await RunAsync(options, cancellationToken).ConfigureAwait(false);
         });
@@ -115,8 +136,52 @@ public static class GenerateCommand
             ? []
             : [.. raw.SelectMany(v => v.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))];
 
-    internal static async Task<int> RunAsync(GenerateOptions options, CancellationToken cancellationToken)
+    /// <param name="preserveFromDirectory">
+    /// specs/004-skill-rename-move-on-update: when set (by <c>UpdateCommand</c>'s relocate path),
+    /// forwarded to <see cref="SkillWriter.Write"/> so credential/cache files are preserved from
+    /// this directory instead of <c>options.OutputDirectory</c>. Not exposed as a CLI flag.
+    /// </param>
+    internal static async Task<int> RunAsync(GenerateOptions options, CancellationToken cancellationToken, string? preserveFromDirectory = null)
     {
+        if (options.AuthConfigPath is { Length: > 0 } && options.AuthShorthand is { Length: > 0 })
+        {
+            Console.Error.WriteLine("--auth and --auth-config are mutually exclusive. Pass one or the other.");
+            return ExitCodes.UsageError;
+        }
+
+        AuthConfig? authConfig = null;
+        string? authConfigJson = null;
+        if (options.AuthConfigPath is { Length: > 0 } authConfigPath)
+        {
+            try
+            {
+                authConfig = AuthConfigLoader.LoadFromFile(authConfigPath, out authConfigJson);
+            }
+            catch (FileNotFoundException ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                return ExitCodes.AcquisitionFailure;
+            }
+            catch (AuthConfigException ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                return ExitCodes.AuthConfigError;
+            }
+        }
+        else if (options.AuthShorthand is { Length: > 0 } authShorthand)
+        {
+            try
+            {
+                authConfig = AuthConfigLoader.CreateShorthand(authShorthand);
+                authConfigJson = AuthConfigLoader.Serialize(authConfig);
+            }
+            catch (AuthShorthandUnsupportedException ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                return ExitCodes.UsageError;
+            }
+        }
+
         MemoryStream stream;
         string format;
         try
@@ -170,9 +235,19 @@ public static class GenerateCommand
             IncludeSelectors: options.Include,
             ExcludeSelectors: options.Exclude,
             BaseUrlOverride: options.BaseUrl,
-            InsecureDefault: options.Insecure);
+            InsecureDefault: options.Insecure,
+            AuthConfig: authConfig);
 
-        var model = SkillModelBuilder.Build(loaded.Document, loaded.SpecVersion, buildOptions);
+        SkillModel model;
+        try
+        {
+            model = SkillModelBuilder.Build(loaded.Document, loaded.SpecVersion, buildOptions);
+        }
+        catch (AuthConfigCollisionException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return ExitCodes.AuthConfigError;
+        }
 
         IScriptEmitter? emitter = options.ScriptKind switch
         {
@@ -189,10 +264,22 @@ public static class GenerateCommand
 
         var outputDirectory = options.OutputDirectory is { Length: > 0 } o ? o : Path.Combine(".", name);
 
+        // FR-001 (specs/003-skill-update-command): every generate records the options needed to
+        // reproduce it later via `update`, without any secret/credential values.
+        var manifestJson = SkillManifestIo.Serialize(new SkillManifest(
+            Name: name,
+            SpecSource: options.SpecSource,
+            ScriptKind: options.ScriptKind,
+            Include: options.Include,
+            Exclude: options.Exclude,
+            Format: options.Format,
+            BaseUrl: options.BaseUrl,
+            Insecure: options.Insecure));
+
         DirectoryInfo written;
         try
         {
-            written = SkillWriter.Write(model, outputDirectory, options.Force, emitter);
+            written = SkillWriter.Write(model, outputDirectory, options.Force, emitter, authConfigJson, manifestJson, preserveFromDirectory);
         }
         catch (SkillDirectoryExistsException ex)
         {
@@ -207,6 +294,41 @@ public static class GenerateCommand
 
         var opCount = model.Tags.Sum(t => t.Operations.Count);
         Console.WriteLine($"{written.FullName} ({opCount} operation(s), {model.Tags.Count} tag(s))");
+
+        if (options.Login && authConfig is not null)
+        {
+            await RunLoginForAuthorizationCodeProfilesAsync(authConfig, emitter, written, cancellationToken);
+        }
+
         return ExitCodes.Success;
+    }
+
+    /// <summary>
+    /// FR-017/T064: <c>--login</c> runs the interactive login once per <c>authorization_code</c>
+    /// profile right after a successful write, priming <c>.auth-cache.json</c>. Generation stays
+    /// fully non-interactive without this flag.
+    /// </summary>
+    private static async Task RunLoginForAuthorizationCodeProfilesAsync(
+        AuthConfig authConfig, IScriptEmitter emitter, DirectoryInfo written, CancellationToken cancellationToken)
+    {
+        // RunnerDescription looks like "dotnet run scripts/call.cs --" / "dotnet fsi scripts/call.fsx --" /
+        // "dotnet script scripts/call.csx --" — always "dotnet <rest>".
+        var runnerArgs = emitter.RunnerDescription["dotnet ".Length..];
+
+        foreach (var profile in authConfig.Profiles.Where(p => p.Type == AuthType.OAuth2 && p.OAuth!.Grant == OAuthGrant.AuthorizationCode))
+        {
+            Console.WriteLine($"--login: running interactive login for profile '{profile.Name}'...");
+            var psi = new ProcessStartInfo("dotnet", $"{runnerArgs} login {profile.Name}")
+            {
+                WorkingDirectory = written.FullName,
+                UseShellExecute = false,
+            };
+            using var process = Process.Start(psi)!;
+            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            if (process.ExitCode != 0)
+            {
+                Console.Error.WriteLine($"--login: login for profile '{profile.Name}' failed (exit {process.ExitCode}).");
+            }
+        }
     }
 }

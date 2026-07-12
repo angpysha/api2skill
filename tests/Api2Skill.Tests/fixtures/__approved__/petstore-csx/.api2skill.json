@@ -1,0 +1,10 @@
+{
+  "name": "petstore",
+  "specSource": "tests/Api2Skill.Tests/fixtures/petstore.json",
+  "scriptKind": "csx",
+  "include": [],
+  "exclude": [],
+  "format": null,
+  "baseUrl": null,
+  "insecure": false
+}

@@ -35,13 +35,24 @@ public class CsEmitterGoldenTests : IDisposable
         return SkillModelBuilder.Build(loaded.Document, loaded.SpecVersion, new BuildOptions(Name: "petstore"));
     }
 
+    private static string PetstoreManifestJson(string scriptKind) =>
+        SkillManifestIo.Serialize(new SkillManifest(
+            Name: "petstore",
+            SpecSource: "tests/Api2Skill.Tests/fixtures/petstore.json",
+            ScriptKind: scriptKind,
+            Include: [],
+            Exclude: [],
+            Format: null,
+            BaseUrl: null,
+            Insecure: false));
+
     [Fact]
     public async Task Generate_MatchesApprovedGoldenTree()
     {
         var model = await BuildPetstoreModelAsync();
         var outputDir = Path.Combine(_workDir, "out");
 
-        SkillWriter.Write(model, outputDir, force: false, new CsFileEmitter());
+        SkillWriter.Write(model, outputDir, force: false, new CsFileEmitter(), manifestJson: PetstoreManifestJson("cs"));
 
         var approvedFiles = Directory.GetFiles(ApprovedDir, "*", SearchOption.AllDirectories)
             .Select(p => Path.GetRelativePath(ApprovedDir, p))
@@ -69,8 +80,8 @@ public class CsEmitterGoldenTests : IDisposable
         var firstDir = Path.Combine(_workDir, "first");
         var secondDir = Path.Combine(_workDir, "second");
 
-        SkillWriter.Write(model, firstDir, force: false, new CsFileEmitter());
-        SkillWriter.Write(model, secondDir, force: false, new CsFileEmitter());
+        SkillWriter.Write(model, firstDir, force: false, new CsFileEmitter(), manifestJson: PetstoreManifestJson("cs"));
+        SkillWriter.Write(model, secondDir, force: false, new CsFileEmitter(), manifestJson: PetstoreManifestJson("cs"));
 
         var relativeFiles = Directory.GetFiles(firstDir, "*", SearchOption.AllDirectories)
             .Select(p => Path.GetRelativePath(firstDir, p))
@@ -91,7 +102,7 @@ public class CsEmitterGoldenTests : IDisposable
         // reference/<tag>.md (progressive disclosure).
         var model = await BuildPetstoreModelAsync();
         var outputDir = Path.Combine(_workDir, "compact");
-        SkillWriter.Write(model, outputDir, force: false, new CsFileEmitter());
+        SkillWriter.Write(model, outputDir, force: false, new CsFileEmitter(), manifestJson: PetstoreManifestJson("cs"));
 
         var skillMd = File.ReadAllText(Path.Combine(outputDir, "SKILL.md"));
         Assert.DoesNotContain("ID of pet to return", skillMd); // parameter description — reference-only

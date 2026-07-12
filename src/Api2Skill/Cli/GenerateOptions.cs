@@ -11,4 +11,7 @@ public sealed record GenerateOptions(
     bool Force,
     bool Insecure,
     string? Format,
-    string? BaseUrl);
+    string? BaseUrl,
+    string? AuthConfigPath = null,
+    string? AuthShorthand = null,
+    bool Login = false);

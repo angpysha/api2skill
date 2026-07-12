@@ -11,11 +11,16 @@ api2skill generate ./petstore.json
 #      reference/<tag>.md     # full per-operation detail, loaded on demand
 #      scripts/call.cs        # the dispatcher (.cs by default; --script fsx|csx also available)
 #      secrets.example.json   # template — copy to secrets.json and fill in real credentials
+#      .api2skill.json        # generation manifest — records options for `update`
 #      .gitignore             # excludes secrets.json
 ```
 
 Drop the output directory into `~/.claude/skills/` (or a project's `.claude/skills/`) and
 Claude can use it immediately.
+
+**Full documentation:** [wiki/Home.md](wiki/Home.md) — getting started, CLI reference,
+authentication, and [Mermaid diagrams](wiki/Generate-Command.md). Docs live in this repo under
+`wiki/`; see [wiki/README.md](wiki/README.md) for how to browse them.
 
 ## Why
 
@@ -47,14 +52,15 @@ api2skill generate ./petstore.json
 # From a running service (self-signed dev cert: add --insecure)
 api2skill generate https://svc.local/swagger.json --insecure
 
-# Piped from stdin
-curl -s https://api.example.com/openapi.yaml | api2skill generate - --format yaml
+# Custom name and output path — options are recorded in .api2skill.json
+api2skill generate ./petstore.json --name my-petstore --out ./skills/my-petstore
 
-# Scope a large API down to what you need
-api2skill generate ./stripe.json --include tag:Charges
+# Refresh when the spec changes (reuses saved --script/--include/--out from manifest)
+api2skill update ./skills/my-petstore ./petstore-v2.json
+api2skill update ./skills/my-petstore   # re-fetch original spec source
 
-# Pick a different script kind
-api2skill generate ./petstore.json --script fsx   # or csx
+# Rename or relocate while updating (secrets.json, auth.json, .auth-cache.json move with it)
+api2skill update ./skills/my-petstore ./petstore-v2.json --name petstore-prod --out ./apis/petstore
 ```
 
 Then, inside the generated skill directory:
@@ -64,47 +70,38 @@ cp secrets.example.json secrets.json   # fill in real credentials
 dotnet run scripts/call.cs -- getPetById --petId 3
 ```
 
-Full CLI reference, the generated-skill layout, auth details, and the untrusted-HTTPS
-opt-in: **[docs/usage.md](docs/usage.md)**.
+## Authentication (basics)
 
-## What gets generated
+| Approach | When to use |
+|----------|-------------|
+| `--auth bearer\|basic\|custom` | Single simple profile, quick scaffold |
+| `--auth-config ./auth.json` | OAuth2/Entra, script auth, multi-profile |
+| `--login` | After generation — interactive OAuth for `authorization_code` profiles |
 
-- **`SKILL.md`** stays compact — an overview, auth setup, and a tag-grouped operation index
-  only. Full parameter/schema detail lives in `reference/<tag>.md`, loaded on demand, so the
-  skill stays usable even on large APIs (hundreds of operations).
-- **The dispatcher** (`scripts/call.<ext>`) is a single script per skill —
-  `call <operationId> --<param> <value> ...` — that owns base-URL resolution, request shaping,
-  and auth for every operation, generated as **plain `HttpClient` / `System.Text.Json`** with
-  no third-party dependency in the emitted code.
-- **Auth**: `apiKey`, HTTP `bearer`, HTTP `basic`, and OAuth2 client-credentials are all
-  generated for real — the dispatcher reads credentials from a gitignored `secrets.json` (never
-  the spec, never embedded) and, for OAuth2, performs the token exchange itself.
-- **Three script kinds**, selectable via `--script`: `.cs` (default, `dotnet run`, no extra
-  install), `.fsx` (`dotnet fsi`, ships with the SDK), `.csx` (`dotnet script`, needs
-  `dotnet tool install -g dotnet-script`). All three are full implementations, not a default
-  plus stubs.
+```bash
+# Quick bearer token scaffold
+api2skill generate ./api.json --auth bearer
+
+# Full auth config (OAuth2, Entra, script commands, custom headers)
+api2skill generate ./api.json --auth-config ./auth.json --login
+```
+
+`--auth` and `--auth-config` are mutually exclusive. See
+[wiki/Authentication.md](wiki/Authentication.md) for profile types, Entra preset, and script
+auth examples.
 
 ## Project layout
 
 ```
 src/Api2Skill/       the generator (console app)
-  Input/              spec acquisition: file, URL, stdin
-  Parsing/            Microsoft.OpenApi wrapper
-  Model/              the emitter-agnostic SkillModel + the OpenAPI -> SkillModel mapping
-  Emit/               SKILL.md/reference/secrets writers + the three script emitters
-  Output/             directory write orchestration (safe --force, no partial output)
-  Cli/                the `generate` command
-
-tests/Api2Skill.Tests/   xUnit — unit, golden/snapshot, and real subprocess integration tests
-
-specs/001-openapi-to-skill/   the feature's spec/plan/research (Spec Kit)
+tests/Api2Skill.Tests/   xUnit — unit, golden, and integration tests
+wiki/                in-repo documentation (start at wiki/Home.md)
+specs/               feature specs (Spec Kit)
 ```
 
 ## Status
 
-MVP complete: all three emitters, all four auth schemes, all three input sources, filtering,
-and the full exit-code contract are implemented and tested (unit + golden + real subprocess
-integration against a live local server). See
-[specs/001-openapi-to-skill/spec.md](specs/001-openapi-to-skill/spec.md) for what's explicitly
-out of scope for this milestone (MCP-server output, compiled-client output, OAuth2 grants
-beyond client-credentials, a `--install` convenience).
+MVP complete: three script emitters (`cs`/`fsx`/`csx`), explicit auth (`bearer`, `basic`,
+`custom`, `script`, OAuth2/Entra), `generate` and `update` commands, filtering, and atomic
+output staging. See [specs/001-openapi-to-skill/spec.md](specs/001-openapi-to-skill/spec.md)
+for milestone scope.

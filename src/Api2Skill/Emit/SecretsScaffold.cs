@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Api2Skill.Auth;
 using Api2Skill.Model;
 
 namespace Api2Skill.Emit;
@@ -14,6 +15,7 @@ public static class SecretsScaffold
 {
     public const string RealSecretsFileName = "secrets.json";
     public const string TemplateFileName = "secrets.example.json";
+    public const string TokenCacheFileName = ".auth-cache.json";
 
     public static void Write(SkillModel model, DirectoryInfo skillDirectory)
     {
@@ -47,8 +49,20 @@ public static class SecretsScaffold
             root["baseUrl"] = string.Empty;
         }
 
+        // Explicit-auth (auth.json) secret references are flat top-level keys — a distinct
+        // namespace from the spec-derived, scheme-keyed entries above (FR-007/FR-008).
+        if (model.AuthConfig is { } authConfig)
+        {
+            foreach (var key in SecretRefScanner.Scan(authConfig))
+            {
+                root.TryAdd(key, string.Empty);
+            }
+        }
+
         var options = new JsonSerializerOptions { WriteIndented = true };
         File.WriteAllText(Path.Combine(skillDirectory.FullName, TemplateFileName), root.ToJsonString(options));
-        File.WriteAllText(Path.Combine(skillDirectory.FullName, ".gitignore"), RealSecretsFileName + Environment.NewLine);
+        File.WriteAllText(
+            Path.Combine(skillDirectory.FullName, ".gitignore"),
+            string.Join(Environment.NewLine, RealSecretsFileName, TokenCacheFileName, TokenCacheFileName + ".lock") + Environment.NewLine);
     }
 }

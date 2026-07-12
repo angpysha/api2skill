@@ -38,10 +38,14 @@ public sealed class CsxEmitter : IScriptEmitter
         // dotnet-script does NOT enable nullable-reference-types by default (unlike a
         // modern .csproj) — without this, the `string?` annotations below fail with CS8632.
         sb.AppendLine("#nullable enable");
+        sb.AppendLine("using System.Diagnostics;");
+        sb.AppendLine("using System.Net;");
         sb.AppendLine("using System.Net.Http;");
         sb.AppendLine("using System.Net.Http.Headers;");
+        sb.AppendLine("using System.Security.Cryptography;");
         sb.AppendLine("using System.Text;");
         sb.AppendLine("using System.Text.Json;");
+        sb.AppendLine("using System.Text.Json.Nodes;");
         sb.AppendLine();
 
         sb.AppendLine("var scriptDir = Path.GetDirectoryName(GetScriptPath());");
@@ -63,6 +67,16 @@ public sealed class CsxEmitter : IScriptEmitter
     {
         sb.AppendLine("async Task<int> Run(string[] args, string scriptDir)");
         sb.AppendLine("{");
+        sb.AppendLine("    if (args.Length > 0 && args[0] == \"login\")");
+        sb.AppendLine("    {");
+        sb.AppendLine("        if (args.Length < 2)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            Console.Error.WriteLine(\"Usage: dotnet script call.csx -- login <profile>\");");
+        sb.AppendLine("            return 2;");
+        sb.AppendLine("        }");
+        sb.AppendLine("        return await LoginAsync(args[1], scriptDir);");
+        sb.AppendLine("    }");
+        sb.AppendLine();
         sb.AppendLine("    var operations = BuildOperations();");
         sb.AppendLine("    var schemes = BuildSchemes();");
         sb.AppendLine();
@@ -118,13 +132,30 @@ public sealed class CsxEmitter : IScriptEmitter
         sb.AppendLine("    try");
         sb.AppendLine("    {");
         sb.AppendLine("        var oauthTokenCache = new Dictionary<string, string>(StringComparer.Ordinal);");
-        sb.AppendLine("        foreach (var schemeId in op.SecuritySchemeIds)");
+        sb.AppendLine("        if (op.AuthProfileNames.Length > 0)");
         sb.AppendLine("        {");
-        sb.AppendLine("            if (!schemes.TryGetValue(schemeId, out var scheme))");
+        sb.AppendLine("            var authConfig = LoadAuthConfig(scriptDir);");
+        sb.AppendLine("            var profiles = authConfig is { } cfg && cfg.TryGetProperty(\"profiles\", out var profilesEl) ? profilesEl : (JsonElement?)null;");
+        sb.AppendLine("            foreach (var profileName in op.AuthProfileNames)");
         sb.AppendLine("            {");
-        sb.AppendLine("                continue;");
+        sb.AppendLine("                var profile = FindProfile(profiles, profileName);");
+        sb.AppendLine("                if (profile is null)");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    throw new AuthResolutionException($\"auth.json has no profile named '{profileName}' (referenced by operation '{operationId}').\");");
+        sb.AppendLine("                }");
+        sb.AppendLine("                await ApplyExplicitProfileAsync(http, profile.Value, profileName, secrets, query, headers, scriptDir);");
         sb.AppendLine("            }");
-        sb.AppendLine("            await ApplyAuthAsync(http, scheme, secrets, query, headers, oauthTokenCache);");
+        sb.AppendLine("        }");
+        sb.AppendLine("        else");
+        sb.AppendLine("        {");
+        sb.AppendLine("            foreach (var schemeId in op.SecuritySchemeIds)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                if (!schemes.TryGetValue(schemeId, out var scheme))");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    continue;");
+        sb.AppendLine("                }");
+        sb.AppendLine("                await ApplyAuthAsync(http, scheme, secrets, query, headers, oauthTokenCache);");
+        sb.AppendLine("            }");
         sb.AppendLine("        }");
         sb.AppendLine();
         sb.AppendLine("        var url = baseUrl.TrimEnd('/') + path + (query.Count > 0 ? \"?\" + string.Join(\"&\", query) : \"\");");
@@ -159,6 +190,11 @@ public sealed class CsxEmitter : IScriptEmitter
         sb.AppendLine("            return 1;");
         sb.AppendLine("        }");
         sb.AppendLine("        return 0;");
+        sb.AppendLine("    }");
+        sb.AppendLine("    catch (AuthResolutionException ex)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        Console.Error.WriteLine(ex.Message);");
+        sb.AppendLine("        return 2;");
         sb.AppendLine("    }");
         sb.AppendLine("    catch (HttpRequestException ex)");
         sb.AppendLine("    {");
@@ -197,6 +233,155 @@ public sealed class CsxEmitter : IScriptEmitter
         sb.AppendLine("    }");
         sb.AppendLine("}");
         sb.AppendLine();
+
+        // Explicit auth.json profiles (FR-006..FR-021a) — see CsFileEmitter for the identical
+        // C# logic; kept as non-static local functions here to match this emitter's style. The
+        // AuthResolutionException type itself is declared at the very end of the file (with the
+        // other record types), matching CsFileEmitter's ordering defensively even though
+        // dotnet-script's scripting host is more permissive about declaration order.
+        sb.AppendLine("JsonElement? LoadAuthConfig(string scriptDir)");
+        sb.AppendLine("{");
+        sb.AppendLine("    var authConfigPath = Path.Combine(scriptDir, \"..\", \"auth.json\");");
+        sb.AppendLine("    if (!File.Exists(authConfigPath))");
+        sb.AppendLine("    {");
+        sb.AppendLine("        return null;");
+        sb.AppendLine("    }");
+        sb.AppendLine("    try");
+        sb.AppendLine("    {");
+        sb.AppendLine("        using var doc = JsonDocument.Parse(File.ReadAllText(authConfigPath));");
+        sb.AppendLine("        return doc.RootElement.Clone();");
+        sb.AppendLine("    }");
+        sb.AppendLine("    catch (JsonException ex)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        throw new AuthResolutionException($\"auth.json is not valid JSON ({ex.Message}).\");");
+        sb.AppendLine("    }");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        sb.AppendLine("JsonElement? FindProfile(JsonElement? profiles, string name)");
+        sb.AppendLine("{");
+        sb.AppendLine("    if (profiles is not { } arr || arr.ValueKind != JsonValueKind.Array)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        return null;");
+        sb.AppendLine("    }");
+        sb.AppendLine("    foreach (var p in arr.EnumerateArray())");
+        sb.AppendLine("    {");
+        sb.AppendLine("        if (p.TryGetProperty(\"name\", out var n) && n.GetString() == name)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            return p;");
+        sb.AppendLine("        }");
+        sb.AppendLine("    }");
+        sb.AppendLine("    return null;");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        sb.AppendLine("string ResolveSecretOrLiteral(string raw, JsonElement? secrets)");
+        sb.AppendLine("{");
+        sb.AppendLine("    if (raw.StartsWith(\"{secret:\", StringComparison.Ordinal) && raw.EndsWith('}'))");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var key = raw[8..^1];");
+        sb.AppendLine("        if (secrets is { } root && root.TryGetProperty(key, out var value) && value.GetString() is { } s)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            return s;");
+        sb.AppendLine("        }");
+        sb.AppendLine("        throw new AuthResolutionException($\"secrets.json has no value for \\\"{key}\\\" (referenced by auth.json).\");");
+        sb.AppendLine("    }");
+        sb.AppendLine("    return raw;");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        sb.AppendLine("string GetProp(JsonElement el, string name) => el.TryGetProperty(name, out var v) ? v.GetString() ?? \"\" : \"\";");
+        sb.AppendLine();
+
+        sb.AppendLine("async Task<(int ExitCode, string Stdout, string Stderr)> RunScriptCommandAsync(string command)");
+        sb.AppendLine("{");
+        sb.AppendLine("    var psi = new ProcessStartInfo");
+        sb.AppendLine("    {");
+        sb.AppendLine("        RedirectStandardOutput = true,");
+        sb.AppendLine("        RedirectStandardError = true,");
+        sb.AppendLine("        UseShellExecute = false,");
+        sb.AppendLine("    };");
+        sb.AppendLine("    if (OperatingSystem.IsWindows())");
+        sb.AppendLine("    {");
+        sb.AppendLine("        psi.FileName = \"cmd.exe\";");
+        sb.AppendLine("        psi.ArgumentList.Add(\"/c\");");
+        sb.AppendLine("        psi.ArgumentList.Add(command);");
+        sb.AppendLine("    }");
+        sb.AppendLine("    else");
+        sb.AppendLine("    {");
+        sb.AppendLine("        psi.FileName = \"/bin/sh\";");
+        sb.AppendLine("        psi.ArgumentList.Add(\"-c\");");
+        sb.AppendLine("        psi.ArgumentList.Add(command);");
+        sb.AppendLine("    }");
+        sb.AppendLine("    using var process = Process.Start(psi)!;");
+        sb.AppendLine("    var stdoutTask = process.StandardOutput.ReadToEndAsync();");
+        sb.AppendLine("    var stderrTask = process.StandardError.ReadToEndAsync();");
+        sb.AppendLine("    await process.WaitForExitAsync();");
+        sb.AppendLine("    return (process.ExitCode, await stdoutTask, await stderrTask);");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        sb.AppendLine("async Task ApplyExplicitProfileAsync(HttpClient http, JsonElement profile, string profileName, JsonElement? secrets, List<string> query, List<(string Name, string Value)> headers, string scriptDir)");
+        sb.AppendLine("{");
+        sb.AppendLine("    var type = GetProp(profile, \"type\");");
+        sb.AppendLine("    switch (type)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        case \"bearer\":");
+        sb.AppendLine("        {");
+        sb.AppendLine("            var token = ResolveSecretOrLiteral(GetProp(profile, \"token\"), secrets);");
+        sb.AppendLine("            var value = token.StartsWith(\"Bearer \", StringComparison.OrdinalIgnoreCase) ? token : $\"Bearer {token}\";");
+        sb.AppendLine("            headers.Add((\"Authorization\", value));");
+        sb.AppendLine("            break;");
+        sb.AppendLine("        }");
+        sb.AppendLine("        case \"basic\":");
+        sb.AppendLine("        {");
+        sb.AppendLine("            var user = ResolveSecretOrLiteral(GetProp(profile, \"username\"), secrets);");
+        sb.AppendLine("            var pass = ResolveSecretOrLiteral(GetProp(profile, \"password\"), secrets);");
+        sb.AppendLine("            var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes($\"{user}:{pass}\"));");
+        sb.AppendLine("            headers.Add((\"Authorization\", $\"Basic {encoded}\"));");
+        sb.AppendLine("            break;");
+        sb.AppendLine("        }");
+        sb.AppendLine("        case \"custom\":");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (profile.TryGetProperty(\"headers\", out var headersEl) && headersEl.ValueKind == JsonValueKind.Array)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                foreach (var h in headersEl.EnumerateArray())");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    var name = GetProp(h, \"name\");");
+        sb.AppendLine("                    var value = ResolveSecretOrLiteral(GetProp(h, \"value\"), secrets);");
+        sb.AppendLine("                    headers.Add((name, value));");
+        sb.AppendLine("                }");
+        sb.AppendLine("            }");
+        sb.AppendLine("            break;");
+        sb.AppendLine("        }");
+        sb.AppendLine("        case \"oauth2\":");
+        sb.AppendLine("        {");
+        sb.AppendLine("            var accessToken = await ResolveOAuthAccessTokenAsync(http, profile, profileName, secrets, scriptDir);");
+        sb.AppendLine("            headers.Add((\"Authorization\", $\"Bearer {accessToken}\"));");
+        sb.AppendLine("            break;");
+        sb.AppendLine("        }");
+        sb.AppendLine("        case \"script\":");
+        sb.AppendLine("        {");
+        sb.AppendLine("            var command = GetProp(profile, \"command\");");
+        sb.AppendLine("            var headerName = GetProp(profile, \"header\");");
+        sb.AppendLine("            if (string.IsNullOrEmpty(headerName)) headerName = \"Authorization\";");
+        sb.AppendLine("            var bearerPrefix = profile.TryGetProperty(\"bearerPrefix\", out var bpEl) && bpEl.ValueKind == JsonValueKind.True;");
+        sb.AppendLine("            var (exitCode, stdout, stderr) = await RunScriptCommandAsync(command);");
+        sb.AppendLine("            if (exitCode != 0)");
+        sb.AppendLine("                throw new AuthResolutionException($\"Script command for auth profile '{profileName}' exited with code {exitCode}: {stderr.Trim()}\");");
+        sb.AppendLine("            var token = stdout.Trim();");
+        sb.AppendLine("            if (bearerPrefix && !token.StartsWith(\"Bearer \", StringComparison.OrdinalIgnoreCase))");
+        sb.AppendLine("                token = $\"Bearer {token}\";");
+        sb.AppendLine("            headers.Add((headerName, token));");
+        sb.AppendLine("            break;");
+        sb.AppendLine("        }");
+        sb.AppendLine("        default:");
+        sb.AppendLine("            throw new AuthResolutionException($\"Auth profile type '{type}' is not supported by this generated dispatcher yet.\");");
+        sb.AppendLine("    }");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        AppendOAuthFunctions(sb);
 
         sb.AppendLine("string? SecretValue(JsonElement? secrets, string schemeId, string key)");
         sb.AppendLine("{");
@@ -294,6 +479,388 @@ public sealed class CsxEmitter : IScriptEmitter
         sb.AppendLine();
     }
 
+    /// <summary>
+    /// OAuth2 (US3): PKCE + state, entra-preset endpoint resolution, the interactive `login`
+    /// flow (loopback callback + browser launch + headless fallback), token exchange/refresh/
+    /// client_credentials, and a file-locked token cache — see CsFileEmitter for the identical
+    /// C# logic; kept non-static and scriptDir-parameterized here to match this emitter's style.
+    /// </summary>
+    private static void AppendOAuthFunctions(StringBuilder sb)
+    {
+        sb.AppendLine("(string Verifier, string Challenge) GeneratePkce()");
+        sb.AppendLine("{");
+        sb.AppendLine("    var bytes = new byte[32];");
+        sb.AppendLine("    RandomNumberGenerator.Fill(bytes);");
+        sb.AppendLine("    var verifier = Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');");
+        sb.AppendLine("    var challengeBytes = SHA256.HashData(Encoding.ASCII.GetBytes(verifier));");
+        sb.AppendLine("    var challenge = Convert.ToBase64String(challengeBytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');");
+        sb.AppendLine("    return (verifier, challenge);");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        sb.AppendLine("string GenerateState()");
+        sb.AppendLine("{");
+        sb.AppendLine("    var bytes = new byte[16];");
+        sb.AppendLine("    RandomNumberGenerator.Fill(bytes);");
+        sb.AppendLine("    return Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        sb.AppendLine("Dictionary<string, string> ParseQuery(string query)");
+        sb.AppendLine("{");
+        sb.AppendLine("    var result = new Dictionary<string, string>(StringComparer.Ordinal);");
+        sb.AppendLine("    var q = query.TrimStart('?');");
+        sb.AppendLine("    if (q.Length == 0) return result;");
+        sb.AppendLine("    foreach (var pair in q.Split('&'))");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var idx = pair.IndexOf('=');");
+        sb.AppendLine("        if (idx < 0) { result[Uri.UnescapeDataString(pair)] = \"\"; continue; }");
+        sb.AppendLine("        result[Uri.UnescapeDataString(pair[..idx])] = Uri.UnescapeDataString(pair[(idx + 1)..]);");
+        sb.AppendLine("    }");
+        sb.AppendLine("    return result;");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        sb.AppendLine("bool TryLaunchBrowser(string url)");
+        sb.AppendLine("{");
+        sb.AppendLine("    try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); return true; }");
+        sb.AppendLine("    catch");
+        sb.AppendLine("    {");
+        sb.AppendLine("        try");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (OperatingSystem.IsMacOS()) { Process.Start(\"open\", url); return true; }");
+        sb.AppendLine("            if (OperatingSystem.IsLinux()) { Process.Start(\"xdg-open\", url); return true; }");
+        sb.AppendLine("            if (OperatingSystem.IsWindows()) { Process.Start(new ProcessStartInfo(\"cmd\", $\"/c start {url}\") { CreateNoWindow = true }); return true; }");
+        sb.AppendLine("        }");
+        sb.AppendLine("        catch { }");
+        sb.AppendLine("        return false;");
+        sb.AppendLine("    }");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        sb.AppendLine("async Task<Dictionary<string, string>> WaitForCallbackAsync(string callbackUrl)");
+        sb.AppendLine("{");
+        sb.AppendLine("    var uri = new Uri(callbackUrl);");
+        sb.AppendLine("    var prefix = $\"{uri.Scheme}://{uri.Host}:{uri.Port}/\";");
+        sb.AppendLine("    using var listener = new HttpListener();");
+        sb.AppendLine("    listener.Prefixes.Add(prefix);");
+        sb.AppendLine("    try");
+        sb.AppendLine("    {");
+        sb.AppendLine("        listener.Start();");
+        sb.AppendLine("    }");
+        sb.AppendLine("    catch (HttpListenerException ex)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        throw new AuthResolutionException($\"Could not start the local OAuth callback listener on {prefix} ({ex.Message}). Another process may be using this port \\u2014 try a different callbackUrl in auth.json.\");");
+        sb.AppendLine("    }");
+        sb.AppendLine("    var context = await listener.GetContextAsync();");
+        sb.AppendLine("    var result = ParseQuery(context.Request.Url?.Query ?? \"\");");
+        sb.AppendLine("    var page = Encoding.UTF8.GetBytes(\"<html><body>Login complete \\u2014 you can close this window and return to the terminal.</body></html>\");");
+        sb.AppendLine("    context.Response.ContentType = \"text/html\";");
+        sb.AppendLine("    context.Response.ContentLength64 = page.Length;");
+        sb.AppendLine("    context.Response.OutputStream.Write(page, 0, page.Length);");
+        sb.AppendLine("    context.Response.OutputStream.Close();");
+        sb.AppendLine("    listener.Stop();");
+        sb.AppendLine("    return result;");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        sb.AppendLine("(string? AuthUrl, string? TokenUrl, List<string> Scopes) ResolveOAuthEndpoints(JsonElement profile)");
+        sb.AppendLine("{");
+        sb.AppendLine("    var preset = GetProp(profile, \"preset\");");
+        sb.AppendLine("    var tenant = GetProp(profile, \"tenant\");");
+        sb.AppendLine("    string? authUrl = profile.TryGetProperty(\"authUrl\", out var a) ? a.GetString() : null;");
+        sb.AppendLine("    string? tokenUrl = profile.TryGetProperty(\"tokenUrl\", out var t) ? t.GetString() : null;");
+        sb.AppendLine("    var scopes = new List<string>();");
+        sb.AppendLine("    if (profile.TryGetProperty(\"scopes\", out var scopesEl) && scopesEl.ValueKind == JsonValueKind.Array)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        foreach (var s in scopesEl.EnumerateArray()) { if (s.GetString() is { } sv) scopes.Add(sv); }");
+        sb.AppendLine("    }");
+        sb.AppendLine("    if (string.Equals(preset, \"entra\", StringComparison.OrdinalIgnoreCase))");
+        sb.AppendLine("    {");
+        sb.AppendLine("        authUrl ??= tenant.Length > 0 ? $\"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize\" : null;");
+        sb.AppendLine("        tokenUrl ??= tenant.Length > 0 ? $\"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token\" : null;");
+        sb.AppendLine("        if (!scopes.Contains(\"offline_access\", StringComparer.Ordinal)) scopes.Add(\"offline_access\");");
+        sb.AppendLine("    }");
+        sb.AppendLine("    return (authUrl, tokenUrl, scopes);");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        sb.AppendLine("string BuildAuthorizeUrl(string authUrl, string clientId, string callbackUrl, List<string> scopes, string challenge, string state, JsonElement profile)");
+        sb.AppendLine("{");
+        sb.AppendLine("    var qs = new List<string>");
+        sb.AppendLine("    {");
+        sb.AppendLine("        \"response_type=code\",");
+        sb.AppendLine("        $\"client_id={Uri.EscapeDataString(clientId)}\",");
+        sb.AppendLine("        $\"redirect_uri={Uri.EscapeDataString(callbackUrl)}\",");
+        sb.AppendLine("        $\"code_challenge={Uri.EscapeDataString(challenge)}\",");
+        sb.AppendLine("        \"code_challenge_method=S256\",");
+        sb.AppendLine("        $\"state={Uri.EscapeDataString(state)}\",");
+        sb.AppendLine("    };");
+        sb.AppendLine("    if (scopes.Count > 0) qs.Add($\"scope={Uri.EscapeDataString(string.Join(' ', scopes))}\");");
+        sb.AppendLine("    if (profile.TryGetProperty(\"authorizeRequest\", out var arEl) && arEl.TryGetProperty(\"body\", out var bodyEl) && bodyEl.ValueKind == JsonValueKind.Object)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        foreach (var prop in bodyEl.EnumerateObject())");
+        sb.AppendLine("        {");
+        sb.AppendLine("            qs.Add($\"{Uri.EscapeDataString(prop.Name)}={Uri.EscapeDataString(prop.Value.GetString() ?? \"\")}\");");
+        sb.AppendLine("        }");
+        sb.AppendLine("    }");
+        sb.AppendLine("    var sep = authUrl.Contains('?') ? \"&\" : \"?\";");
+        sb.AppendLine("    return authUrl + sep + string.Join(\"&\", qs);");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        sb.AppendLine("async Task<(string AccessToken, string? RefreshToken, int ExpiresIn)?> PostTokenRequestAsync(HttpClient http, JsonElement profile, string tokenUrl, string clientId, Dictionary<string, string> form, JsonElement? secrets)");
+        sb.AppendLine("{");
+        sb.AppendLine("    var clientAuth = GetProp(profile, \"clientAuth\");");
+        sb.AppendLine("    var clientSecretRaw = profile.TryGetProperty(\"clientSecret\", out var csEl) ? csEl.GetString() : null;");
+        sb.AppendLine("    var clientSecret = clientSecretRaw is { Length: > 0 } ? ResolveSecretOrLiteral(clientSecretRaw, secrets) : null;");
+        sb.AppendLine();
+        sb.AppendLine("    using var request = new HttpRequestMessage(HttpMethod.Post, tokenUrl);");
+        sb.AppendLine("    if (clientAuth == \"basic\" && clientSecret is not null)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        form.Remove(\"client_id\");");
+        sb.AppendLine("        var basic = Convert.ToBase64String(Encoding.UTF8.GetBytes($\"{clientId}:{clientSecret}\"));");
+        sb.AppendLine("        request.Headers.TryAddWithoutValidation(\"Authorization\", $\"Basic {basic}\");");
+        sb.AppendLine("    }");
+        sb.AppendLine("    else if (clientSecret is not null)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        form[\"client_secret\"] = clientSecret;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    if (profile.TryGetProperty(\"tokenRequest\", out var trEl))");
+        sb.AppendLine("    {");
+        sb.AppendLine("        if (trEl.TryGetProperty(\"headers\", out var hEl) && hEl.ValueKind == JsonValueKind.Object)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            foreach (var prop in hEl.EnumerateObject()) request.Headers.TryAddWithoutValidation(prop.Name, prop.Value.GetString() ?? \"\");");
+        sb.AppendLine("        }");
+        sb.AppendLine("        if (trEl.TryGetProperty(\"body\", out var bEl) && bEl.ValueKind == JsonValueKind.Object)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            foreach (var prop in bEl.EnumerateObject()) form[prop.Name] = prop.Value.GetString() ?? \"\";");
+        sb.AppendLine("        }");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    request.Content = new FormUrlEncodedContent(form);");
+        sb.AppendLine("    using var response = await http.SendAsync(request);");
+        sb.AppendLine("    var text = await response.Content.ReadAsStringAsync();");
+        sb.AppendLine("    if (!response.IsSuccessStatusCode) return null;");
+        sb.AppendLine("    try");
+        sb.AppendLine("    {");
+        sb.AppendLine("        using var doc = JsonDocument.Parse(text);");
+        sb.AppendLine("        var root = doc.RootElement;");
+        sb.AppendLine("        if (!root.TryGetProperty(\"access_token\", out var atEl) || atEl.GetString() is not { } accessToken) return null;");
+        sb.AppendLine("        var refreshToken = root.TryGetProperty(\"refresh_token\", out var rtEl) ? rtEl.GetString() : null;");
+        sb.AppendLine("        var expiresIn = root.TryGetProperty(\"expires_in\", out var eiEl) && eiEl.TryGetInt32(out var ei) ? ei : 3600;");
+        sb.AppendLine("        return (accessToken, refreshToken, expiresIn);");
+        sb.AppendLine("    }");
+        sb.AppendLine("    catch (JsonException)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        return null;");
+        sb.AppendLine("    }");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        sb.AppendLine("Task<(string AccessToken, string? RefreshToken, int ExpiresIn)?> ExchangeCodeForTokenAsync(HttpClient http, JsonElement profile, string tokenUrl, string clientId, string code, string verifier, string callbackUrl, JsonElement? secrets) =>");
+        sb.AppendLine("    PostTokenRequestAsync(http, profile, tokenUrl, clientId, new Dictionary<string, string> { [\"grant_type\"] = \"authorization_code\", [\"code\"] = code, [\"redirect_uri\"] = callbackUrl, [\"code_verifier\"] = verifier, [\"client_id\"] = clientId }, secrets);");
+        sb.AppendLine();
+
+        sb.AppendLine("Task<(string AccessToken, string? RefreshToken, int ExpiresIn)?> FetchClientCredentialsTokenAsync(HttpClient http, JsonElement profile, string tokenUrl, string clientId, JsonElement? secrets) =>");
+        sb.AppendLine("    PostTokenRequestAsync(http, profile, tokenUrl, clientId, new Dictionary<string, string> { [\"grant_type\"] = \"client_credentials\", [\"client_id\"] = clientId }, secrets);");
+        sb.AppendLine();
+
+        sb.AppendLine("Task<(string AccessToken, string? RefreshToken, int ExpiresIn)?> RefreshOAuthTokenAsync(HttpClient http, JsonElement profile, string tokenUrl, string clientId, string refreshToken, JsonElement? secrets) =>");
+        sb.AppendLine("    PostTokenRequestAsync(http, profile, tokenUrl, clientId, new Dictionary<string, string> { [\"grant_type\"] = \"refresh_token\", [\"refresh_token\"] = refreshToken, [\"client_id\"] = clientId }, secrets);");
+        sb.AppendLine();
+
+        sb.AppendLine("string TokenCachePath(string scriptDir) => Path.Combine(scriptDir, \"..\", \".auth-cache.json\");");
+        sb.AppendLine();
+
+        sb.AppendLine("async Task<Dictionary<string, JsonElement>> ReadTokenCacheAsync(string path)");
+        sb.AppendLine("{");
+        sb.AppendLine("    var result = new Dictionary<string, JsonElement>(StringComparer.Ordinal);");
+        sb.AppendLine("    if (!File.Exists(path)) return result;");
+        sb.AppendLine("    try");
+        sb.AppendLine("    {");
+        sb.AppendLine("        using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(path));");
+        sb.AppendLine("        foreach (var prop in doc.RootElement.EnumerateObject()) result[prop.Name] = prop.Value.Clone();");
+        sb.AppendLine("    }");
+        sb.AppendLine("    catch (JsonException) { }");
+        sb.AppendLine("    return result;");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        sb.AppendLine("async Task WriteTokenCacheAsync(string path, Dictionary<string, JsonElement> cache)");
+        sb.AppendLine("{");
+        sb.AppendLine("    var obj = new JsonObject();");
+        sb.AppendLine("    foreach (var (key, value) in cache) obj[key] = JsonNode.Parse(value.GetRawText());");
+        sb.AppendLine("    var tmpPath = path + \".tmp-\" + Guid.NewGuid().ToString(\"N\");");
+        sb.AppendLine("    await File.WriteAllTextAsync(tmpPath, obj.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));");
+        sb.AppendLine("    if (!OperatingSystem.IsWindows())");
+        sb.AppendLine("    {");
+        sb.AppendLine("        File.SetUnixFileMode(tmpPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);");
+        sb.AppendLine("    }");
+        sb.AppendLine("    File.Move(tmpPath, path, overwrite: true);");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        sb.AppendLine("void StoreTokenInCache(Dictionary<string, JsonElement> cache, string profileName, (string AccessToken, string? RefreshToken, int ExpiresIn) token)");
+        sb.AppendLine("{");
+        sb.AppendLine("    var obj = new JsonObject { [\"access_token\"] = token.AccessToken, [\"expires_at\"] = DateTimeOffset.UtcNow.AddSeconds(token.ExpiresIn).ToString(\"o\") };");
+        sb.AppendLine("    if (token.RefreshToken is not null) obj[\"refresh_token\"] = token.RefreshToken;");
+        sb.AppendLine("    cache[profileName] = JsonDocument.Parse(obj.ToJsonString()).RootElement.Clone();");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        sb.AppendLine("async Task<T> WithTokenCacheLockAsync<T>(string scriptDir, Func<Task<T>> action)");
+        sb.AppendLine("{");
+        sb.AppendLine("    var lockPath = TokenCachePath(scriptDir) + \".lock\";");
+        sb.AppendLine("    FileStream? lockStream = null;");
+        sb.AppendLine("    for (var attempt = 0; attempt < 100 && lockStream is null; attempt++)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        try { lockStream = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }");
+        sb.AppendLine("        catch (IOException) { await Task.Delay(50); }");
+        sb.AppendLine("    }");
+        sb.AppendLine("    if (lockStream is null)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        throw new AuthResolutionException(\"Could not acquire the token cache lock (.auth-cache.json.lock) after multiple attempts \\u2014 another process may be stuck holding it.\");");
+        sb.AppendLine("    }");
+        sb.AppendLine("    try { return await action(); }");
+        sb.AppendLine("    finally { lockStream.Dispose(); }");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        sb.AppendLine("async Task<string> ResolveOAuthAccessTokenAsync(HttpClient http, JsonElement profile, string profileName, JsonElement? secrets, string scriptDir)");
+        sb.AppendLine("{");
+        sb.AppendLine("    var (_, tokenUrl, _) = ResolveOAuthEndpoints(profile);");
+        sb.AppendLine("    if (tokenUrl is null) throw new AuthResolutionException($\"Auth profile '{profileName}' (oauth2) has no tokenUrl configured (directly or via a preset).\");");
+        sb.AppendLine("    var clientId = ResolveSecretOrLiteral(GetProp(profile, \"clientId\"), secrets);");
+        sb.AppendLine("    var grant = GetProp(profile, \"grant\");");
+        sb.AppendLine("    var cachePath = TokenCachePath(scriptDir);");
+        sb.AppendLine();
+        sb.AppendLine("    return await WithTokenCacheLockAsync(scriptDir, async () =>");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var cache = await ReadTokenCacheAsync(cachePath);");
+        sb.AppendLine("        if (cache.TryGetValue(profileName, out var entry))");
+        sb.AppendLine("        {");
+        sb.AppendLine("            var expiresAt = entry.TryGetProperty(\"expires_at\", out var eaEl) && DateTimeOffset.TryParse(eaEl.GetString(), out var ea) ? ea : DateTimeOffset.MinValue;");
+        sb.AppendLine("            var cachedToken = entry.TryGetProperty(\"access_token\", out var atEl) ? atEl.GetString() : null;");
+        sb.AppendLine("            if (cachedToken is not null && expiresAt > DateTimeOffset.UtcNow.AddSeconds(30))");
+        sb.AppendLine("            {");
+        sb.AppendLine("                return cachedToken;");
+        sb.AppendLine("            }");
+        sb.AppendLine("            var refreshToken = entry.TryGetProperty(\"refresh_token\", out var rtEl) ? rtEl.GetString() : null;");
+        sb.AppendLine("            if (refreshToken is not null)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                var refreshed = await RefreshOAuthTokenAsync(http, profile, tokenUrl, clientId, refreshToken, secrets);");
+        sb.AppendLine("                if (refreshed is not null)");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    StoreTokenInCache(cache, profileName, refreshed.Value);");
+        sb.AppendLine("                    await WriteTokenCacheAsync(cachePath, cache);");
+        sb.AppendLine("                    return refreshed.Value.AccessToken;");
+        sb.AppendLine("                }");
+        sb.AppendLine("            }");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        if (grant == \"client_credentials\")");
+        sb.AppendLine("        {");
+        sb.AppendLine("            var fetched = await FetchClientCredentialsTokenAsync(http, profile, tokenUrl, clientId, secrets);");
+        sb.AppendLine("            if (fetched is not null)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                StoreTokenInCache(cache, profileName, fetched.Value);");
+        sb.AppendLine("                await WriteTokenCacheAsync(cachePath, cache);");
+        sb.AppendLine("                return fetched.Value.AccessToken;");
+        sb.AppendLine("            }");
+        sb.AppendLine("            throw new AuthResolutionException($\"Failed to obtain a client_credentials token for auth profile '{profileName}'.\");");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        throw new AuthResolutionException($\"No valid or refreshable token for auth profile '{profileName}'. Run: dotnet script scripts/call.csx -- login {profileName}\");");
+        sb.AppendLine("    });");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        sb.AppendLine("async Task<int> LoginAsync(string profileName, string scriptDir)");
+        sb.AppendLine("{");
+        sb.AppendLine("    var authConfig = LoadAuthConfig(scriptDir);");
+        sb.AppendLine("    var profiles = authConfig is { } cfg && cfg.TryGetProperty(\"profiles\", out var profilesEl) ? profilesEl : (JsonElement?)null;");
+        sb.AppendLine("    var profile = FindProfile(profiles, profileName);");
+        sb.AppendLine("    if (profile is null)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        Console.Error.WriteLine($\"No auth profile named '{profileName}' in auth.json.\");");
+        sb.AppendLine("        return 2;");
+        sb.AppendLine("    }");
+        sb.AppendLine("    var type = GetProp(profile.Value, \"type\");");
+        sb.AppendLine("    if (type != \"oauth2\")");
+        sb.AppendLine("    {");
+        sb.AppendLine("        Console.Error.WriteLine($\"Profile '{profileName}' is type '{type}', not 'oauth2' \\u2014 login is only applicable to oauth2 profiles.\");");
+        sb.AppendLine("        return 2;");
+        sb.AppendLine("    }");
+        sb.AppendLine("    var grant = GetProp(profile.Value, \"grant\");");
+        sb.AppendLine("    if (grant == \"client_credentials\")");
+        sb.AppendLine("    {");
+        sb.AppendLine("        Console.WriteLine($\"Profile '{profileName}' uses client_credentials \\u2014 not applicable: no interactive login is needed, a token is obtained automatically at call time.\");");
+        sb.AppendLine("        return 0;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    var (authUrl, tokenUrl, scopes) = ResolveOAuthEndpoints(profile.Value);");
+        sb.AppendLine("    if (authUrl is null || tokenUrl is null)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        Console.Error.WriteLine($\"Profile '{profileName}' is missing authUrl/tokenUrl (directly or via a preset).\");");
+        sb.AppendLine("        return 2;");
+        sb.AppendLine("    }");
+        sb.AppendLine("    var callbackUrl = GetProp(profile.Value, \"callbackUrl\");");
+        sb.AppendLine("    if (callbackUrl.Length == 0) callbackUrl = \"http://localhost:8400/callback\";");
+        sb.AppendLine("    var secrets = LoadSecrets(scriptDir);");
+        sb.AppendLine("    var clientId = ResolveSecretOrLiteral(GetProp(profile.Value, \"clientId\"), secrets);");
+        sb.AppendLine();
+        sb.AppendLine("    var (verifier, challenge) = GeneratePkce();");
+        sb.AppendLine("    var state = GenerateState();");
+        sb.AppendLine("    var authorizeUrl = BuildAuthorizeUrl(authUrl, clientId, callbackUrl, scopes, challenge, state, profile.Value);");
+        sb.AppendLine();
+        sb.AppendLine("    Console.WriteLine($\"Opening your browser to sign in for profile '{profileName}'...\");");
+        sb.AppendLine("    var browserLaunched = TryLaunchBrowser(authorizeUrl);");
+        sb.AppendLine("    Console.WriteLine(browserLaunched");
+        sb.AppendLine("        ? \"If it did not open, visit this URL to sign in:\"");
+        sb.AppendLine("        : \"Could not launch a browser automatically. Open this URL to sign in:\");");
+        sb.AppendLine("    Console.WriteLine(authorizeUrl);");
+        sb.AppendLine();
+        sb.AppendLine("    Dictionary<string, string> callbackParams;");
+        sb.AppendLine("    try { callbackParams = await WaitForCallbackAsync(callbackUrl); }");
+        sb.AppendLine("    catch (AuthResolutionException ex) { Console.Error.WriteLine(ex.Message); return 2; }");
+        sb.AppendLine();
+        sb.AppendLine("    if (!callbackParams.TryGetValue(\"state\", out var returnedState) || returnedState != state)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        Console.Error.WriteLine(\"The callback's state did not match what was sent \\u2014 rejecting (possible CSRF/mix-up). No token was stored. Run login again.\");");
+        sb.AppendLine("        return 2;");
+        sb.AppendLine("    }");
+        sb.AppendLine("    if (!callbackParams.TryGetValue(\"code\", out var code))");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var err = callbackParams.TryGetValue(\"error\", out var e) ? e : \"no authorization code was returned\";");
+        sb.AppendLine("        Console.Error.WriteLine($\"Login failed: {err}\");");
+        sb.AppendLine("        return 2;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    using var http = new HttpClient();");
+        sb.AppendLine("    var tokenResponse = await ExchangeCodeForTokenAsync(http, profile.Value, tokenUrl, clientId, code, verifier, callbackUrl, secrets);");
+        sb.AppendLine("    if (tokenResponse is null)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        Console.Error.WriteLine(\"Failed to exchange the authorization code for a token.\");");
+        sb.AppendLine("        return 2;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    await WithTokenCacheLockAsync(scriptDir, async () =>");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var cachePath = TokenCachePath(scriptDir);");
+        sb.AppendLine("        var cache = await ReadTokenCacheAsync(cachePath);");
+        sb.AppendLine("        StoreTokenInCache(cache, profileName, tokenResponse.Value);");
+        sb.AppendLine("        await WriteTokenCacheAsync(cachePath, cache);");
+        sb.AppendLine("        return true;");
+        sb.AppendLine("    });");
+        sb.AppendLine();
+        sb.AppendLine("    Console.WriteLine($\"Login succeeded for profile '{profileName}'. You can now call operations that use it.\");");
+        sb.AppendLine("    return 0;");
+        sb.AppendLine("}");
+        sb.AppendLine();
+    }
+
     private static void AppendParseArgsFunction(StringBuilder sb)
     {
         sb.AppendLine("(Dictionary<string, string> Params, string? Body) ParseArgs(string[] rest)");
@@ -331,6 +898,8 @@ public sealed class CsxEmitter : IScriptEmitter
                   .Append(op.RequestBody is not null ? "true" : "false").Append(", ")
                   .Append(op.RequestBody?.ContentType is { } ct ? Literal(ct) : "null").Append(", [")
                   .Append(string.Join(", ", op.SecuritySchemeIds.Select(Literal)))
+                  .Append("], [")
+                  .Append(string.Join(", ", op.AuthProfileNames.Select(Literal)))
                   .Append("]),")
                   .AppendLine();
             }
@@ -355,8 +924,9 @@ public sealed class CsxEmitter : IScriptEmitter
         sb.AppendLine();
 
         sb.AppendLine("record ParamSpec(string Name, string Location);");
-        sb.AppendLine("record OperationSpec(string Method, string PathTemplate, ParamSpec[] Parameters, bool HasBody, string? BodyContentType, string[] SecuritySchemeIds);");
+        sb.AppendLine("record OperationSpec(string Method, string PathTemplate, ParamSpec[] Parameters, bool HasBody, string? BodyContentType, string[] SecuritySchemeIds, string[] AuthProfileNames);");
         sb.AppendLine("record SchemeSpec(string Id, string Kind, string? ApiKeyName, string? ApiKeyLocation, string? OAuthTokenUrl);");
+        sb.AppendLine("sealed class AuthResolutionException(string message) : Exception(message);");
     }
 
     private static string LocationKey(ParameterLocation location) => location switch
