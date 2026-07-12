@@ -233,6 +233,30 @@ let tryLaunchBrowser (url: string) : bool =
         with _ ->
             false
 
+let runClipboardCommand (fileName: string) (args: string list) (text: string) : bool =
+    try
+        let psi = ProcessStartInfo(fileName, RedirectStandardInput = true, UseShellExecute = false, CreateNoWindow = true)
+        for a in args do psi.ArgumentList.Add(a)
+        use proc = Process.Start(psi)
+        proc.StandardInput.Write(text)
+        proc.StandardInput.Close()
+        proc.WaitForExit()
+        proc.ExitCode = 0
+    with _ ->
+        false
+
+let tryCopyToClipboard (text: string) : bool =
+    if OperatingSystem.IsMacOS() then
+        runClipboardCommand "pbcopy" [] text
+    elif OperatingSystem.IsWindows() then
+        runClipboardCommand "clip" [] text
+    elif OperatingSystem.IsLinux() then
+        runClipboardCommand "wl-copy" [] text
+        || runClipboardCommand "xclip" ["-selection"; "clipboard"] text
+        || runClipboardCommand "xsel" ["--clipboard"; "--input"] text
+    else
+        false
+
 let waitForCallbackAsync (callbackUrl: string) : Task<Dictionary<string, string>> =
     task {
         let uri = Uri(callbackUrl)
@@ -589,10 +613,16 @@ let loginAsync (profileName: string) : Task<int> =
             let state = generateState ()
             let authorizeUrl = buildAuthorizeUrl authUrl clientId callbackUrl scopes challenge state profile
 
-            printfn "Opening your browser to sign in for profile '%s'..." profileName
-            let browserLaunched = tryLaunchBrowser authorizeUrl
-            printfn "%s" (if browserLaunched then "If it did not open, visit this URL to sign in:" else "Could not launch a browser automatically. Open this URL to sign in:")
-            printfn "%s" authorizeUrl
+            let browserLaunch = getProp profile "browserLaunch"
+            if browserLaunch = "clipboard" then
+                let copied = tryCopyToClipboard authorizeUrl
+                printfn "%s" (if copied then sprintf "Copied the sign-in URL to your clipboard for profile '%s'. Paste it into your browser:" profileName else sprintf "Could not copy the sign-in URL to the clipboard automatically. Open this URL to sign in for profile '%s':" profileName)
+                printfn "%s" authorizeUrl
+            else
+                printfn "Opening your browser to sign in for profile '%s'..." profileName
+                let browserLaunched = tryLaunchBrowser authorizeUrl
+                printfn "%s" (if browserLaunched then "If it did not open, visit this URL to sign in:" else "Could not launch a browser automatically. Open this URL to sign in:")
+                printfn "%s" authorizeUrl
 
             let! callbackParams = waitForCallbackAsync callbackUrl
 

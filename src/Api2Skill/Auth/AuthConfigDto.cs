@@ -39,6 +39,7 @@ public sealed class AuthProfileDto
     public string? TokenUrl { get; set; }
     public List<string>? Scopes { get; set; }
     public string? CallbackUrl { get; set; }
+    public string? BrowserLaunch { get; set; }
     public string? ClientAuth { get; set; }
     public string? ClientId { get; set; }
     public string? ClientSecret { get; set; }

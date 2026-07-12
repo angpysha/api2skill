@@ -205,6 +205,28 @@ dotnet run scripts/call.cs -- login user
 
 `client_credentials` profiles fetch tokens on demand — they are not valid `login` targets.
 
+By default (`browserLaunch` omitted, or `"auto"`) `login` tries to open the authorize URL in the
+OS default browser. Set `"browserLaunch": "clipboard"` on an `authorization_code` profile to skip
+launching a browser entirely — `login` instead copies the authorize URL to the system clipboard
+(native OS clipboard tool, no new dependency) and prints it, so you can paste it into whichever
+browser you prefer. The local callback listener behavior (`callbackUrl`, default
+`http://localhost:8400/callback`) is unchanged either way.
+
+```json
+{
+  "name": "user",
+  "type": "oauth2",
+  "grant": "authorization_code",
+  "authUrl": "https://auth.example.com/authorize",
+  "tokenUrl": "https://auth.example.com/token",
+  "callbackUrl": "http://localhost:8400/callback",
+  "browserLaunch": "clipboard",
+  "clientId": "{secret:CLIENT_ID}",
+  "clientSecret": "{secret:CLIENT_SECRET}",
+  "scopes": ["openid", "offline_access"]
+}
+```
+
 ## Profile attachment
 
 ```json

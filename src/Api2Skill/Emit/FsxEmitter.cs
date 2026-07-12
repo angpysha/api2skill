@@ -344,6 +344,8 @@ public sealed class FsxEmitter : IScriptEmitter
         sb.AppendLine("            false");
         sb.AppendLine();
 
+        AppendClipboardFunctions(sb);
+
         sb.AppendLine("let waitForCallbackAsync (callbackUrl: string) : Task<Dictionary<string, string>> =");
         sb.AppendLine("    task {");
         sb.AppendLine("        let uri = Uri(callbackUrl)");
@@ -716,10 +718,16 @@ public sealed class FsxEmitter : IScriptEmitter
         sb.AppendLine("            let state = generateState ()");
         sb.AppendLine("            let authorizeUrl = buildAuthorizeUrl authUrl clientId callbackUrl scopes challenge state profile");
         sb.AppendLine();
-        sb.AppendLine("            printfn \"Opening your browser to sign in for profile '%s'...\" profileName");
-        sb.AppendLine("            let browserLaunched = tryLaunchBrowser authorizeUrl");
-        sb.AppendLine("            printfn \"%s\" (if browserLaunched then \"If it did not open, visit this URL to sign in:\" else \"Could not launch a browser automatically. Open this URL to sign in:\")");
-        sb.AppendLine("            printfn \"%s\" authorizeUrl");
+        sb.AppendLine("            let browserLaunch = getProp profile \"browserLaunch\"");
+        sb.AppendLine("            if browserLaunch = \"clipboard\" then");
+        sb.AppendLine("                let copied = tryCopyToClipboard authorizeUrl");
+        sb.AppendLine("                printfn \"%s\" (if copied then sprintf \"Copied the sign-in URL to your clipboard for profile '%s'. Paste it into your browser:\" profileName else sprintf \"Could not copy the sign-in URL to the clipboard automatically. Open this URL to sign in for profile '%s':\" profileName)");
+        sb.AppendLine("                printfn \"%s\" authorizeUrl");
+        sb.AppendLine("            else");
+        sb.AppendLine("                printfn \"Opening your browser to sign in for profile '%s'...\" profileName");
+        sb.AppendLine("                let browserLaunched = tryLaunchBrowser authorizeUrl");
+        sb.AppendLine("                printfn \"%s\" (if browserLaunched then \"If it did not open, visit this URL to sign in:\" else \"Could not launch a browser automatically. Open this URL to sign in:\")");
+        sb.AppendLine("                printfn \"%s\" authorizeUrl");
         sb.AppendLine();
         sb.AppendLine("            let! callbackParams = waitForCallbackAsync callbackUrl");
         sb.AppendLine();
@@ -757,6 +765,40 @@ public sealed class FsxEmitter : IScriptEmitter
         sb.AppendLine("            eprintfn \"%s\" msg");
         sb.AppendLine("            return 2");
         sb.AppendLine("    }");
+        sb.AppendLine();
+    }
+
+    /// <summary>
+    /// <c>browserLaunch: "clipboard"</c> (US OAuth manual-browser login): copies the authorize URL
+    /// to the system clipboard via native OS tools instead of launching a browser — no new NuGet
+    /// dependency, mirroring how <c>tryLaunchBrowser</c> already shells out to <c>open</c>/<c>xdg-open</c>/<c>cmd</c>.
+    /// </summary>
+    private static void AppendClipboardFunctions(StringBuilder sb)
+    {
+        sb.AppendLine("let runClipboardCommand (fileName: string) (args: string list) (text: string) : bool =");
+        sb.AppendLine("    try");
+        sb.AppendLine("        let psi = ProcessStartInfo(fileName, RedirectStandardInput = true, UseShellExecute = false, CreateNoWindow = true)");
+        sb.AppendLine("        for a in args do psi.ArgumentList.Add(a)");
+        sb.AppendLine("        use proc = Process.Start(psi)");
+        sb.AppendLine("        proc.StandardInput.Write(text)");
+        sb.AppendLine("        proc.StandardInput.Close()");
+        sb.AppendLine("        proc.WaitForExit()");
+        sb.AppendLine("        proc.ExitCode = 0");
+        sb.AppendLine("    with _ ->");
+        sb.AppendLine("        false");
+        sb.AppendLine();
+
+        sb.AppendLine("let tryCopyToClipboard (text: string) : bool =");
+        sb.AppendLine("    if OperatingSystem.IsMacOS() then");
+        sb.AppendLine("        runClipboardCommand \"pbcopy\" [] text");
+        sb.AppendLine("    elif OperatingSystem.IsWindows() then");
+        sb.AppendLine("        runClipboardCommand \"clip\" [] text");
+        sb.AppendLine("    elif OperatingSystem.IsLinux() then");
+        sb.AppendLine("        runClipboardCommand \"wl-copy\" [] text");
+        sb.AppendLine("        || runClipboardCommand \"xclip\" [\"-selection\"; \"clipboard\"] text");
+        sb.AppendLine("        || runClipboardCommand \"xsel\" [\"--clipboard\"; \"--input\"] text");
+        sb.AppendLine("    else");
+        sb.AppendLine("        false");
         sb.AppendLine();
     }
 

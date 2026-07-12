@@ -55,6 +55,7 @@ public class DispatcherOAuthTokenLifecycleTests : IAsyncLifetime
                     AuthUrl: "https://fake-idp.example.com/authorize",
                     TokenUrl: $"http://127.0.0.1:{_tokenPort}/token",
                     Scopes: ["offline_access"], CallbackUrl: "http://localhost:18400/callback",
+                    BrowserLaunch: "auto",
                     ClientAuth: ClientAuthMethod.Body, ClientId: "{secret:CLIENT_ID}", ClientSecret: null,
                     AuthorizeRequest: OAuthRequestExtras.Empty, TokenRequest: OAuthRequestExtras.Empty)),
         ]);

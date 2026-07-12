@@ -71,6 +71,7 @@ public sealed record OAuthSettings(
     string TokenUrl,
     IReadOnlyList<string> Scopes,
     string CallbackUrl,
+    string BrowserLaunch,
     ClientAuthMethod ClientAuth,
     string ClientId,
     string? ClientSecret,

@@ -123,6 +123,12 @@ public static class AuthConfigLoader
                 $"Auth profile '{dto.Name}' has an unknown type '{dto.Type}'. Supported: bearer, script, oauth2, basic, custom.");
         }
 
+        if (dto.BrowserLaunch is not null && type != AuthType.OAuth2)
+        {
+            throw new AuthConfigException(
+                $"Auth profile '{dto.Name}' sets \"browserLaunch\" but is type '{dto.Type}' — browserLaunch only applies to oauth2 profiles.");
+        }
+
         var attach = MapAttach(dto.Attach, dto.Name!);
 
         return type switch
@@ -259,6 +265,16 @@ public static class AuthConfigLoader
 
         var callbackUrl = string.IsNullOrWhiteSpace(dto.CallbackUrl) ? "http://localhost:8400/callback" : dto.CallbackUrl;
 
+        var browserLaunch = string.IsNullOrWhiteSpace(dto.BrowserLaunch)
+            ? "auto"
+            : dto.BrowserLaunch.Trim().ToLowerInvariant() switch
+            {
+                "auto" => "auto",
+                "clipboard" => "clipboard",
+                _ => throw new AuthConfigException(
+                    $"Auth profile '{dto.Name}' (oauth2) has an unknown browserLaunch '{dto.BrowserLaunch}'. Supported: auto, clipboard."),
+            };
+
         return new OAuthSettings(
             Grant: grant,
             Preset: dto.Preset,
@@ -267,6 +283,7 @@ public static class AuthConfigLoader
             TokenUrl: tokenUrl!,
             Scopes: scopes,
             CallbackUrl: callbackUrl,
+            BrowserLaunch: browserLaunch,
             ClientAuth: clientAuth,
             ClientId: dto.ClientId,
             ClientSecret: dto.ClientSecret,
@@ -338,6 +355,7 @@ public static class AuthConfigLoader
                 dto.TokenUrl = p.OAuth.TokenUrl;
                 dto.Scopes = [.. p.OAuth.Scopes];
                 dto.CallbackUrl = p.OAuth.CallbackUrl;
+                dto.BrowserLaunch = p.OAuth.BrowserLaunch == "auto" ? null : p.OAuth.BrowserLaunch;
                 dto.ClientAuth = p.OAuth.ClientAuth == ClientAuthMethod.Basic ? "basic" : "body";
                 dto.ClientId = p.OAuth.ClientId;
                 dto.ClientSecret = p.OAuth.ClientSecret;
