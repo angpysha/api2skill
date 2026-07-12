@@ -31,7 +31,7 @@ public class DispatcherOAuthClientCredentialsTests : IAsyncLifetime
                 new OAuthSettings(
                     Grant: OAuthGrant.ClientCredentials, Preset: null, Tenant: null, AuthUrl: null,
                     TokenUrl: $"http://127.0.0.1:{_tokenPort}/token", Scopes: [],
-                    CallbackUrl: "http://localhost:18401/callback", ClientAuth: ClientAuthMethod.Body,
+                    CallbackUrl: "http://localhost:18401/callback", BrowserLaunch: "auto", ClientAuth: ClientAuthMethod.Body,
                     ClientId: "{secret:CLIENT_ID}", ClientSecret: "{secret:CLIENT_SECRET}",
                     AuthorizeRequest: OAuthRequestExtras.Empty, TokenRequest: OAuthRequestExtras.Empty)),
         ]);

@@ -25,12 +25,14 @@ public class DispatcherOAuthLoginTests : IAsyncLifetime
     private HttpListener _tokenListener = null!;
     private int _tokenPort;
     private int _callbackPort;
+    private int _clipboardCallbackPort;
     private string _skillDir = "";
 
     public async Task InitializeAsync()
     {
         (_tokenListener, _tokenPort) = LoopbackHttpListenerFactory.Start();
         _callbackPort = GetFreePort();
+        _clipboardCallbackPort = GetFreePort();
         _skillDir = await GenerateSkillAsync();
         await File.WriteAllTextAsync(Path.Combine(_skillDir, "secrets.json"), """{"CLIENT_ID":"public-client-id"}""");
     }
@@ -65,6 +67,22 @@ public class DispatcherOAuthLoginTests : IAsyncLifetime
                     TokenUrl: $"http://127.0.0.1:{_tokenPort}/token",
                     Scopes: ["offline_access"],
                     CallbackUrl: $"http://localhost:{_callbackPort}/callback",
+                    BrowserLaunch: "auto",
+                    ClientAuth: ClientAuthMethod.Body,
+                    ClientId: "{secret:CLIENT_ID}",
+                    ClientSecret: null,
+                    AuthorizeRequest: OAuthRequestExtras.Empty,
+                    TokenRequest: OAuthRequestExtras.Empty)),
+            new AuthProfile("aad-clipboard", AuthType.OAuth2, new Attachment(AttachScope.Tags, ["unused-tag"]), null, null, null, null,
+                new OAuthSettings(
+                    Grant: OAuthGrant.AuthorizationCode,
+                    Preset: null,
+                    Tenant: null,
+                    AuthUrl: "https://fake-idp.example.com/authorize",
+                    TokenUrl: $"http://127.0.0.1:{_tokenPort}/token",
+                    Scopes: ["offline_access"],
+                    CallbackUrl: $"http://localhost:{_clipboardCallbackPort}/callback",
+                    BrowserLaunch: "clipboard",
                     ClientAuth: ClientAuthMethod.Body,
                     ClientId: "{secret:CLIENT_ID}",
                     ClientSecret: null,
@@ -128,7 +146,9 @@ public class DispatcherOAuthLoginTests : IAsyncLifetime
     }
 
     /// <summary>Simulates the IdP's browser redirect by hitting the local callback directly.</summary>
-    private async Task SendFakeCallbackAsync(string extraQuery)
+    private Task SendFakeCallbackAsync(string extraQuery) => SendFakeCallbackAsync(extraQuery, _callbackPort);
+
+    private async Task SendFakeCallbackAsync(string extraQuery, int callbackPort)
     {
         using var http = new HttpClient();
         // The dispatcher's HttpListener may not have called Start() yet (it starts a beat after
@@ -139,7 +159,7 @@ public class DispatcherOAuthLoginTests : IAsyncLifetime
         {
             try
             {
-                var response = await http.GetAsync($"http://localhost:{_callbackPort}/callback?{extraQuery}");
+                var response = await http.GetAsync($"http://localhost:{callbackPort}/callback?{extraQuery}");
                 Assert.Equal(HttpStatusCode.OK, response.StatusCode);
                 return;
             }
@@ -274,5 +294,48 @@ public class DispatcherOAuthLoginTests : IAsyncLifetime
 
         Assert.NotEqual(0, process.ExitCode);
         Assert.Contains("does-not-exist", stderr, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Spec 005 US1/US3: <c>"browserLaunch": "clipboard"</c> must never launch a browser, must
+    /// print the authorize URL either way, and must still complete the callback + token exchange
+    /// exactly like the "auto" profile — regardless of whether a clipboard tool is available on
+    /// the test runner (CI is a "no clipboard tool" environment, exercising the US3 fallback).
+    /// </summary>
+    [Fact]
+    public async Task ClipboardBrowserLaunch_NeverOpensBrowser_PrintsUrlAndCompletesLogin()
+    {
+        using var process = StartLogin("aad-clipboard");
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        string? deliveryLine = null;
+        while (DateTime.UtcNow < deadline)
+        {
+            var line = await process.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(30));
+            if (line is null) break;
+            Assert.DoesNotContain("Opening your browser", line, StringComparison.Ordinal);
+            if (line.Contains("Copied the sign-in URL", StringComparison.Ordinal)
+                || line.Contains("Could not copy the sign-in URL", StringComparison.Ordinal))
+            {
+                deliveryLine = line;
+            }
+            if (line.StartsWith("https://fake-idp.example.com/authorize", StringComparison.Ordinal))
+            {
+                var state = ExtractQueryParam(line, "state");
+                var tokenTask = RespondToTokenRequestAsync();
+                await SendFakeCallbackAsync($"code=CLIP_CODE&state={Uri.EscapeDataString(state)}", _clipboardCallbackPort);
+                await tokenTask;
+                break;
+            }
+        }
+
+        Assert.NotNull(deliveryLine);
+        Assert.Contains("aad-clipboard", deliveryLine, StringComparison.Ordinal);
+
+        await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        Assert.Equal(0, process.ExitCode);
+
+        var cachePath = Path.Combine(_skillDir, ".auth-cache.json");
+        using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(cachePath));
+        Assert.Equal("TESTACCESS123", doc.RootElement.GetProperty("aad-clipboard").GetProperty("access_token").GetString());
     }
 }

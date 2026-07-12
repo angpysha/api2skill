@@ -165,6 +165,89 @@ public class AuthConfigLoaderTests
         Assert.Null(config.Profiles[0].OAuth!.ClientSecret);
     }
 
+    // --- browserLaunch (spec 005) ---
+
+    [Fact]
+    public void Parse_OAuth2_DefaultsBrowserLaunchToAuto()
+    {
+        var config = AuthConfigLoader.Parse("""
+            { "profiles": [
+              { "name": "svc", "type": "oauth2", "grant": "client_credentials",
+                "clientId": "{secret:CID}", "tokenUrl": "https://example.com/token" }
+            ] }
+            """);
+
+        Assert.Equal("auto", config.Profiles[0].OAuth!.BrowserLaunch);
+    }
+
+    [Fact]
+    public void Parse_OAuth2_AcceptsClipboardBrowserLaunch()
+    {
+        var config = AuthConfigLoader.Parse("""
+            { "profiles": [
+              { "name": "aad", "type": "oauth2", "authUrl": "https://example.com/authorize",
+                "tokenUrl": "https://example.com/token", "clientId": "{secret:CID}",
+                "browserLaunch": "clipboard" }
+            ] }
+            """);
+
+        Assert.Equal("clipboard", config.Profiles[0].OAuth!.BrowserLaunch);
+    }
+
+    [Fact]
+    public void Parse_OAuth2_UnknownBrowserLaunch_ThrowsAuthConfigException()
+    {
+        var ex = Assert.Throws<AuthConfigException>(() => AuthConfigLoader.Parse("""
+            { "profiles": [
+              { "name": "aad", "type": "oauth2", "authUrl": "https://example.com/authorize",
+                "tokenUrl": "https://example.com/token", "clientId": "{secret:CID}",
+                "browserLaunch": "incognito" }
+            ] }
+            """));
+        Assert.Contains("browserLaunch", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Parse_BrowserLaunchOnNonOAuthProfile_ThrowsAuthConfigException()
+    {
+        var ex = Assert.Throws<AuthConfigException>(() => AuthConfigLoader.Parse("""
+            { "profiles": [
+              { "name": "x", "type": "bearer", "token": "{secret:T}", "browserLaunch": "clipboard" }
+            ] }
+            """));
+        Assert.Contains("browserLaunch", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Serialize_OmitsBrowserLaunch_WhenAuto()
+    {
+        var config = AuthConfigLoader.Parse("""
+            { "profiles": [
+              { "name": "svc", "type": "oauth2", "grant": "client_credentials",
+                "clientId": "{secret:CID}", "tokenUrl": "https://example.com/token" }
+            ] }
+            """);
+
+        var json = AuthConfigLoader.Serialize(config);
+        Assert.DoesNotContain("browserLaunch", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Serialize_RoundTripsClipboardBrowserLaunch()
+    {
+        var config = AuthConfigLoader.Parse("""
+            { "profiles": [
+              { "name": "aad", "type": "oauth2", "authUrl": "https://example.com/authorize",
+                "tokenUrl": "https://example.com/token", "clientId": "{secret:CID}",
+                "browserLaunch": "clipboard" }
+            ] }
+            """);
+
+        var json = AuthConfigLoader.Serialize(config);
+        var reparsed = AuthConfigLoader.Parse(json);
+        Assert.Equal("clipboard", reparsed.Profiles[0].OAuth!.BrowserLaunch);
+    }
+
     // --- --auth shorthand ---
 
     [Theory]

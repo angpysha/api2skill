@@ -538,6 +538,8 @@ public sealed class CsxEmitter : IScriptEmitter
         sb.AppendLine("}");
         sb.AppendLine();
 
+        AppendClipboardFunctions(sb);
+
         sb.AppendLine("async Task<Dictionary<string, string>> WaitForCallbackAsync(string callbackUrl)");
         sb.AppendLine("{");
         sb.AppendLine("    var uri = new Uri(callbackUrl);");
@@ -815,12 +817,24 @@ public sealed class CsxEmitter : IScriptEmitter
         sb.AppendLine("    var state = GenerateState();");
         sb.AppendLine("    var authorizeUrl = BuildAuthorizeUrl(authUrl, clientId, callbackUrl, scopes, challenge, state, profile.Value);");
         sb.AppendLine();
-        sb.AppendLine("    Console.WriteLine($\"Opening your browser to sign in for profile '{profileName}'...\");");
-        sb.AppendLine("    var browserLaunched = TryLaunchBrowser(authorizeUrl);");
-        sb.AppendLine("    Console.WriteLine(browserLaunched");
-        sb.AppendLine("        ? \"If it did not open, visit this URL to sign in:\"");
-        sb.AppendLine("        : \"Could not launch a browser automatically. Open this URL to sign in:\");");
-        sb.AppendLine("    Console.WriteLine(authorizeUrl);");
+        sb.AppendLine("    var browserLaunch = GetProp(profile.Value, \"browserLaunch\");");
+        sb.AppendLine("    if (browserLaunch == \"clipboard\")");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var copied = TryCopyToClipboard(authorizeUrl);");
+        sb.AppendLine("        Console.WriteLine(copied");
+        sb.AppendLine("            ? $\"Copied the sign-in URL to your clipboard for profile '{profileName}'. Paste it into your browser:\"");
+        sb.AppendLine("            : $\"Could not copy the sign-in URL to the clipboard automatically. Open this URL to sign in for profile '{profileName}':\");");
+        sb.AppendLine("        Console.WriteLine(authorizeUrl);");
+        sb.AppendLine("    }");
+        sb.AppendLine("    else");
+        sb.AppendLine("    {");
+        sb.AppendLine("        Console.WriteLine($\"Opening your browser to sign in for profile '{profileName}'...\");");
+        sb.AppendLine("        var browserLaunched = TryLaunchBrowser(authorizeUrl);");
+        sb.AppendLine("        Console.WriteLine(browserLaunched");
+        sb.AppendLine("            ? \"If it did not open, visit this URL to sign in:\"");
+        sb.AppendLine("            : \"Could not launch a browser automatically. Open this URL to sign in:\");");
+        sb.AppendLine("        Console.WriteLine(authorizeUrl);");
+        sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine("    Dictionary<string, string> callbackParams;");
         sb.AppendLine("    try { callbackParams = await WaitForCallbackAsync(callbackUrl); }");
@@ -857,6 +871,48 @@ public sealed class CsxEmitter : IScriptEmitter
         sb.AppendLine();
         sb.AppendLine("    Console.WriteLine($\"Login succeeded for profile '{profileName}'. You can now call operations that use it.\");");
         sb.AppendLine("    return 0;");
+        sb.AppendLine("}");
+        sb.AppendLine();
+    }
+
+    /// <summary>
+    /// <c>browserLaunch: "clipboard"</c> (US OAuth manual-browser login): copies the authorize URL
+    /// to the system clipboard via native OS tools instead of launching a browser — no new NuGet
+    /// dependency, mirroring how <c>TryLaunchBrowser</c> already shells out to <c>open</c>/<c>xdg-open</c>/<c>cmd</c>.
+    /// </summary>
+    private static void AppendClipboardFunctions(StringBuilder sb)
+    {
+        sb.AppendLine("bool RunClipboardCommand(string fileName, string[] args, string text)");
+        sb.AppendLine("{");
+        sb.AppendLine("    try");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var psi = new ProcessStartInfo(fileName) { RedirectStandardInput = true, UseShellExecute = false, CreateNoWindow = true };");
+        sb.AppendLine("        foreach (var a in args) psi.ArgumentList.Add(a);");
+        sb.AppendLine("        using var process = Process.Start(psi);");
+        sb.AppendLine("        if (process is null) return false;");
+        sb.AppendLine("        process.StandardInput.Write(text);");
+        sb.AppendLine("        process.StandardInput.Close();");
+        sb.AppendLine("        process.WaitForExit();");
+        sb.AppendLine("        return process.ExitCode == 0;");
+        sb.AppendLine("    }");
+        sb.AppendLine("    catch");
+        sb.AppendLine("    {");
+        sb.AppendLine("        return false;");
+        sb.AppendLine("    }");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        sb.AppendLine("bool TryCopyToClipboard(string text)");
+        sb.AppendLine("{");
+        sb.AppendLine("    if (OperatingSystem.IsMacOS()) return RunClipboardCommand(\"pbcopy\", Array.Empty<string>(), text);");
+        sb.AppendLine("    if (OperatingSystem.IsWindows()) return RunClipboardCommand(\"clip\", Array.Empty<string>(), text);");
+        sb.AppendLine("    if (OperatingSystem.IsLinux())");
+        sb.AppendLine("    {");
+        sb.AppendLine("        return RunClipboardCommand(\"wl-copy\", Array.Empty<string>(), text)");
+        sb.AppendLine("            || RunClipboardCommand(\"xclip\", new[] { \"-selection\", \"clipboard\" }, text)");
+        sb.AppendLine("            || RunClipboardCommand(\"xsel\", new[] { \"--clipboard\", \"--input\" }, text);");
+        sb.AppendLine("    }");
+        sb.AppendLine("    return false;");
         sb.AppendLine("}");
         sb.AppendLine();
     }

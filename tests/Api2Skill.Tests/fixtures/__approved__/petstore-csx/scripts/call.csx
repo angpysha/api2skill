@@ -356,6 +356,38 @@ bool TryLaunchBrowser(string url)
     }
 }
 
+bool RunClipboardCommand(string fileName, string[] args, string text)
+{
+    try
+    {
+        var psi = new ProcessStartInfo(fileName) { RedirectStandardInput = true, UseShellExecute = false, CreateNoWindow = true };
+        foreach (var a in args) psi.ArgumentList.Add(a);
+        using var process = Process.Start(psi);
+        if (process is null) return false;
+        process.StandardInput.Write(text);
+        process.StandardInput.Close();
+        process.WaitForExit();
+        return process.ExitCode == 0;
+    }
+    catch
+    {
+        return false;
+    }
+}
+
+bool TryCopyToClipboard(string text)
+{
+    if (OperatingSystem.IsMacOS()) return RunClipboardCommand("pbcopy", Array.Empty<string>(), text);
+    if (OperatingSystem.IsWindows()) return RunClipboardCommand("clip", Array.Empty<string>(), text);
+    if (OperatingSystem.IsLinux())
+    {
+        return RunClipboardCommand("wl-copy", Array.Empty<string>(), text)
+            || RunClipboardCommand("xclip", new[] { "-selection", "clipboard" }, text)
+            || RunClipboardCommand("xsel", new[] { "--clipboard", "--input" }, text);
+    }
+    return false;
+}
+
 async Task<Dictionary<string, string>> WaitForCallbackAsync(string callbackUrl)
 {
     var uri = new Uri(callbackUrl);
@@ -620,12 +652,24 @@ async Task<int> LoginAsync(string profileName, string scriptDir)
     var state = GenerateState();
     var authorizeUrl = BuildAuthorizeUrl(authUrl, clientId, callbackUrl, scopes, challenge, state, profile.Value);
 
-    Console.WriteLine($"Opening your browser to sign in for profile '{profileName}'...");
-    var browserLaunched = TryLaunchBrowser(authorizeUrl);
-    Console.WriteLine(browserLaunched
-        ? "If it did not open, visit this URL to sign in:"
-        : "Could not launch a browser automatically. Open this URL to sign in:");
-    Console.WriteLine(authorizeUrl);
+    var browserLaunch = GetProp(profile.Value, "browserLaunch");
+    if (browserLaunch == "clipboard")
+    {
+        var copied = TryCopyToClipboard(authorizeUrl);
+        Console.WriteLine(copied
+            ? $"Copied the sign-in URL to your clipboard for profile '{profileName}'. Paste it into your browser:"
+            : $"Could not copy the sign-in URL to the clipboard automatically. Open this URL to sign in for profile '{profileName}':");
+        Console.WriteLine(authorizeUrl);
+    }
+    else
+    {
+        Console.WriteLine($"Opening your browser to sign in for profile '{profileName}'...");
+        var browserLaunched = TryLaunchBrowser(authorizeUrl);
+        Console.WriteLine(browserLaunched
+            ? "If it did not open, visit this URL to sign in:"
+            : "Could not launch a browser automatically. Open this URL to sign in:");
+        Console.WriteLine(authorizeUrl);
+    }
 
     Dictionary<string, string> callbackParams;
     try { callbackParams = await WaitForCallbackAsync(callbackUrl); }
