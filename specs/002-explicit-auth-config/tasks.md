@@ -178,15 +178,15 @@ E).
 
 ### Tests for User Story 4 ⚠️
 
-- [ ] T067 [P] [US4] Integration test: script command stdout becomes the configured header value (default `Authorization`) in `tests/Api2Skill.Tests/Integration/DispatcherScriptAuthTests.cs`
-- [ ] T068 [P] [US4] Integration test: `bearerPrefix` prepends `Bearer ` exactly once when absent in `tests/Api2Skill.Tests/Integration/DispatcherScriptAuthTests.cs` (extend)
-- [ ] T069 [P] [US4] Integration test: a non-zero command exit fails the call and surfaces stderr in `tests/Api2Skill.Tests/Integration/DispatcherScriptAuthTests.cs` (extend)
+- [x] T067 [P] [US4] Integration test: script command stdout becomes the configured header value (default `Authorization`) in `tests/Api2Skill.Tests/Integration/DispatcherScriptAuthTests.cs`
+- [x] T068 [P] [US4] Integration test: `bearerPrefix` prepends `Bearer ` exactly once when absent in `tests/Api2Skill.Tests/Integration/DispatcherScriptAuthTests.cs` (extend)
+- [x] T069 [P] [US4] Integration test: a non-zero command exit fails the call and surfaces stderr in `tests/Api2Skill.Tests/Integration/DispatcherScriptAuthTests.cs` (extend)
 
 ### Implementation for User Story 4
 
-- [ ] T070 [US4] Implement the `script` type handler (process exec, trim stdout, `bearerPrefix`, non-zero-exit failure surfacing stderr) in `AuthEngine.Cs.cs` and `AuthEngine.Fsx.cs` (depends on T018, T019)
-- [ ] T071 [US4] Update `SKILL.md` docs noting `script` executes a user-provided local command (FR-022) in `src/Api2Skill/Emit/SkillMdWriter.cs` (depends on T023)
-- [ ] T072 [US4] Run quickstart.md Scenario E — manual validation
+- [x] T070 [US4] Implement the `script` type handler (process exec, trim stdout, `bearerPrefix`, non-zero-exit failure surfacing stderr) in `AuthEngine.Cs.cs` and `AuthEngine.Fsx.cs` (depends on T018, T019)
+- [x] T071 [US4] Update `SKILL.md` docs noting `script` executes a user-provided local command (FR-022) in `src/Api2Skill/Emit/SkillMdWriter.cs` (depends on T023)
+- [x] T072 [US4] Run quickstart.md Scenario E — manual validation
 
 **Checkpoint**: All four user stories are independently functional.
 
@@ -194,7 +194,7 @@ E).
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T073 [P] Update `README.md` with `auth.json`/`--auth`/`--auth-config`/`--login` usage examples
+- [x] T073 [P] Update `README.md` with `auth.json`/`--auth`/`--auth-config`/`--login` usage examples
 - [ ] T074 [P] Author ADR-0004 (runtime-read `auth.json` + API-independent engine), ADR-0005 (loopback + PKCE + `state`), ADR-0006 (file-locked token cache), linked from `plan.md`
 - [ ] T075 Cross-emitter parity sweep: run quickstart.md Scenario F across `cs`/`fsx`/`csx` for all five auth types
 - [ ] T076 Run the full test suite (`dotnet-unit-tests.ps1`) and confirm green

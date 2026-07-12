@@ -483,6 +483,27 @@ let resolveOAuthAccessTokenAsync (http: HttpClient) (profile: JsonElement) (prof
             })
     }
 
+let runScriptCommandAsync (command: string) : Task<int * string * string> =
+    task {
+        let psi = ProcessStartInfo()
+        psi.RedirectStandardOutput <- true
+        psi.RedirectStandardError <- true
+        psi.UseShellExecute <- false
+        if OperatingSystem.IsWindows() then
+            psi.FileName <- "cmd.exe"
+            psi.ArgumentList.Add("/c") |> ignore
+            psi.ArgumentList.Add(command) |> ignore
+        else
+            psi.FileName <- "/bin/sh"
+            psi.ArgumentList.Add("-c") |> ignore
+            psi.ArgumentList.Add(command) |> ignore
+        use proc = Process.Start(psi)
+        let! stdout = proc.StandardOutput.ReadToEndAsync()
+        let! stderr = proc.StandardError.ReadToEndAsync()
+        do! proc.WaitForExitAsync()
+        return (proc.ExitCode, stdout, stderr)
+    }
+
 let applyExplicitProfileAsync (http: HttpClient) (profile: JsonElement) (profileName: string) (secrets: JsonElement option) (query: ResizeArray<string>) (headers: ResizeArray<string * string>) : Task<unit> =
     task {
         let profType = getProp profile "type"
@@ -507,6 +528,21 @@ let applyExplicitProfileAsync (http: HttpClient) (profile: JsonElement) (profile
         | "oauth2" ->
             let! accessToken = resolveOAuthAccessTokenAsync http profile profileName secrets
             headers.Add(("Authorization", sprintf "Bearer %s" accessToken))
+        | "script" ->
+            let command = getProp profile "command"
+            let headerName =
+                let h = getProp profile "header"
+                if String.IsNullOrEmpty(h) then "Authorization" else h
+            let bearerPrefix =
+                match profile.TryGetProperty("bearerPrefix") with
+                | true, v -> v.ValueKind = JsonValueKind.True
+                | _ -> false
+            let! exitCode, stdout, stderr = runScriptCommandAsync command
+            if exitCode <> 0 then
+                return raise (AuthResolutionException (sprintf "Script command for auth profile '%s' exited with code %d: %s" profileName exitCode (stderr.Trim())))
+            let token = stdout.Trim()
+            let value = if bearerPrefix && not (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) then sprintf "Bearer %s" token else token
+            headers.Add((headerName, value))
         | other ->
             raise (AuthResolutionException (sprintf "Auth profile type '%s' is not supported by this generated dispatcher yet." other))
     }

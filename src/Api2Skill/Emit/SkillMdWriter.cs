@@ -147,7 +147,7 @@ public static class SkillMdWriter
         AuthType.Bearer => "Set the token in `secrets.json`; `Bearer ` is added automatically if missing.",
         AuthType.Basic => "Set `username`/`password` in `secrets.json`; sent as `Authorization: Basic ...`.",
         AuthType.Custom => $"Sends {profile.Custom!.Headers.Count} header(s): {string.Join(", ", profile.Custom.Headers.Select(h => h.Name))}. Set the referenced values in `secrets.json`.",
-        AuthType.Script => $"Runs `{profile.Script!.Command}` on every call; its trimmed stdout becomes the `{profile.Script.Header}` header. **Not yet executed by this generated dispatcher version.**",
+        AuthType.Script => $"Runs the user-provided local command `{profile.Script!.Command}` on every call; its trimmed stdout becomes the `{profile.Script.Header}` header{(profile.Script.BearerPrefix ? " (`Bearer ` added when absent)" : "")}.",
         AuthType.OAuth2 => "OAuth2 profile (see `auth.json` for endpoints/scopes). **Interactive login is not yet executed by this generated dispatcher version.**",
         _ => string.Empty,
     };
