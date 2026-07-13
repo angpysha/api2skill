@@ -279,23 +279,26 @@ let beginCallbackListener (callbackUrl: string) : HttpListener =
     listener
 
 let awaitOAuthCallbackAsync (listener: HttpListener) : Task<Dictionary<string, string>> =
+    let rec waitForCode () = task {
+        let! context = listener.GetContextAsync()
+        let queryString = if isNull (box context.Request.Url) then "" else context.Request.Url.Query
+        let result = parseQuery queryString
+        if result.ContainsKey("code") || result.ContainsKey("error") then
+            let page = Encoding.UTF8.GetBytes("<html><body>Login complete \u2014 you can close this window and return to the terminal.</body></html>")
+            context.Response.StatusCode <- 200
+            context.Response.ContentType <- "text/html; charset=utf-8"
+            context.Response.ContentLength64 <- int64 page.Length
+            context.Response.OutputStream.Write(page, 0, page.Length)
+            context.Response.Close()
+            return result
+        else
+            context.Response.StatusCode <- 404
+            context.Response.Close()
+            return! waitForCode ()
+    }
     task {
         try
-            while true do
-                let! context = listener.GetContextAsync()
-                let queryString = if isNull (box context.Request.Url) then "" else context.Request.Url.Query
-                let result = parseQuery queryString
-                if result.ContainsKey("code") || result.ContainsKey("error") then
-                    let page = Encoding.UTF8.GetBytes("<html><body>Login complete \u2014 you can close this window and return to the terminal.</body></html>")
-                    context.Response.StatusCode <- 200
-                    context.Response.ContentType <- "text/html; charset=utf-8"
-                    context.Response.ContentLength64 <- int64 page.Length
-                    context.Response.OutputStream.Write(page, 0, page.Length)
-                    context.Response.Close()
-                    return result
-                else
-                    context.Response.StatusCode <- 404
-                    context.Response.Close()
+            return! waitForCode ()
         finally
             listener.Stop()
             listener.Close()
@@ -637,11 +640,7 @@ let loginAsync (profileName: string) : Task<int> =
             let state = generateState ()
             let authorizeUrl = buildAuthorizeUrl authUrl clientId callbackUrl scopes challenge state profile
 
-            let callbackListener =
-                try beginCallbackListener callbackUrl
-                with AuthResolutionException msg ->
-                    eprintfn "%s" msg
-                    return 2
+            let callbackListener = beginCallbackListener callbackUrl
             printfn "Listening for OAuth callback on %s ..." callbackUrl
 
             let browserLaunch = getProp profile "browserLaunch"
