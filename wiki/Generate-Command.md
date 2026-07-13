@@ -31,7 +31,20 @@ Converts an OpenAPI/Swagger document into a Claude Agent Skill directory.
 | `--auth <type>` | | | Shorthand: `bearer`, `basic`, or `custom` |
 | `--login` | | off | After write, run interactive login for `authorization_code` profiles |
 
-See [Authentication](Authentication.md) for auth details.
+See [Authentication](Authentication.md) for auth details, including auto-scaffold `auth.json`
+on first generate.
+
+## Auto-scaffold `auth.json`
+
+When neither `--auth` nor `--auth-config` is supplied and the filtered spec references security
+schemes, `generate` writes an inactive `auth.json` template (profile names = scheme IDs,
+`{secret:…}` placeholders, `_guidance` metadata). Explicit auth activates on a later run:
+
+```bash
+api2skill generate ./api.json --auth-config ./my-skill/auth.json --force
+```
+
+See [specs/006-auth-template-scaffold/contracts/auth-scaffold.md](../specs/006-auth-template-scaffold/contracts/auth-scaffold.md).
 
 ## Generate pipeline
 
@@ -43,7 +56,7 @@ flowchart TD
     D --> E[Resolve auth profiles]
     E --> F[Emit SKILL.md + reference/]
     F --> G[Emit dispatcher script]
-    G --> H[Write secrets.example.json + auth.json]
+    G --> H[Write secrets.example.json + optional auth.json scaffold]
     H --> I[Stage to temp directory]
     I --> J{All writers OK?}
     J -->|No| K[Discard staging — no partial output]
@@ -106,7 +119,8 @@ Re-running with the same `--out` fails (exit `3`) unless `--force` is passed. Wi
 
 - `SKILL.md`, `reference/`, dispatcher, `secrets.example.json`, and `.gitignore` are regenerated.
 - Existing `secrets.json`, `auth.json`, and `.auth-cache.json` are preserved byte-for-byte.
-- A new `--auth-config` or `--auth` replaces `auth.json`; omit both to keep the existing file.
+- A new `--auth-config` or `--auth` replaces `auth.json`; omit both to keep the existing file
+  (auto-scaffold runs only when no `auth.json` exists yet).
 
 ## Exit codes
 

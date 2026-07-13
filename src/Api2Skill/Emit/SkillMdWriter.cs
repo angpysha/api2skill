@@ -61,6 +61,29 @@ public static class SkillMdWriter
             sb.AppendLine();
         }
 
+        if (model.AuthScaffoldGuidance is { } scaffoldGuidance)
+        {
+            sb.AppendLine("## Auth profile names");
+            sb.AppendLine();
+            sb.AppendLine(
+                "An inactive `auth.json` template was written on first generate. Profile names must match OpenAPI security scheme IDs for explicit auth to attach correctly.");
+            sb.AppendLine();
+            sb.AppendLine("| scheme ID | profile name | status | operations / tags |");
+            sb.AppendLine("|---|---|---|---|");
+            foreach (var entry in scaffoldGuidance.Schemes)
+            {
+                var status = entry.Status == SchemeScaffoldStatus.Scaffolded ? "scaffolded" : "manual only";
+                var ops = entry.OperationIds.Count > 0 ? string.Join(", ", entry.OperationIds) : "(none)";
+                var tags = entry.Tags.Count > 0 ? string.Join(", ", entry.Tags) : "(none)";
+                sb.AppendLine(
+                    $"| `{entry.SchemeId}` | `{entry.SuggestedProfileName}` | {status} | ops: {ops}; tags: {tags} |");
+            }
+            sb.AppendLine();
+            sb.AppendLine(
+                "Activate explicit auth after editing `auth.json`: `api2skill generate <spec> --auth-config ./auth.json --force`");
+            sb.AppendLine();
+        }
+
         if (model.AuthConfig is { Profiles.Count: > 0 } authConfig)
         {
             sb.AppendLine("## Explicit auth profiles (auth.json)");

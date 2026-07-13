@@ -82,6 +82,12 @@ dotnet run scripts/call.cs -- getPetById --petId 3
 # Quick bearer token scaffold
 api2skill generate ./api.json --auth bearer
 
+# Auto-scaffold auth.json from OpenAPI security schemes (first generate, no --auth flags)
+api2skill generate ./api.json --out ./my-skill
+# → ./my-skill/auth.json (inactive template) + SKILL.md "Auth profile names" section
+# Activate after editing:
+api2skill generate ./api.json --auth-config ./my-skill/auth.json --force --out ./my-skill
+
 # Full auth config (OAuth2, Entra, script commands, custom headers)
 api2skill generate ./api.json --auth-config ./auth.json --login
 ```

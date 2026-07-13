@@ -92,4 +92,33 @@ public class NoSecretLeakageTests : IDisposable
         Assert.DoesNotContain(SentinelSecretValue, authJson, StringComparison.Ordinal);
         Assert.Contains("{secret:BEARER_TOKEN}", authJson, StringComparison.Ordinal); // reference, not a value
     }
+
+    [Fact]
+    public async Task AutoScaffold_CommittedArtifacts_ContainOnlyPlaceholders()
+    {
+        await using var stream = new MemoryStream(await File.ReadAllBytesAsync(
+            Path.Combine(AppContext.BaseDirectory, "fixtures", "multi-auth.yaml")));
+        var loaded = await OpenApiLoader.LoadAsync(stream, "yaml");
+        var model = SkillModelBuilder.Build(loaded.Document, loaded.SpecVersion, new BuildOptions(Name: "multi-auth"));
+        var scaffold = AuthScaffold.Build(model);
+        model = model with { AuthScaffoldGuidance = scaffold.Guidance };
+
+        var outDir = Path.Combine(_workDir, "auto-scaffold");
+        SkillWriter.Write(model, outDir, force: false, new CsFileEmitter(), scaffoldAuthJson: scaffold.Json);
+
+        foreach (var file in Directory.GetFiles(outDir, "*", SearchOption.AllDirectories))
+        {
+            if (Path.GetFileName(file) is "secrets.json")
+            {
+                continue;
+            }
+
+            var content = await File.ReadAllTextAsync(file);
+            Assert.DoesNotContain(SentinelSecretValue, content, StringComparison.Ordinal);
+            if (Path.GetFileName(file) == "auth.json")
+            {
+                Assert.Contains("{secret:", content, StringComparison.Ordinal);
+            }
+        }
+    }
 }

@@ -225,13 +225,14 @@ static string ResolveSecretOrLiteral(string raw, JsonElement? secrets)
 
 static string GetProp(JsonElement el, string name) => el.TryGetProperty(name, out var v) ? v.GetString() ?? "" : "";
 
-static async Task<(int ExitCode, string Stdout, string Stderr)> RunScriptCommandAsync(string command)
+static async Task<(int ExitCode, string Stdout, string Stderr)> RunScriptCommandAsync(string command, string skillRoot)
 {
     var psi = new ProcessStartInfo
     {
         RedirectStandardOutput = true,
         RedirectStandardError = true,
         UseShellExecute = false,
+        WorkingDirectory = skillRoot,
     };
     if (OperatingSystem.IsWindows())
     {
@@ -252,7 +253,7 @@ static async Task<(int ExitCode, string Stdout, string Stderr)> RunScriptCommand
     return (process.ExitCode, await stdoutTask, await stderrTask);
 }
 
-static async Task ApplyExplicitProfileAsync(HttpClient http, JsonElement profile, string profileName, JsonElement? secrets, List<string> query, List<(string Name, string Value)> headers)
+static async Task ApplyExplicitProfileAsync(HttpClient http, JsonElement profile, string profileName, JsonElement? secrets, List<string> query, List<(string Name, string Value)> headers, [CallerFilePath] string callerPath = "")
 {
     var type = GetProp(profile, "type");
     switch (type)
@@ -297,7 +298,9 @@ static async Task ApplyExplicitProfileAsync(HttpClient http, JsonElement profile
             var headerName = GetProp(profile, "header");
             if (string.IsNullOrEmpty(headerName)) headerName = "Authorization";
             var bearerPrefix = profile.TryGetProperty("bearerPrefix", out var bpEl) && bpEl.ValueKind == JsonValueKind.True;
-            var (exitCode, stdout, stderr) = await RunScriptCommandAsync(command);
+            var scriptDir = Path.GetDirectoryName(callerPath) ?? ".";
+            var skillRoot = Path.GetFullPath(Path.Combine(scriptDir, ".."));
+            var (exitCode, stdout, stderr) = await RunScriptCommandAsync(command, skillRoot);
             if (exitCode != 0)
                 throw new AuthResolutionException($"Script command for auth profile '{profileName}' exited with code {exitCode}: {stderr.Trim()}");
             var token = stdout.Trim();

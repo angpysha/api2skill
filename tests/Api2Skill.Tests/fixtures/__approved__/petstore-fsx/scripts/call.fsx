@@ -3,6 +3,7 @@
 open System
 open System.Collections.Generic
 open System.Diagnostics
+open System.IO
 open System.Net
 open System.Net.Http
 open System.Security.Cryptography
@@ -507,12 +508,13 @@ let resolveOAuthAccessTokenAsync (http: HttpClient) (profile: JsonElement) (prof
             })
     }
 
-let runScriptCommandAsync (command: string) : Task<int * string * string> =
+let runScriptCommandAsync (command: string) (skillRoot: string) : Task<int * string * string> =
     task {
         let psi = ProcessStartInfo()
         psi.RedirectStandardOutput <- true
         psi.RedirectStandardError <- true
         psi.UseShellExecute <- false
+        psi.WorkingDirectory <- skillRoot
         if OperatingSystem.IsWindows() then
             psi.FileName <- "cmd.exe"
             psi.ArgumentList.Add("/c") |> ignore
@@ -561,7 +563,8 @@ let applyExplicitProfileAsync (http: HttpClient) (profile: JsonElement) (profile
                 match profile.TryGetProperty("bearerPrefix") with
                 | true, v -> v.ValueKind = JsonValueKind.True
                 | _ -> false
-            let! exitCode, stdout, stderr = runScriptCommandAsync command
+            let skillRoot = Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, ".."))
+            let! exitCode, stdout, stderr = runScriptCommandAsync command skillRoot
             if exitCode <> 0 then
                 return raise (AuthResolutionException (sprintf "Script command for auth profile '%s' exited with code %d: %s" profileName exitCode (stderr.Trim())))
             let token = stdout.Trim()

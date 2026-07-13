@@ -38,7 +38,8 @@ public static class SkillWriter
 
     public static DirectoryInfo Write(
         SkillModel model, string outputDirectory, bool force, IScriptEmitter emitter,
-        string? authConfigJson = null, string? manifestJson = null, string? preserveFromDirectory = null)
+        string? authConfigJson = null, string? scaffoldAuthJson = null, string? manifestJson = null,
+        string? preserveFromDirectory = null)
     {
         var targetDir = new DirectoryInfo(Path.GetFullPath(outputDirectory));
         byte[]? preservedSecrets = null;
@@ -113,6 +114,10 @@ public static class SkillWriter
             else if (preservedAuthConfig is not null)
             {
                 File.WriteAllBytes(Path.Combine(stagingDir.FullName, AuthConfigFileName), preservedAuthConfig);
+            }
+            else if (scaffoldAuthJson is not null)
+            {
+                File.WriteAllText(Path.Combine(stagingDir.FullName, AuthConfigFileName), scaffoldAuthJson);
             }
 
             if (preservedTokenCache is not null)

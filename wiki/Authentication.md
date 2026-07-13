@@ -27,8 +27,37 @@ flowchart TD
     OAuth --> Send
 ```
 
-Profiles are defined in `auth.json` (or scaffolded by `--auth`). Multiple profiles can apply
-to one operation; header-name collisions across applicable profiles fail at generation time.
+Profiles are defined in `auth.json` (or scaffolded by `--auth`, or auto-scaffolded on first
+`generate` — see below). Multiple profiles can apply to one operation; header-name collisions
+across applicable profiles fail at generation time.
+
+## Auto-scaffold `auth.json` (first generate)
+
+When you run `generate` **without** `--auth` or `--auth-config`, and the filtered spec
+references at least one security scheme, api2skill writes an **inactive** `auth.json` template
+into the skill directory:
+
+- Profile `name` values match OpenAPI security scheme IDs (e.g. `bearerAuth` → profile
+  `bearerAuth`).
+- Supported schemes become active global-attach profiles with `{secret:…}` placeholders only.
+- Unsupported or manual-only schemes (e.g. `openIdConnect`, query `apiKey`) are listed in
+  `_guidance` / `SKILL.md` but omitted from active `profiles`.
+- `_tagAttachExamples` shows copy-paste tag-scoped profiles when tags use different schemes.
+
+The template is **not** loaded as explicit auth on that run — calls still use spec-derived auth
+until you edit the file and re-run with `--auth-config`.
+
+```bash
+# First generate — writes inactive auth.json + SKILL.md "Auth profile names" section
+api2skill generate ./multi-auth.yaml --out ./my-skill
+
+# Edit auth.json / secrets.json, then activate explicit auth
+api2skill generate ./multi-auth.yaml --auth-config ./my-skill/auth.json --force --out ./my-skill
+```
+
+Contract: [specs/006-auth-template-scaffold/contracts/auth-scaffold.md](../specs/006-auth-template-scaffold/contracts/auth-scaffold.md).
+
+On `--force`, an existing `auth.json` is preserved byte-for-byte (no re-scaffold).
 
 ## Two ways to configure auth at generation time
 
@@ -128,6 +157,10 @@ tokens from CLIs like Azure CLI:
 
 Non-zero exit code fails the call and surfaces stderr. The command is user-controlled local
 execution — document trust boundaries in your team's runbooks.
+
+Script commands run with the **skill root** (the directory containing `auth.json`) as the
+process working directory, so relative paths like `./get-token.sh` resolve next to the skill
+folder regardless of where you invoke `dotnet run`.
 
 ### OAuth2
 

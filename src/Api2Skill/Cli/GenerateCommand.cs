@@ -249,6 +249,14 @@ public static class GenerateCommand
             return ExitCodes.AuthConfigError;
         }
 
+        string? scaffoldAuthJson = null;
+        if (authConfig is null && model.SecuritySchemes.Count > 0)
+        {
+            var scaffold = AuthScaffold.Build(model);
+            scaffoldAuthJson = scaffold.Json;
+            model = model with { AuthScaffoldGuidance = scaffold.Guidance };
+        }
+
         IScriptEmitter? emitter = options.ScriptKind switch
         {
             "cs" => new CsFileEmitter(),
@@ -279,7 +287,9 @@ public static class GenerateCommand
         DirectoryInfo written;
         try
         {
-            written = SkillWriter.Write(model, outputDirectory, options.Force, emitter, authConfigJson, manifestJson, preserveFromDirectory);
+            written = SkillWriter.Write(
+                model, outputDirectory, options.Force, emitter, authConfigJson, scaffoldAuthJson, manifestJson,
+                preserveFromDirectory);
         }
         catch (SkillDirectoryExistsException ex)
         {
