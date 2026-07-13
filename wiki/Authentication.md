@@ -226,6 +226,122 @@ Supports `client_credentials` and `authorization_code` grants.
 The `entra` preset fills `authUrl` and `tokenUrl` from the tenant. Runtime login uses PKCE
 (S256) and anti-CSRF `state` automatically.
 
+**Public client (PKCE only — no `clientSecret`):**
+
+Omit `clientSecret` when the IdP registers a public/native client. Runtime login still adds
+PKCE (`code_challenge` / `code_verifier`) and `state` automatically; the token exchange sends
+`client_id` in the form body (`clientAuth: "body"`, the default).
+
+```json
+{
+  "profiles": [
+    {
+      "name": "user",
+      "type": "oauth2",
+      "grant": "authorization_code",
+      "authUrl": "https://auth.example.com/oauth/authorize",
+      "tokenUrl": "https://auth.example.com/oauth/token",
+      "callbackUrl": "http://localhost:8400/callback",
+      "clientId": "{secret:CLIENT_ID}",
+      "scopes": ["openid", "offline_access"]
+    }
+  ]
+}
+```
+
+```json
+{
+  "CLIENT_ID": "your-public-client-id"
+}
+```
+
+#### Custom authorize and token requests
+
+Some IdPs require extra query parameters on the authorize URL, custom HTTP headers on the token
+POST, or additional `application/x-www-form-urlencoded` fields on token exchange / refresh. Use
+`authorizeRequest` and `tokenRequest` on the profile:
+
+| Block | `headers` | `body` |
+|-------|-----------|--------|
+| `authorizeRequest` | **Ignored** — login opens a browser URL; HTTP headers cannot be attached to navigation | Extra **query parameters** merged into the authorize URL |
+| `tokenRequest` | Custom HTTP headers on the token/refresh POST | Extra form fields merged into the URL-encoded POST body |
+
+`client_id` is sent automatically from the profile's `clientId` field (resolved from
+`secrets.json`). You usually do **not** need to duplicate it in `tokenRequest.body` unless the
+provider expects a different field name. Values in `authorizeRequest` / `tokenRequest` are
+literals (they are not `{secret:…}`-resolved).
+
+**Example — public client, extra authorize query params, CORS/origin headers + body on token
+exchange:**
+
+```json
+{
+  "profiles": [
+    {
+      "name": "user",
+      "type": "oauth2",
+      "grant": "authorization_code",
+      "authUrl": "https://auth.example.com/oauth/authorize",
+      "tokenUrl": "https://auth.example.com/oauth/token",
+      "callbackUrl": "http://localhost:8400/callback",
+      "clientAuth": "body",
+      "clientId": "{secret:CLIENT_ID}",
+      "scopes": ["openid", "offline_access"],
+      "authorizeRequest": {
+        "body": {
+          "prompt": "consent"
+        }
+      },
+      "tokenRequest": {
+        "headers": {
+          "Origin": "https://app.example.com",
+          "X-Rewrite-Origin": "https://app.example.com"
+        },
+        "body": {
+          "resource": "my-api"
+        }
+      }
+    }
+  ]
+}
+```
+
+`authorizeRequest.body` becomes query string parameters on the browser URL (e.g.
+`…&prompt=consent`). `tokenRequest.headers` are sent on the POST to `tokenUrl` during code
+exchange and refresh. `tokenRequest.body` fields are merged alongside the standard OAuth fields
+(`grant_type`, `code`, `code_verifier`, `client_id`, etc.).
+
+**Microsoft Entra with custom token headers:**
+
+```json
+{
+  "profiles": [
+    {
+      "name": "aad",
+      "type": "oauth2",
+      "grant": "authorization_code",
+      "preset": "entra",
+      "tenant": "contoso.onmicrosoft.com",
+      "clientId": "{secret:CLIENT_ID}",
+      "scopes": ["api://<app-id>/.default", "offline_access"],
+      "tokenRequest": {
+        "headers": {
+          "Origin": "https://myapp.example.com"
+        }
+      }
+    }
+  ]
+}
+```
+
+**Limitations:**
+
+- `authorizeRequest.headers` has no effect — if an IdP requires origin rewrite as an HTTP header
+  on authorize, use a proxy in front of the IdP or pass equivalent values via
+  `authorizeRequest.body` when the provider accepts them as query parameters.
+- `clientAuth: "body"` (default) sends `client_id` (and `client_secret` when set) in the form;
+  use `"basic"` only when the provider expects `Authorization: Basic …` instead.
+
 ### Interactive login
 
 ```bash

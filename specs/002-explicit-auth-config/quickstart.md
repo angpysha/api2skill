@@ -94,6 +94,45 @@ Repeat Scenario A/B for `--script fsx` and `--script csx`; behavior is identical
 Invoke two oauth2 calls in parallel with an expired token; confirm exactly one refresh occurs (the
 file lock serializes; the second reuses the freshly stored token) and `.auth-cache.json` is intact.
 
+## Scenario H — OAuth custom authorize query params and token headers/body (US3 / FR-014)
+
+Use when an IdP needs extra authorize URL parameters, custom headers on the token POST (e.g.
+CORS/origin rewrite), or additional form fields on token exchange / refresh.
+
+`auth.json`:
+
+```jsonc
+{ "profiles": [
+  { "name": "user", "type": "oauth2", "grant": "authorization_code",
+    "authUrl": "https://auth.example.com/oauth/authorize",
+    "tokenUrl": "https://auth.example.com/oauth/token",
+    "callbackUrl": "http://localhost:8400/callback",
+    "clientId": "{secret:CLIENT_ID}",
+    "scopes": ["openid", "offline_access"],
+    "authorizeRequest": { "body": { "prompt": "consent" } },
+    "tokenRequest": {
+      "headers": { "Origin": "https://app.example.com", "X-Rewrite-Origin": "https://app.example.com" },
+      "body": { "resource": "my-api" }
+    } } ] }
+```
+
+```bash
+api2skill generate ./api.json --auth-config ./auth.json --out ./out --login
+# secrets.json: { "CLIENT_ID": "..." }
+dotnet run ./out/scripts/call.cs -- someOperation
+```
+
+**Expect**:
+
+- `login` builds an authorize URL with `prompt=consent` (and PKCE + `state` as usual).
+- Token exchange POST includes the custom `Origin` / `X-Rewrite-Origin` headers and the extra
+  `resource` form field, plus the standard OAuth fields (`grant_type`, `code`, `code_verifier`,
+  `client_id`, …).
+- `authorizeRequest.headers` are ignored (browser navigation cannot carry custom HTTP headers).
+
+See also [wiki/Authentication.md](../../../wiki/Authentication.md) for the full OAuth customization
+reference.
+
 ## Automated coverage
 
 - **Unit**: `tests/Api2Skill.Tests/Auth/` — loader/validation, collision (exit 5), entra preset,

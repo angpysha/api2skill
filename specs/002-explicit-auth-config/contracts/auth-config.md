@@ -87,9 +87,35 @@ Rules:
   valid `login` target.
 - `clientAuth: body` sends `client_id`/`client_secret` as form fields; `basic` sends
   `Authorization: Basic base64(id:secret)` and omits them from the body.
+- `clientSecret` is optional — omit for public clients (PKCE-only authorization code).
+- `authorizeRequest.body` — each key/value is merged as an extra **query parameter** on the
+  authorize URL at `login` time. `authorizeRequest.headers` is accepted in the schema but has
+  **no runtime effect** (browser navigation cannot attach HTTP headers).
+- `tokenRequest.headers` — added to the HTTP request on token exchange and refresh POSTs.
+- `tokenRequest.body` — each key/value is merged into the `application/x-www-form-urlencoded` body
+  alongside standard OAuth fields. `client_id` from `clientId` is already sent; use `body` only for
+  provider-specific extras or overrides. Values in `authorizeRequest` / `tokenRequest` are literals
+  (not `{secret:…}`-resolved).
 - `entra` preset: from `tenant`, fills `authUrl`/`tokenUrl` to
   `https://login.microsoftonline.com/{tenant}/oauth2/v2.0/{authorize|token}` and ensures
   `offline_access` ∈ `scopes`. Explicit `authUrl`/`tokenUrl`/`scopes` override the expansion.
+
+Example — public client with custom token headers (CORS/origin rewrite) and authorize query param:
+
+```jsonc
+{ "profiles": [
+  { "name": "user", "type": "oauth2", "grant": "authorization_code",
+    "authUrl": "https://auth.example.com/oauth/authorize",
+    "tokenUrl": "https://auth.example.com/oauth/token",
+    "callbackUrl": "http://localhost:8400/callback",
+    "clientId": "{secret:CLIENT_ID}",
+    "scopes": ["openid", "offline_access"],
+    "authorizeRequest": { "body": { "prompt": "consent" } },
+    "tokenRequest": {
+      "headers": { "Origin": "https://app.example.com", "X-Rewrite-Origin": "https://app.example.com" },
+      "body": { "resource": "my-api" }
+    } } ] }
+```
 
 ## Secret references
 
