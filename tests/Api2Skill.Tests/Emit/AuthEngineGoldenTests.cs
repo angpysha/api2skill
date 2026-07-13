@@ -122,4 +122,41 @@ public class AuthEngineGoldenTests : IDisposable
         // operation's AuthProfileNames is empty, so the spec-derived path is always taken.
         Assert.Contains("if (op.AuthProfileNames.Length > 0)", text, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task CsFileEmitter_RunScriptCommandAsync_SetsWorkingDirectoryToSkillRoot()
+    {
+        var model = await BuildModelWithBearerProfileAsync();
+        var outDir = Path.Combine(_workDir, "script-cwd-cs");
+        SkillWriter.Write(model, outDir, force: false, new CsFileEmitter(), AuthConfigLoader.Serialize(model.AuthConfig!));
+
+        var text = await File.ReadAllTextAsync(Path.Combine(outDir, "scripts", "call.cs"));
+        Assert.Contains("RunScriptCommandAsync(string command, string skillRoot)", text, StringComparison.Ordinal);
+        Assert.Contains("WorkingDirectory = skillRoot", text, StringComparison.Ordinal);
+        Assert.Contains("Path.GetFullPath(Path.Combine(scriptDir, \"..\"))", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CsxEmitter_RunScriptCommandAsync_SetsWorkingDirectoryToSkillRoot()
+    {
+        var model = await BuildModelWithBearerProfileAsync();
+        var outDir = Path.Combine(_workDir, "script-cwd-csx");
+        SkillWriter.Write(model, outDir, force: false, new CsxEmitter(), AuthConfigLoader.Serialize(model.AuthConfig!));
+
+        var text = await File.ReadAllTextAsync(Path.Combine(outDir, "scripts", "call.csx"));
+        Assert.Contains("RunScriptCommandAsync(string command, string skillRoot)", text, StringComparison.Ordinal);
+        Assert.Contains("WorkingDirectory = skillRoot", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task FsxEmitter_RunScriptCommandAsync_SetsWorkingDirectoryToSkillRoot()
+    {
+        var model = await BuildModelWithBearerProfileAsync();
+        var outDir = Path.Combine(_workDir, "script-cwd-fsx");
+        SkillWriter.Write(model, outDir, force: false, new FsxEmitter(), AuthConfigLoader.Serialize(model.AuthConfig!));
+
+        var text = await File.ReadAllTextAsync(Path.Combine(outDir, "scripts", "call.fsx"));
+        Assert.Contains("runScriptCommandAsync (command: string) (skillRoot: string)", text, StringComparison.Ordinal);
+        Assert.Contains("psi.WorkingDirectory <- skillRoot", text, StringComparison.Ordinal);
+    }
 }

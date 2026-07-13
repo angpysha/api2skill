@@ -223,13 +223,14 @@ string ResolveSecretOrLiteral(string raw, JsonElement? secrets)
 
 string GetProp(JsonElement el, string name) => el.TryGetProperty(name, out var v) ? v.GetString() ?? "" : "";
 
-async Task<(int ExitCode, string Stdout, string Stderr)> RunScriptCommandAsync(string command)
+async Task<(int ExitCode, string Stdout, string Stderr)> RunScriptCommandAsync(string command, string skillRoot)
 {
     var psi = new ProcessStartInfo
     {
         RedirectStandardOutput = true,
         RedirectStandardError = true,
         UseShellExecute = false,
+        WorkingDirectory = skillRoot,
     };
     if (OperatingSystem.IsWindows())
     {
@@ -295,7 +296,8 @@ async Task ApplyExplicitProfileAsync(HttpClient http, JsonElement profile, strin
             var headerName = GetProp(profile, "header");
             if (string.IsNullOrEmpty(headerName)) headerName = "Authorization";
             var bearerPrefix = profile.TryGetProperty("bearerPrefix", out var bpEl) && bpEl.ValueKind == JsonValueKind.True;
-            var (exitCode, stdout, stderr) = await RunScriptCommandAsync(command);
+            var skillRoot = Path.GetFullPath(Path.Combine(scriptDir, ".."));
+            var (exitCode, stdout, stderr) = await RunScriptCommandAsync(command, skillRoot);
             if (exitCode != 0)
                 throw new AuthResolutionException($"Script command for auth profile '{profileName}' exited with code {exitCode}: {stderr.Trim()}");
             var token = stdout.Trim();

@@ -31,7 +31,8 @@ public sealed record SkillModel(
     IReadOnlyList<TagGroup> Tags,
     IReadOnlyList<string> Warnings,
     bool InsecureDefault = false,
-    AuthConfig? AuthConfig = null);
+    AuthConfig? AuthConfig = null,
+    AuthScaffoldGuidance? AuthScaffoldGuidance = null);
 
 /// <summary>A tag-grouped bucket of operations for the SKILL.md operation index (D6).</summary>
 public sealed record TagGroup(

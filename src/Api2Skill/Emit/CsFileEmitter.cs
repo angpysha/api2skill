@@ -297,13 +297,14 @@ public sealed class CsFileEmitter : IScriptEmitter
         sb.AppendLine("static string GetProp(JsonElement el, string name) => el.TryGetProperty(name, out var v) ? v.GetString() ?? \"\" : \"\";");
         sb.AppendLine();
 
-        sb.AppendLine("static async Task<(int ExitCode, string Stdout, string Stderr)> RunScriptCommandAsync(string command)");
+        sb.AppendLine("static async Task<(int ExitCode, string Stdout, string Stderr)> RunScriptCommandAsync(string command, string skillRoot)");
         sb.AppendLine("{");
         sb.AppendLine("    var psi = new ProcessStartInfo");
         sb.AppendLine("    {");
         sb.AppendLine("        RedirectStandardOutput = true,");
         sb.AppendLine("        RedirectStandardError = true,");
         sb.AppendLine("        UseShellExecute = false,");
+        sb.AppendLine("        WorkingDirectory = skillRoot,");
         sb.AppendLine("    };");
         sb.AppendLine("    if (OperatingSystem.IsWindows())");
         sb.AppendLine("    {");
@@ -325,7 +326,7 @@ public sealed class CsFileEmitter : IScriptEmitter
         sb.AppendLine("}");
         sb.AppendLine();
 
-        sb.AppendLine("static async Task ApplyExplicitProfileAsync(HttpClient http, JsonElement profile, string profileName, JsonElement? secrets, List<string> query, List<(string Name, string Value)> headers)");
+        sb.AppendLine("static async Task ApplyExplicitProfileAsync(HttpClient http, JsonElement profile, string profileName, JsonElement? secrets, List<string> query, List<(string Name, string Value)> headers, [CallerFilePath] string callerPath = \"\")");
         sb.AppendLine("{");
         sb.AppendLine("    var type = GetProp(profile, \"type\");");
         sb.AppendLine("    switch (type)");
@@ -370,7 +371,9 @@ public sealed class CsFileEmitter : IScriptEmitter
         sb.AppendLine("            var headerName = GetProp(profile, \"header\");");
         sb.AppendLine("            if (string.IsNullOrEmpty(headerName)) headerName = \"Authorization\";");
         sb.AppendLine("            var bearerPrefix = profile.TryGetProperty(\"bearerPrefix\", out var bpEl) && bpEl.ValueKind == JsonValueKind.True;");
-        sb.AppendLine("            var (exitCode, stdout, stderr) = await RunScriptCommandAsync(command);");
+        sb.AppendLine("            var scriptDir = Path.GetDirectoryName(callerPath) ?? \".\";");
+        sb.AppendLine("            var skillRoot = Path.GetFullPath(Path.Combine(scriptDir, \"..\"));");
+        sb.AppendLine("            var (exitCode, stdout, stderr) = await RunScriptCommandAsync(command, skillRoot);");
         sb.AppendLine("            if (exitCode != 0)");
         sb.AppendLine("                throw new AuthResolutionException($\"Script command for auth profile '{profileName}' exited with code {exitCode}: {stderr.Trim()}\");");
         sb.AppendLine("            var token = stdout.Trim();");

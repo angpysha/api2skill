@@ -157,4 +157,43 @@ public class DispatcherScriptAuthTests : IAsyncLifetime
         Assert.Equal(2, exitCode);
         Assert.Contains(errorMessage, stderr, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task ScriptProfile_WritesSentinelToSkillRoot_RegardlessOfCallerCwd()
+    {
+        var sentinelName = ".script-cwd-sentinel";
+        var touchCommand = OperatingSystem.IsWindows()
+            ? $"echo ok> {sentinelName}"
+            : $"touch {sentinelName}";
+        var authConfig = new AuthConfig([ScriptProfile(touchCommand)]);
+        var skillDir = await GenerateSkillAsync(authConfig);
+
+        var sentinelPath = Path.Combine(skillDir, sentinelName);
+        if (File.Exists(sentinelPath))
+        {
+            File.Delete(sentinelPath);
+        }
+
+        var foreignCwd = Path.Combine(_workDir, "foreign-cwd");
+        Directory.CreateDirectory(foreignCwd);
+
+        var serverTask = CaptureRequestAsync();
+        var psi = new ProcessStartInfo(
+            "dotnet",
+            $"run \"{Path.Combine(skillDir, "scripts", "call.cs")}\" -- apiKeyOp")
+        {
+            WorkingDirectory = foreignCwd,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        psi.Environment["API2SKILL_BASE_URL"] = $"http://127.0.0.1:{_port}";
+
+        using var process = Process.Start(psi)!;
+        var runTask = process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(60));
+        await Task.WhenAll(serverTask, runTask);
+
+        Assert.True(File.Exists(sentinelPath), "Script auth must run with skill root as working directory.");
+        Assert.False(File.Exists(Path.Combine(foreignCwd, sentinelName)));
+    }
 }

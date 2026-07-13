@@ -37,6 +37,7 @@ public sealed class FsxEmitter : IScriptEmitter
         sb.AppendLine("open System");
         sb.AppendLine("open System.Collections.Generic");
         sb.AppendLine("open System.Diagnostics");
+        sb.AppendLine("open System.IO");
         sb.AppendLine("open System.Net");
         sb.AppendLine("open System.Net.Http");
         sb.AppendLine("open System.Security.Cryptography");
@@ -610,12 +611,13 @@ public sealed class FsxEmitter : IScriptEmitter
         sb.AppendLine("    }");
         sb.AppendLine();
 
-        sb.AppendLine("let runScriptCommandAsync (command: string) : Task<int * string * string> =");
+        sb.AppendLine("let runScriptCommandAsync (command: string) (skillRoot: string) : Task<int * string * string> =");
         sb.AppendLine("    task {");
         sb.AppendLine("        let psi = ProcessStartInfo()");
         sb.AppendLine("        psi.RedirectStandardOutput <- true");
         sb.AppendLine("        psi.RedirectStandardError <- true");
         sb.AppendLine("        psi.UseShellExecute <- false");
+        sb.AppendLine("        psi.WorkingDirectory <- skillRoot");
         sb.AppendLine("        if OperatingSystem.IsWindows() then");
         sb.AppendLine("            psi.FileName <- \"cmd.exe\"");
         sb.AppendLine("            psi.ArgumentList.Add(\"/c\") |> ignore");
@@ -665,7 +667,8 @@ public sealed class FsxEmitter : IScriptEmitter
         sb.AppendLine("                match profile.TryGetProperty(\"bearerPrefix\") with");
         sb.AppendLine("                | true, v -> v.ValueKind = JsonValueKind.True");
         sb.AppendLine("                | _ -> false");
-        sb.AppendLine("            let! exitCode, stdout, stderr = runScriptCommandAsync command");
+        sb.AppendLine("            let skillRoot = Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, \"..\"))");
+        sb.AppendLine("            let! exitCode, stdout, stderr = runScriptCommandAsync command skillRoot");
         sb.AppendLine("            if exitCode <> 0 then");
         sb.AppendLine("                return raise (AuthResolutionException (sprintf \"Script command for auth profile '%s' exited with code %d: %s\" profileName exitCode (stderr.Trim())))");
         sb.AppendLine("            let token = stdout.Trim()");
