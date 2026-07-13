@@ -18,6 +18,42 @@ public class EdgeCaseTests
     }
 
     [Fact]
+    public async Task SamePath_DifferentHttpMethods_AreDistinctOperations_NotPathOnlyDuplicates()
+    {
+        // OpenAPI allows multiple HTTP methods on one path. Uniqueness must consider method+path
+        // (EC-3), not path alone — otherwise GET /items and POST /items would be treated as
+        // duplicates and the second operation would be dropped or mis-disambiguated.
+        const string json = """
+        {
+          "openapi": "3.0.3",
+          "info": { "title": "Same Path Methods", "version": "1" },
+          "servers": [{ "url": "https://example.com" }],
+          "paths": {
+            "/items": {
+              "get": { "responses": { "200": { "description": "ok" } } },
+              "post": { "responses": { "201": { "description": "created" } } }
+            }
+          }
+        }
+        """;
+        var doc = await ParseAsync(json);
+        var model = SkillModelBuilder.Build(doc, Microsoft.OpenApi.OpenApiSpecVersion.OpenApi3_0,
+            new BuildOptions(Name: "same-path-methods"));
+
+        var ops = model.Tags.SelectMany(t => t.Operations).ToList();
+        Assert.Equal(2, ops.Count);
+        Assert.Equal(2, ops.Select(o => o.OperationId).Distinct(StringComparer.Ordinal).Count());
+
+        var byMethod = ops.ToDictionary(o => o.Method.Method, o => o, StringComparer.Ordinal);
+        Assert.Equal("GET", byMethod["GET"].Method.Method);
+        Assert.Equal("POST", byMethod["POST"].Method.Method);
+        Assert.Equal("/items", byMethod["GET"].PathTemplate);
+        Assert.Equal("/items", byMethod["POST"].PathTemplate);
+        Assert.Equal("get_items", byMethod["GET"].OperationId);
+        Assert.Equal("post_items", byMethod["POST"].OperationId);
+    }
+
+    [Fact]
     public async Task EC5_CollidingSynthesizedOperationIds_AreDisambiguatedDeterministically()
     {
         // Two GET operations whose paths sanitize to the SAME synthesized id
