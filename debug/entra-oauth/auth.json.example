@@ -8,6 +8,7 @@
       "tenant": "YOUR_TENANT_ID_OR_DOMAIN",
       "clientId": "{secret:CLIENT_ID}",
       "callbackUrl": "http://localhost:8400/callback",
+      "browserLaunch": "clipboard",
       "scopes": [
         "openid",
         "profile",
