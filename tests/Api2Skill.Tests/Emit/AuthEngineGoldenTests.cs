@@ -99,6 +99,8 @@ public class AuthEngineGoldenTests : IDisposable
     {
         Assert.Contains("GeneratePkce", text, StringComparison.Ordinal);
         Assert.Contains("GenerateState", text, StringComparison.Ordinal);
+        Assert.Contains("BeginCallbackListener", text, StringComparison.Ordinal);
+        Assert.Contains("AwaitOAuthCallbackAsync", text, StringComparison.Ordinal);
         Assert.Contains("LoginAsync", text, StringComparison.Ordinal);
         Assert.Contains("code_challenge_method=S256", text, StringComparison.Ordinal);
         Assert.Contains("WithTokenCacheLockAsync", text, StringComparison.Ordinal);

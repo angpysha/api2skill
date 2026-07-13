@@ -352,6 +352,11 @@ api2skill generate ./api.json --auth-config ./auth.json --login
 dotnet run scripts/call.cs -- login user
 ```
 
+`login` starts a local HTTP listener on `callbackUrl` **before** opening the browser, so a fast
+IdP redirect is not missed. The terminal prints `Listening for OAuth callback on …` when the
+listener is ready. Both `localhost` and `127.0.0.1` are accepted on loopback when either host
+appears in `callbackUrl`.
+
 `client_credentials` profiles fetch tokens on demand — they are not valid `login` targets.
 
 By default (`browserLaunch` omitted, or `"auto"`) `login` tries to open the authorize URL in the

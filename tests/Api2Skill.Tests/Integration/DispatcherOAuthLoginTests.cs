@@ -150,7 +150,13 @@ public class DispatcherOAuthLoginTests : IAsyncLifetime
 
     private async Task SendFakeCallbackAsync(string extraQuery, int callbackPort)
     {
+        await SendFakeCallbackAsync(extraQuery, callbackPort, useLoopbackIp: false);
+    }
+
+    private async Task SendFakeCallbackAsync(string extraQuery, int callbackPort, bool useLoopbackIp)
+    {
         using var http = new HttpClient();
+        var host = useLoopbackIp ? "127.0.0.1" : "localhost";
         // The dispatcher's HttpListener may not have called Start() yet (it starts a beat after
         // the URL is printed) — retry through the brief window.
         var deadline = DateTime.UtcNow.AddSeconds(15);
@@ -159,8 +165,30 @@ public class DispatcherOAuthLoginTests : IAsyncLifetime
         {
             try
             {
-                var response = await http.GetAsync($"http://localhost:{callbackPort}/callback?{extraQuery}");
+                var response = await http.GetAsync($"http://{host}:{callbackPort}/callback?{extraQuery}");
                 Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+                return;
+            }
+            catch (HttpRequestException ex)
+            {
+                last = ex;
+                await Task.Delay(100);
+            }
+        }
+        throw new TimeoutException($"Could not reach the callback listener in time.", last);
+    }
+
+    private async Task SendSpuriousCallbackProbeAsync(int callbackPort, string path = "/favicon.ico")
+    {
+        using var http = new HttpClient();
+        var deadline = DateTime.UtcNow.AddSeconds(15);
+        Exception? last = null;
+        while (DateTime.UtcNow < deadline)
+        {
+            try
+            {
+                var response = await http.GetAsync($"http://localhost:{callbackPort}{path}");
+                Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
                 return;
             }
             catch (HttpRequestException ex)
@@ -212,6 +240,38 @@ public class DispatcherOAuthLoginTests : IAsyncLifetime
         using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(cachePath));
         Assert.Equal("TESTACCESS123", doc.RootElement.GetProperty("aad").GetProperty("access_token").GetString());
         Assert.Equal("TESTREFRESH456", doc.RootElement.GetProperty("aad").GetProperty("refresh_token").GetString());
+    }
+
+    [Fact]
+    public async Task SpuriousRequestBeforeCallback_StillCompletesLogin()
+    {
+        using var process = StartLogin();
+        var authorizeUrl = await CaptureAuthorizeUrlAsync(process);
+        var state = ExtractQueryParam(authorizeUrl, "state");
+
+        await SendSpuriousCallbackProbeAsync(_callbackPort);
+
+        var tokenTask = RespondToTokenRequestAsync();
+        await SendFakeCallbackAsync($"code=AFTER_PROBE&state={Uri.EscapeDataString(state)}");
+        await tokenTask;
+
+        await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        Assert.Equal(0, process.ExitCode);
+    }
+
+    [Fact]
+    public async Task CallbackVia127001_WhenProfileUsesLocalhost_StillCompletesLogin()
+    {
+        using var process = StartLogin();
+        var authorizeUrl = await CaptureAuthorizeUrlAsync(process);
+        var state = ExtractQueryParam(authorizeUrl, "state");
+
+        var tokenTask = RespondToTokenRequestAsync();
+        await SendFakeCallbackAsync($"code=LOOPBACK_IP&state={Uri.EscapeDataString(state)}", _callbackPort, useLoopbackIp: true);
+        await tokenTask;
+
+        await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        Assert.Equal(0, process.ExitCode);
     }
 
     [Fact]
