@@ -258,26 +258,50 @@ let tryCopyToClipboard (text: string) : bool =
     else
         false
 
-let waitForCallbackAsync (callbackUrl: string) : Task<Dictionary<string, string>> =
-    task {
-        let uri = Uri(callbackUrl)
-        let prefix = sprintf "%s://%s:%d/" uri.Scheme uri.Host uri.Port
-        use listener = new HttpListener()
-        listener.Prefixes.Add(prefix)
-        try
-            listener.Start()
-        with :? HttpListenerException as ex ->
-            raise (AuthResolutionException (sprintf "Could not start the local OAuth callback listener on %s (%s). Another process may be using this port \u2014 try a different callbackUrl in auth.json." prefix ex.Message))
+let addCallbackPrefixes (listener: HttpListener) (uri: Uri) =
+    let scheme = uri.Scheme
+    let port = uri.Port
+    let host = uri.Host
+    listener.Prefixes.Add(sprintf "%s://%s:%d/" scheme host port) |> ignore
+    if String.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase) then
+        listener.Prefixes.Add(sprintf "%s://127.0.0.1:%d/" scheme port) |> ignore
+    elif host = "127.0.0.1" || host = "::1" then
+        listener.Prefixes.Add(sprintf "%s://localhost:%d/" scheme port) |> ignore
+
+let beginCallbackListener (callbackUrl: string) : HttpListener =
+    let uri = Uri(callbackUrl)
+    let listener = new HttpListener()
+    addCallbackPrefixes listener uri
+    try
+        listener.Start()
+    with :? HttpListenerException as ex ->
+        raise (AuthResolutionException (sprintf "Could not start the local OAuth callback listener on %s:%d (%s). Another process may be using this port \u2014 try a different callbackUrl in auth.json." uri.Host uri.Port ex.Message))
+    listener
+
+let awaitOAuthCallbackAsync (listener: HttpListener) : Task<Dictionary<string, string>> =
+    let rec waitForCode () = task {
         let! context = listener.GetContextAsync()
         let queryString = if isNull (box context.Request.Url) then "" else context.Request.Url.Query
         let result = parseQuery queryString
-        let page = Encoding.UTF8.GetBytes("<html><body>Login complete \u2014 you can close this window and return to the terminal.</body></html>")
-        context.Response.ContentType <- "text/html"
-        context.Response.ContentLength64 <- int64 page.Length
-        context.Response.OutputStream.Write(page, 0, page.Length)
-        context.Response.OutputStream.Close()
-        listener.Stop()
-        return result
+        if result.ContainsKey("code") || result.ContainsKey("error") then
+            let page = Encoding.UTF8.GetBytes("<html><body>Login complete \u2014 you can close this window and return to the terminal.</body></html>")
+            context.Response.StatusCode <- 200
+            context.Response.ContentType <- "text/html; charset=utf-8"
+            context.Response.ContentLength64 <- int64 page.Length
+            context.Response.OutputStream.Write(page, 0, page.Length)
+            context.Response.Close()
+            return result
+        else
+            context.Response.StatusCode <- 404
+            context.Response.Close()
+            return! waitForCode ()
+    }
+    task {
+        try
+            return! waitForCode ()
+        finally
+            listener.Stop()
+            listener.Close()
     }
 
 let resolveOAuthEndpoints (profile: JsonElement) : string option * string option * string list =
@@ -616,6 +640,9 @@ let loginAsync (profileName: string) : Task<int> =
             let state = generateState ()
             let authorizeUrl = buildAuthorizeUrl authUrl clientId callbackUrl scopes challenge state profile
 
+            let callbackListener = beginCallbackListener callbackUrl
+            printfn "Listening for OAuth callback on %s ..." callbackUrl
+
             let browserLaunch = getProp profile "browserLaunch"
             if browserLaunch = "clipboard" then
                 let copied = tryCopyToClipboard authorizeUrl
@@ -627,7 +654,7 @@ let loginAsync (profileName: string) : Task<int> =
                 printfn "%s" (if browserLaunched then "If it did not open, visit this URL to sign in:" else "Could not launch a browser automatically. Open this URL to sign in:")
                 printfn "%s" authorizeUrl
 
-            let! callbackParams = waitForCallbackAsync callbackUrl
+            let! callbackParams = awaitOAuthCallbackAsync callbackListener
 
             let stateMatches = match callbackParams.TryGetValue("state") with | true, returnedState -> returnedState = state | false, _ -> false
             if not stateMatches then

@@ -14,7 +14,7 @@
     <PackageId>api2skill</PackageId>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>api2skill</ToolCommandName>
-    <Version>0.4.2</Version>
+    <Version>0.4.3</Version>
     <Authors>angpysha</Authors>
     <Description>Converts an OpenAPI/Swagger document into a self-contained Claude Agent Skill (SKILL.md + a runnable .cs/.fsx/.csx dispatcher + reference docs + a secrets scaffold) so an existing REST API becomes something Claude can call correctly, with authentication.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

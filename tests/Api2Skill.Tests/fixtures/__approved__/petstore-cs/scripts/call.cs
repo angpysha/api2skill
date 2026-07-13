@@ -393,29 +393,61 @@ static bool TryCopyToClipboard(string text)
     return false;
 }
 
-static async Task<Dictionary<string, string>> WaitForCallbackAsync(string callbackUrl)
+static void AddCallbackPrefixes(HttpListener listener, Uri uri)
+{
+    var scheme = uri.Scheme;
+    var port = uri.Port;
+    var host = uri.Host;
+    listener.Prefixes.Add($"{scheme}://{host}:{port}/");
+    if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase))
+        listener.Prefixes.Add($"{scheme}://127.0.0.1:{port}/");
+    else if (host is "127.0.0.1" or "::1")
+        listener.Prefixes.Add($"{scheme}://localhost:{port}/");
+}
+
+static HttpListener BeginCallbackListener(string callbackUrl)
 {
     var uri = new Uri(callbackUrl);
-    var prefix = $"{uri.Scheme}://{uri.Host}:{uri.Port}/";
-    using var listener = new HttpListener();
-    listener.Prefixes.Add(prefix);
+    var listener = new HttpListener();
+    AddCallbackPrefixes(listener, uri);
     try
     {
         listener.Start();
     }
     catch (HttpListenerException ex)
     {
-        throw new AuthResolutionException($"Could not start the local OAuth callback listener on {prefix} ({ex.Message}). Another process may be using this port \u2014 try a different callbackUrl in auth.json.");
+        throw new AuthResolutionException($"Could not start the local OAuth callback listener on {uri.Host}:{uri.Port} ({ex.Message}). Another process may be using this port \u2014 try a different callbackUrl in auth.json.");
     }
-    var context = await listener.GetContextAsync();
-    var result = ParseQuery(context.Request.Url?.Query ?? "");
-    var page = Encoding.UTF8.GetBytes("<html><body>Login complete \u2014 you can close this window and return to the terminal.</body></html>");
-    context.Response.ContentType = "text/html";
-    context.Response.ContentLength64 = page.Length;
-    context.Response.OutputStream.Write(page, 0, page.Length);
-    context.Response.OutputStream.Close();
-    listener.Stop();
-    return result;
+    return listener;
+}
+
+static async Task<Dictionary<string, string>> AwaitOAuthCallbackAsync(HttpListener listener)
+{
+  try
+  {
+    while (true)
+    {
+        var context = await listener.GetContextAsync();
+        var result = ParseQuery(context.Request.Url?.Query ?? "");
+        if (result.ContainsKey("code") || result.ContainsKey("error"))
+        {
+            var page = Encoding.UTF8.GetBytes("<html><body>Login complete \u2014 you can close this window and return to the terminal.</body></html>");
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "text/html; charset=utf-8";
+            context.Response.ContentLength64 = page.Length;
+            context.Response.OutputStream.Write(page, 0, page.Length);
+            context.Response.Close();
+            return result;
+        }
+        context.Response.StatusCode = 404;
+        context.Response.Close();
+    }
+  }
+  finally
+  {
+      listener.Stop();
+      listener.Close();
+  }
 }
 
 static (string? AuthUrl, string? TokenUrl, List<string> Scopes) ResolveOAuthEndpoints(JsonElement profile)
@@ -756,6 +788,11 @@ static async Task<int> LoginAsync(string profileName)
     var state = GenerateState();
     var authorizeUrl = BuildAuthorizeUrl(authUrl, clientId, callbackUrl, scopes, challenge, state, profile.Value);
 
+    HttpListener callbackListener;
+    try { callbackListener = BeginCallbackListener(callbackUrl); }
+    catch (AuthResolutionException ex) { Console.Error.WriteLine(ex.Message); return 2; }
+    Console.WriteLine($"Listening for OAuth callback on {callbackUrl} ...");
+
     var browserLaunch = GetProp(profile.Value, "browserLaunch");
     if (browserLaunch == "clipboard")
     {
@@ -776,7 +813,7 @@ static async Task<int> LoginAsync(string profileName)
     }
 
     Dictionary<string, string> callbackParams;
-    try { callbackParams = await WaitForCallbackAsync(callbackUrl); }
+    try { callbackParams = await AwaitOAuthCallbackAsync(callbackListener); }
     catch (AuthResolutionException ex) { Console.Error.WriteLine(ex.Message); return 2; }
 
     if (!callbackParams.TryGetValue("state", out var returnedState) || returnedState != state)
