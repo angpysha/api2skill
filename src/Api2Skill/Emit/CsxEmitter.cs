@@ -944,23 +944,20 @@ public sealed class CsxEmitter : IScriptEmitter
     {
         sb.AppendLine("Dictionary<string, OperationSpec> BuildOperations() => new()");
         sb.AppendLine("{");
-        foreach (var tag in model.Tags)
+        foreach (var op in EmitterOperations.DistinctByOperationId(model))
         {
-            foreach (var op in tag.Operations)
-            {
-                sb.Append("    [").Append(Literal(op.OperationId)).Append("] = new(")
-                  .Append(Literal(op.Method.Method)).Append(", ")
-                  .Append(Literal(op.PathTemplate)).Append(", [")
-                  .Append(string.Join(", ", op.Parameters.Select(p => $"new({Literal(p.Name)}, {Literal(LocationKey(p.In))})")))
-                  .Append("], ")
-                  .Append(op.RequestBody is not null ? "true" : "false").Append(", ")
-                  .Append(op.RequestBody?.ContentType is { } ct ? Literal(ct) : "null").Append(", [")
-                  .Append(string.Join(", ", op.SecuritySchemeIds.Select(Literal)))
-                  .Append("], [")
-                  .Append(string.Join(", ", op.AuthProfileNames.Select(Literal)))
-                  .Append("]),")
-                  .AppendLine();
-            }
+            sb.Append("    [").Append(Literal(op.OperationId)).Append("] = new(")
+              .Append(Literal(op.Method.Method)).Append(", ")
+              .Append(Literal(op.PathTemplate)).Append(", [")
+              .Append(string.Join(", ", op.Parameters.Select(p => $"new({Literal(p.Name)}, {Literal(LocationKey(p.In))})")))
+              .Append("], ")
+              .Append(op.RequestBody is not null ? "true" : "false").Append(", ")
+              .Append(op.RequestBody?.ContentType is { } ct ? Literal(ct) : "null").Append(", [")
+              .Append(string.Join(", ", op.SecuritySchemeIds.Select(Literal)))
+              .Append("], [")
+              .Append(string.Join(", ", op.AuthProfileNames.Select(Literal)))
+              .Append("]),")
+              .AppendLine();
         }
         sb.AppendLine("};");
         sb.AppendLine();

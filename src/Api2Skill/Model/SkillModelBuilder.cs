@@ -233,7 +233,7 @@ public static class SkillModelBuilder
     private static string ResolveOperationId(
         string? existing, HttpMethod method, string path, Dictionary<string, int> seen)
     {
-        var baseId = !string.IsNullOrWhiteSpace(existing) ? existing! : Sanitize($"{method.Method}_{path}");
+        var baseId = !string.IsNullOrWhiteSpace(existing) ? existing! : SynthesizeOperationId(method, path);
 
         if (!seen.TryGetValue(baseId, out var count))
         {
@@ -245,6 +245,13 @@ public static class SkillModelBuilder
         seen[baseId] = count;
         return $"{baseId}_{count}";
     }
+
+    /// <summary>
+    /// EC-3/FR-004c: stable id from HTTP method + path. Path alone is not unique — the same
+    /// path may host multiple methods (e.g. GET and POST /items).
+    /// </summary>
+    private static string SynthesizeOperationId(HttpMethod method, string path) =>
+        Sanitize($"{method.Method}_{path}");
 
     private static string Sanitize(string value)
     {

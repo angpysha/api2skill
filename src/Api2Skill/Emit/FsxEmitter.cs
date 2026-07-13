@@ -193,31 +193,28 @@ public sealed class FsxEmitter : IScriptEmitter
     {
         sb.AppendLine("let operations : Map<string, OperationSpec> =");
         sb.AppendLine("    Map.ofList [");
-        foreach (var tag in model.Tags)
+        foreach (var op in EmitterOperations.DistinctByOperationId(model))
         {
-            foreach (var op in tag.Operations)
-            {
-                var parameters = op.Parameters.Count == 0
-                    ? "[]"
-                    : "[ " + string.Join("; ", op.Parameters.Select(p => $"{{ Name = {Literal(p.Name)}; Location = {Literal(LocationKey(p.In))} }}")) + " ]";
-                var schemeIds = op.SecuritySchemeIds.Count == 0
-                    ? "[]"
-                    : "[ " + string.Join("; ", op.SecuritySchemeIds.Select(Literal)) + " ]";
-                var authProfileNames = op.AuthProfileNames.Count == 0
-                    ? "[]"
-                    : "[ " + string.Join("; ", op.AuthProfileNames.Select(Literal)) + " ]";
-                var bodyContentType = op.RequestBody?.ContentType is { } ct ? $"Some {Literal(ct)}" : "None";
+            var parameters = op.Parameters.Count == 0
+                ? "[]"
+                : "[ " + string.Join("; ", op.Parameters.Select(p => $"{{ Name = {Literal(p.Name)}; Location = {Literal(LocationKey(p.In))} }}")) + " ]";
+            var schemeIds = op.SecuritySchemeIds.Count == 0
+                ? "[]"
+                : "[ " + string.Join("; ", op.SecuritySchemeIds.Select(Literal)) + " ]";
+            var authProfileNames = op.AuthProfileNames.Count == 0
+                ? "[]"
+                : "[ " + string.Join("; ", op.AuthProfileNames.Select(Literal)) + " ]";
+            var bodyContentType = op.RequestBody?.ContentType is { } ct ? $"Some {Literal(ct)}" : "None";
 
-                sb.Append("        ").Append(Literal(op.OperationId)).Append(", { Method = ").Append(Literal(op.Method.Method))
-                  .Append("; PathTemplate = ").Append(Literal(op.PathTemplate))
-                  .Append("; Parameters = ").Append(parameters)
-                  .Append("; HasBody = ").Append(op.RequestBody is not null ? "true" : "false")
-                  .Append("; BodyContentType = ").Append(bodyContentType)
-                  .Append("; SecuritySchemeIds = ").Append(schemeIds)
-                  .Append("; AuthProfileNames = ").Append(authProfileNames)
-                  .Append(" }")
-                  .AppendLine();
-            }
+            sb.Append("        ").Append(Literal(op.OperationId)).Append(", { Method = ").Append(Literal(op.Method.Method))
+              .Append("; PathTemplate = ").Append(Literal(op.PathTemplate))
+              .Append("; Parameters = ").Append(parameters)
+              .Append("; HasBody = ").Append(op.RequestBody is not null ? "true" : "false")
+              .Append("; BodyContentType = ").Append(bodyContentType)
+              .Append("; SecuritySchemeIds = ").Append(schemeIds)
+              .Append("; AuthProfileNames = ").Append(authProfileNames)
+              .Append(" }")
+              .AppendLine();
         }
         sb.AppendLine("    ]");
         sb.AppendLine();
