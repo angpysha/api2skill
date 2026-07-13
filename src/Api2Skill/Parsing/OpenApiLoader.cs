@@ -42,8 +42,7 @@ public static class OpenApiLoader
         // YAML support lives in a separate package since OpenAPI.NET v2 and must be
         // registered explicitly — LoadAsync(..., "yaml", ...) throws "Format 'yaml' is not
         // supported" without this (confirmed empirically; not called out in the package docs).
-        var settings = new OpenApiReaderSettings();
-        settings.AddYamlReader();
+        var settings = CreateReaderSettings();
 
         ReadResult result;
         try
@@ -56,11 +55,28 @@ public static class OpenApiLoader
             throw new OpenApiParseException([new ParseError(ex.Message, null)]);
         }
 
-        var diagnostic = result.Diagnostic;
-        if (diagnostic?.Errors is { Count: > 0 } errors)
+        var warnings = result.Diagnostic?.Warnings is { Count: > 0 } w
+            ? w.Select(e => e.Message).ToList()
+            : [];
+
+        if (result.Diagnostic?.Errors is { Count: > 0 } errors)
         {
-            throw new OpenApiParseException(
-                [.. errors.Select(e => new ParseError(e.Message, e.Pointer))]);
+            var fatal = new List<ParseError>();
+            foreach (var error in errors)
+            {
+                if (IsPathSignatureUniquenessError(error))
+                {
+                    warnings.Add(FormatDiagnostic(error));
+                    continue;
+                }
+
+                fatal.Add(new ParseError(error.Message, error.Pointer));
+            }
+
+            if (fatal.Count > 0)
+            {
+                throw new OpenApiParseException(fatal);
+            }
         }
 
         if (result.Document is null)
@@ -68,13 +84,28 @@ public static class OpenApiLoader
             throw new OpenApiParseException([new ParseError("The document parsed to an empty result.", null)]);
         }
 
-        var warnings = diagnostic?.Warnings is { Count: > 0 } w
-            ? w.Select(e => e.Message).ToList()
-            : [];
-
         return new LoadedSpec(
             result.Document,
-            diagnostic?.SpecificationVersion ?? OpenApiSpecVersion.OpenApi3_0,
+            result.Diagnostic?.SpecificationVersion ?? OpenApiSpecVersion.OpenApi3_0,
             warnings);
     }
+
+    private static OpenApiReaderSettings CreateReaderSettings()
+    {
+        var settings = new OpenApiReaderSettings();
+        settings.AddYamlReader();
+        return settings;
+    }
+
+    /// <summary>
+    /// OpenAPI.NET rejects paths whose signatures collide when <c>{param}</c> names are
+    /// normalized to <c>{}</c> (e.g. <c>/v1/forms/{id}</c> vs <c>/v1/forms/{formId}</c>).
+    /// Many published specs do this; the parsed model still contains every path entry.
+    /// </summary>
+    private static bool IsPathSignatureUniquenessError(OpenApiError error) =>
+        error.Message.Contains("path signature", StringComparison.OrdinalIgnoreCase)
+        && error.Message.Contains("MUST be unique", StringComparison.OrdinalIgnoreCase);
+
+    private static string FormatDiagnostic(OpenApiError error) =>
+        error.Pointer is { Length: > 0 } pointer ? $"{pointer}: {error.Message}" : error.Message;
 }
