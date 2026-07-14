@@ -100,6 +100,17 @@ public static class SkillMdWriter
                 sb.AppendLine($"| `{profile.Name}` | {ProfileTypeLabel(profile.Type)} | {attach} | {ProfileNotes(profile)} |");
             }
             sb.AppendLine();
+
+            if (authConfig.Profiles.Any(p => p.Type == AuthType.OAuth2 && p.OAuth?.Grant == OAuthGrant.AuthorizationCode))
+            {
+                sb.AppendLine("### OAuth login");
+                sb.AppendLine();
+                sb.AppendLine("- Preferred: `api2skill login --skill . --profile <name>` (writes `.auth-cache.json`).");
+                sb.AppendLine("- Or: generated dispatcher `login <name>` (shells to `api2skill oauth-capture` when available).");
+                sb.AppendLine("- Custom scheme callbacks (`api2skill://…`): run `api2skill register-protocol` once first.");
+                sb.AppendLine("- Non-loopback HTTPS callbacks: use hosted relay (`API2SKILL_OAUTH_RELAY_BASE` / `--relay-base`); see wiki Authentication.");
+                sb.AppendLine();
+            }
         }
 
         sb.AppendLine("## How to call");
@@ -171,7 +182,7 @@ public static class SkillMdWriter
         AuthType.Basic => "Set `username`/`password` in `secrets.json`; sent as `Authorization: Basic ...`.",
         AuthType.Custom => $"Sends {profile.Custom!.Headers.Count} header(s): {string.Join(", ", profile.Custom.Headers.Select(h => h.Name))}. Set the referenced values in `secrets.json`.",
         AuthType.Script => $"Runs the user-provided local command `{profile.Script!.Command}` on every call; its trimmed stdout becomes the `{profile.Script.Header}` header{(profile.Script.BearerPrefix ? " (`Bearer ` added when absent)" : "")}.",
-        AuthType.OAuth2 => "OAuth2 profile (see `auth.json` for endpoints/scopes). **Interactive login is not yet executed by this generated dispatcher version.**",
+        AuthType.OAuth2 => "OAuth2 profile (see `auth.json`). Interactive login: `api2skill login --skill . --profile <name>`, or `dotnet run scripts/call.cs -- login <name>` (shells to `api2skill oauth-capture`).",
         _ => string.Empty,
     };
 }

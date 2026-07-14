@@ -203,11 +203,11 @@ Ready work now: `br ready` → claim `.1` (foundation) first. Story children are
 
 **Beads**: `api2skill-009-oauth-capture-ol0.7`
 
-- [ ] T043 [P] Update OAuth / callback modes in `wiki/Authentication.md` (HTTP/HTTPS/scheme/hosted, cert flags, register-protocol)
-- [ ] T044 [P] Add compact SKILL.md auth pointers via `src/Api2Skill/Emit/SkillMdWriter.cs`
-- [ ] T045 Bump package version to **0.6.0** in `src/Api2Skill/Api2Skill.csproj` (+ any mirrored version files per `version-bump` rule)
-- [ ] T046 Run full `quickstart.md` scenarios A–E; record results in PR description
-- [ ] T047 Close eligible `br` children + epic when human accepts (`br close …`); keep `.beads/issues.jsonl` staged with code
+- [x] T043 [P] Update OAuth / callback modes in `wiki/Authentication.md` (HTTP/HTTPS/scheme/hosted, cert flags, register-protocol)
+- [x] T044 [P] Add compact SKILL.md auth pointers via `src/Api2Skill/Emit/SkillMdWriter.cs`
+- [x] T045 Bump package version to **0.6.0** in `src/Api2Skill/Api2Skill.csproj` (+ any mirrored version files per `version-bump` rule)
+- [x] T046 Run full `quickstart.md` scenarios A–E; record results in PR description
+- [x] T047 Close eligible `br` children + epic when human accepts (`br close …`); keep `.beads/issues.jsonl` staged with code
 
 ---
 
