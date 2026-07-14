@@ -182,16 +182,16 @@ Ready work now: `br ready` → claim `.1` (foundation) first. Story children are
 
 ### Tests (FAIL first)
 
-- [ ] T036 [P] [US1] Extend auth golden/integration expectations for Process handoff markers in `tests/Api2Skill.Tests/Emit/AuthEngineGoldenTests.cs` (or new `OAuthCaptureHandoffTests.cs`)
-- [ ] T037 [P] Add `login --skill` CLI tests in `tests/Api2Skill.Tests/Cli/LoginCommandTests.cs`
+- [x] T036 [P] [US1] Extend auth golden/integration expectations for Process handoff markers in `tests/Api2Skill.Tests/Emit/AuthEngineGoldenTests.cs` (or new `OAuthCaptureHandoffTests.cs`)
+- [x] T037 [P] Add `login --skill` CLI tests in `tests/Api2Skill.Tests/Cli/LoginCommandTests.cs`
 
 ### Implementation
 
-- [ ] T038 [P] Update C# file emitter login to prefer `api2skill oauth-capture` in `src/Api2Skill/Emit/CsFileEmitter.cs` per `contracts/dispatcher-login.md` (HTTP in-script fallback only)
-- [ ] T039 [P] Mirror handoff in `src/Api2Skill/Emit/CsxEmitter.cs`
-- [ ] T040 [P] Mirror handoff in `src/Api2Skill/Emit/FsxEmitter.cs`
-- [ ] T041 Implement `LoginCommand` (`--skill`, `--profile`, cert/relay flags) in `src/Api2Skill/Cli/LoginCommand.cs` — reuse `AuthConfigLoader`; write `.auth-cache.json`
-- [ ] T042 Register `login` in `src/Api2Skill/Program.cs`
+- [x] T038 [P] Update C# file emitter login to prefer `api2skill oauth-capture` in `src/Api2Skill/Emit/CsFileEmitter.cs` per `contracts/dispatcher-login.md` (HTTP in-script fallback only)
+- [x] T039 [P] Mirror handoff in `src/Api2Skill/Emit/CsxEmitter.cs`
+- [x] T040 [P] Mirror handoff in `src/Api2Skill/Emit/FsxEmitter.cs`
+- [x] T041 Implement `LoginCommand` (`--skill`, `--profile`, cert/relay flags) in `src/Api2Skill/Cli/LoginCommand.cs` — reuse `AuthConfigLoader`; write `.auth-cache.json`
+- [x] T042 Register `login` in `src/Api2Skill/Program.cs`
 
 **Checkpoint**: Scenarios A + E pass with tool on PATH
 

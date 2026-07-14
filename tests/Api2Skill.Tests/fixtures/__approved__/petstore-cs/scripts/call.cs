@@ -764,6 +764,94 @@ static async Task<string> ResolveOAuthAccessTokenAsync(HttpClient http, JsonElem
     });
 }
 
+static Process? TryStartOAuthCaptureProcess(string callbackUrl, string state)
+{
+    try
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "api2skill",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        psi.ArgumentList.Add("oauth-capture");
+        psi.ArgumentList.Add("--callback-url");
+        psi.ArgumentList.Add(callbackUrl);
+        psi.ArgumentList.Add("--state");
+        psi.ArgumentList.Add(state);
+        psi.ArgumentList.Add("--json");
+        var process = Process.Start(psi);
+        if (process is null) return null;
+        // Old/wrong binaries exit immediately — treat as missing so HTTP can fall back.
+        process.WaitForExit(150);
+        if (process.HasExited)
+        {
+            process.Dispose();
+            return null;
+        }
+        return process;
+    }
+    catch (Exception)
+    {
+        return null;
+    }
+}
+
+static bool IsHttpLoopbackCallback(string callbackUrl)
+{
+    if (!Uri.TryCreate(callbackUrl, UriKind.Absolute, out var uri)) return false;
+    if (!uri.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase)) return false;
+    return uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+        || uri.Host is "127.0.0.1" or "::1" or "[::1]";
+}
+
+static async Task<Dictionary<string, string>> AwaitOAuthCaptureProcessAsync(Process process)
+{
+    var stdout = await process.StandardOutput.ReadToEndAsync();
+    await process.WaitForExitAsync();
+    var line = stdout.Trim();
+    if (line.Length == 0)
+        throw new AuthResolutionException($"api2skill oauth-capture exited {process.ExitCode} with empty stdout.");
+    try
+    {
+        using var doc = JsonDocument.Parse(line);
+        var root = doc.RootElement;
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (root.TryGetProperty("code", out var codeEl) && codeEl.GetString() is { } code) result["code"] = code;
+        if (root.TryGetProperty("state", out var stateEl) && stateEl.GetString() is { } st) result["state"] = st;
+        if (root.TryGetProperty("error", out var errEl) && errEl.GetString() is { } err) result["error"] = err;
+        if (root.TryGetProperty("errorDescription", out var edEl) && edEl.GetString() is { } ed) result["error_description"] = ed;
+        var ok = root.TryGetProperty("ok", out var okEl) && okEl.ValueKind == JsonValueKind.True;
+        if (!ok && !result.ContainsKey("code"))
+            throw new AuthResolutionException(result.TryGetValue("error", out var e) ? e : "oauth-capture failed");
+        return result;
+    }
+    catch (JsonException ex)
+    {
+        throw new AuthResolutionException($"Failed to parse oauth-capture JSON: {ex.Message}");
+    }
+}
+
+static void PresentAuthorizeUrl(string profileName, string authorizeUrl, string browserLaunch)
+{
+    if (browserLaunch == "clipboard")
+    {
+        var copied = TryCopyToClipboard(authorizeUrl);
+        Console.WriteLine(copied
+            ? $"Copied the sign-in URL to your clipboard for profile '{profileName}'. Paste it into your browser:"
+            : $"Could not copy the sign-in URL to the clipboard automatically. Open this URL to sign in for profile '{profileName}':");
+        Console.WriteLine(authorizeUrl);
+        return;
+    }
+    Console.WriteLine($"Opening your browser to sign in for profile '{profileName}'...");
+    var browserLaunched = TryLaunchBrowser(authorizeUrl);
+    Console.WriteLine(browserLaunched
+        ? "If it did not open, visit this URL to sign in:"
+        : "Could not launch a browser automatically. Open this URL to sign in:");
+    Console.WriteLine(authorizeUrl);
+}
+
 static async Task<int> LoginAsync(string profileName)
 {
     var authConfig = LoadAuthConfig();
@@ -802,33 +890,33 @@ static async Task<int> LoginAsync(string profileName)
     var state = GenerateState();
     var authorizeUrl = BuildAuthorizeUrl(authUrl, clientId, callbackUrl, scopes, challenge, state, profile.Value);
 
-    HttpListener callbackListener;
-    try { callbackListener = BeginCallbackListener(callbackUrl); }
-    catch (AuthResolutionException ex) { Console.Error.WriteLine(ex.Message); return 2; }
-    Console.WriteLine($"Listening for OAuth callback on {callbackUrl} ...");
-
-    var browserLaunch = GetProp(profile.Value, "browserLaunch");
-    if (browserLaunch == "clipboard")
+    // Prefer app-owned capture (api2skill oauth-capture). HTTP HttpListener is fallback only.
+    var captureProc = TryStartOAuthCaptureProcess(callbackUrl, state);
+    Dictionary<string, string> callbackParams;
+    if (captureProc is not null)
     {
-        var copied = TryCopyToClipboard(authorizeUrl);
-        Console.WriteLine(copied
-            ? $"Copied the sign-in URL to your clipboard for profile '{profileName}'. Paste it into your browser:"
-            : $"Could not copy the sign-in URL to the clipboard automatically. Open this URL to sign in for profile '{profileName}':");
-        Console.WriteLine(authorizeUrl);
+        Console.WriteLine($"Listening for OAuth callback on {callbackUrl} ...");
+        await Task.Delay(200);
+        PresentAuthorizeUrl(profileName, authorizeUrl, GetProp(profile.Value, "browserLaunch"));
+        try { callbackParams = await AwaitOAuthCaptureProcessAsync(captureProc); }
+        catch (AuthResolutionException ex) { Console.Error.WriteLine(ex.Message); return 2; }
+        finally { captureProc.Dispose(); }
+    }
+    else if (IsHttpLoopbackCallback(callbackUrl))
+    {
+        HttpListener callbackListener;
+        try { callbackListener = BeginCallbackListener(callbackUrl); }
+        catch (AuthResolutionException ex) { Console.Error.WriteLine(ex.Message); return 2; }
+        Console.WriteLine($"Listening for OAuth callback on {callbackUrl} ...");
+        PresentAuthorizeUrl(profileName, authorizeUrl, GetProp(profile.Value, "browserLaunch"));
+        try { callbackParams = await AwaitOAuthCallbackAsync(callbackListener); }
+        catch (AuthResolutionException ex) { Console.Error.WriteLine(ex.Message); return 2; }
     }
     else
     {
-        Console.WriteLine($"Opening your browser to sign in for profile '{profileName}'...");
-        var browserLaunched = TryLaunchBrowser(authorizeUrl);
-        Console.WriteLine(browserLaunched
-            ? "If it did not open, visit this URL to sign in:"
-            : "Could not launch a browser automatically. Open this URL to sign in:");
-        Console.WriteLine(authorizeUrl);
+        Console.Error.WriteLine("Could not start 'api2skill oauth-capture'. Install or upgrade api2skill and ensure it is on PATH. HTTPS / custom-scheme / hosted callbacks require the tool (HTTP loopback can fall back to an in-script listener).");
+        return 2;
     }
-
-    Dictionary<string, string> callbackParams;
-    try { callbackParams = await AwaitOAuthCallbackAsync(callbackListener); }
-    catch (AuthResolutionException ex) { Console.Error.WriteLine(ex.Message); return 2; }
 
     if (!callbackParams.TryGetValue("state", out var returnedState) || returnedState != state)
     {
