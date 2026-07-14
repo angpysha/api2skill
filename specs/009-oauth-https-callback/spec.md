@@ -61,7 +61,7 @@ Existing loopback HTTP login continues to work via app-owned or delegated listen
 
 ### User Story 3 - Our custom scheme (Priority: P1)
 
-User registers `api2skill://…` (exact string TBD) at IdP; after auth, OS opens api2skill; capture completes; tokens cached.
+User runs `api2skill register-protocol`, registers `api2skill://…` at the IdP; after auth, OS opens api2skill; capture completes; tokens cached.
 
 ### User Story 4 - Hosted capture + custom address (Priority: P1)
 
@@ -70,6 +70,9 @@ User registers the **app-provided hosted** HTTPS Callback URL (or a custom URL) 
 ### Edge Cases
 
 - Scheme used before `register-protocol` — clear colored error telling user to run register
+- Scheme registered but different tool version — document re-run `register-protocol` after upgrade
+- HTTPS without cert param and non-interactive session → fail with clear colored error (do not hang)
+- User’s own non-loopback HTTPS without relay — fail with docs pointing to hosted URL, loopback, or scheme
 - Hosted page unavailable / timeout — clear colored error; no hang
 
 ## Requirements
@@ -82,16 +85,21 @@ User registers the **app-provided hosted** HTTPS Callback URL (or a custom URL) 
 - **FR-006**: For local HTTPS, the app MUST accept a **tool parameter** for TLS certificate material (path and/or related options — exact flag names in plan). If HTTPS capture requires a trusted cert and the parameter is unset, the app MUST **ask the user interactively** (TTY). Prompts and trust-related warnings MUST use **colored output** so they stand out. Non-TTY / CI without the parameter MUST fail fast with an explicit error (no silent hang).
 - **FR-007**: v1 MUST ship a **hosted HTTPS capture URL** (Postman-style) that users can register at the IdP. After redirect, the capture result MUST hand off into the local api2skill app / skill token + cache flow. Privacy/timeout/abuse constraints are documented in plan/wiki. Exact host/path and infra — plan stage (may be temporary staging URL until permanent domain).
 - **FR-008**: App MUST expose both (1) a user-facing `api2skill login --skill …` (profile/options TBD in plan) that owns end-to-end login where appropriate, and (2) a thin capture command (e.g. `api2skill oauth-capture`) for scripts and generated skill shells; capture handoff MUST feed token exchange + `.auth-cache.json` without duplicating capture logic in the skill.
+- **FR-009**: Registration of the first-party custom scheme MUST be **explicit only** via `api2skill register-protocol` (unregister optional in plan). MUST NOT register silently on install or first login. Docs and colored CLI MUST tell users to run register when the scheme is required.
 
 ## Success Criteria
 
 - **SC-001**: HTTP and HTTPS callback profiles can both complete `login` on supported OS.
-- **SC-002**: First-party custom scheme login works with IdP registration.
+- **SC-002**: First-party custom scheme login works after explicit `register-protocol` + IdP registration.
 - **SC-003**: User can set a custom callback string like Postman; hosted default works end-to-end for at least one IdP smoke path; behavior for other strings is documented.
 
-## Open questions (remaining grill)
+## Grill status
 
-1. ~~HTTPS cert~~ → locked (FR-006).
-2. ~~Hosted capture~~ → locked **B** (FR-007).
-3. ~~Handoff CLI~~ → locked **C** (FR-008): `login` + thin `oauth-capture`.
-4. **Registration** of `api2skill://` on install vs first login vs explicit `api2skill register-protocol`?
+All blocking grill questions answered. Residual details (host domain, exact flag names, PEM vs PFX, OS matrix for protocol register) deferred to `/speckit.plan`.
+
+| # | Topic | Decision |
+|---|-------|----------|
+| 1 | HTTPS cert | Tool param + interactive ask + colored output |
+| 2 | Any address | Hosted capture URL in v1 |
+| 3 | Handoff | `login` + thin `oauth-capture` |
+| 4 | Scheme register | Explicit `register-protocol` only |
