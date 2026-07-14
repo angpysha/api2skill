@@ -45,6 +45,6 @@ Generated skill should **call** app capture, not reimplement HTTPS TLS.
 | Primary fix = local HTTPS HttpListener only | No | 2026-07-14 |
 | Capture logic in api2skill app | Yes | 2026-07-14 |
 | Supported kinds | HTTP + HTTPS **mandatory**; first-party + **other** custom schemes; Postman-like arbitrary Callback URL | 2026-07-14 |
-| How non-loopback arbitrary HTTPS is received | TBD (hosted relay vs document as out of band) | |
+| How non-loopback arbitrary HTTPS is received | **B — hosted capture URL in v1** (Postman-style); plus loopback HTTP/HTTPS + schemes | 2026-07-14 |
 | HTTPS cert strategy | **Tool parameter** for cert; if required for trust and missing → **prompt user**; **colored** CLI for visibility; fail fast if non-TTY and unset | 2026-07-14 |
 | Skill ↔ app handoff command shape | TBD | |

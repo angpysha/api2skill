@@ -25,6 +25,7 @@
 | Our scheme | Supported (e.g. `api2skill://oauth/callback`) plus **other** schemes the user configures |
 | HTTP / HTTPS | Required (must work for `http://…` and `https://…` redirect URIs) |
 | HTTPS cert / trust | **Tool parameter** for cert path (when IdP/browser requires a trusted cert). If missing when HTTPS bind needs it, **prompt the user** (interactive). Use **colored CLI output** so the trust/prompt is impossible to miss |
+| Non-loopback / any address | **B — hosted capture URL in v1** (Postman-style analogue); complements local HTTP/HTTPS + schemes |
 
 ## Background
 
@@ -42,7 +43,7 @@ Postman lets you set a **Callback URL** (custom) and also ships defaults (`https
 | HTTPS loopback | `https://localhost:8400/` | Bind HTTPS listener (**mandatory**); cert via tool param / interactive ask (see FR-006) |
 | Our custom scheme | `api2skill://oauth/callback` | Register / handle OS protocol |
 | Other custom scheme | `myapp://auth` or vendor scheme | Handle if OS routes to us, or document limits |
-| Other address | Hosted / custom HTTPS URL | **[NEEDS CLARIFICATION: how we receive the redirect without owning that host]** |
+| Other address | Hosted / custom HTTPS URL | **v1: ship hosted capture URL** (app-provided default); user can register that URL (or their custom URL if traffic can reach app) at IdP |
 
 After capture → PKCE token exchange → write skill `.auth-cache.json`.
 
@@ -60,15 +61,16 @@ Existing loopback HTTP login continues to work via app-owned or delegated listen
 
 User registers `api2skill://…` (exact string TBD) at IdP; after auth, OS opens api2skill; capture completes; tokens cached.
 
-### User Story 4 - Other custom scheme / custom address (Priority: P2)
+### User Story 4 - Hosted capture + custom address (Priority: P1)
 
-User sets an arbitrary Callback URL (Postman-like). App either captures it (if traffic can reach the app) or documents + integrates an app-provided default HTTPS capture URL — **[NEEDS CLARIFICATION]**.
+User registers the **app-provided hosted** HTTPS Callback URL (or a custom URL) at the IdP. Redirect lands on the hosted page; capture completes and hands off to the local api2skill app / skill token flow. Custom schemes and loopback remain available as alternatives.
 
 ### Edge Cases
 
 - Scheme registered but different version of tool installed — **[NEEDS CLARIFICATION]**
 - HTTPS without cert param and non-interactive session → fail with clear colored error (do not hang)
-- Non-loopback HTTPS `https://customer.app/callback` when we don’t host it — cannot receive without relay — **must clarify**
+- User’s own non-loopback HTTPS without relay — fail with docs pointing to hosted URL, loopback, or scheme
+- Hosted page unavailable / timeout — clear colored error; no hang
 
 ## Requirements
 
@@ -78,17 +80,17 @@ User sets an arbitrary Callback URL (Postman-like). App either captures it (if t
 - **FR-004**: App MUST allow configuring **additional / arbitrary** callback URLs and schemes (Postman-like Callback URL field), subject to OS/IdP constraints documented in wiki.
 - **FR-005**: Capture logic MUST live in the **api2skill app**; skill/`login` calls into it then continues token exchange + cache.
 - **FR-006**: For local HTTPS, the app MUST accept a **tool parameter** for TLS certificate material (path and/or related options — exact flag names in plan). If HTTPS capture requires a trusted cert and the parameter is unset, the app MUST **ask the user interactively** (TTY). Prompts and trust-related warnings MUST use **colored output** so they stand out. Non-TTY / CI without the parameter MUST fail fast with an explicit error (no silent hang).
-- **FR-007**: How “any other address” is received when not loopback and not our scheme — **[NEEDS CLARIFICATION]** (hosted relay vs require loopback/scheme only for capture)
+- **FR-007**: v1 MUST ship a **hosted HTTPS capture URL** (Postman-style) that users can register at the IdP. After redirect, the capture result MUST hand off into the local api2skill app / skill token + cache flow. Privacy/timeout/abuse constraints are documented in plan/wiki. Exact host/path and infra — plan stage (may be temporary staging URL until permanent domain).
 
 ## Success Criteria
 
 - **SC-001**: HTTP and HTTPS callback profiles can both complete `login` on supported OS.
 - **SC-002**: First-party custom scheme login works with IdP registration.
-- **SC-003**: User can set a custom callback string like Postman; behavior for that string is documented and tested where feasible.
+- **SC-003**: User can set a custom callback string like Postman; hosted default works end-to-end for at least one IdP smoke path; behavior for other strings is documented.
 
 ## Open questions (remaining grill)
 
-1. ~~HTTPS cert trust / param~~ → **locked**: tool parameter + interactive ask + colored output (FR-006). Exact PEM/PFX vs `dotnet`/mkcert paths → plan stage OK unless human prefers one format now.
-2. **Non-loopback “any address”**: ship a **hosted** capture URL (Postman `oauth.pstmn.io` analogue), or only support addresses the local app can receive (loopback HTTP/HTTPS + custom schemes)?
+1. ~~HTTPS cert~~ → locked (FR-006).
+2. ~~Hosted capture~~ → locked **B** (FR-007). Hosting vendor / domain / privacy model → plan (or ask if human wants to pin now).
 3. **Handoff CLI**: `api2skill login --skill …` vs skill shells out to `api2skill oauth-capture`?
 4. **Registration** of `api2skill://` on install vs first login vs explicit `api2skill register-protocol`?
