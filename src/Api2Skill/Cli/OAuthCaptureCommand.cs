@@ -112,6 +112,7 @@ public static class OAuthCaptureCommand
         TextWriter? stdout = null,
         TextWriter? stderr = null,
         IRedirectCapture? httpCapture = null,
+        IRedirectCapture? hostedCapture = null,
         CancellationToken cancellationToken = default)
     {
         stdout ??= Console.Out;
@@ -143,7 +144,13 @@ public static class OAuthCaptureCommand
             return ExitCodes.UsageError;
         }
 
-        var resolvedMode = CaptureModeResolver.Resolve(callbackUri, mode, relayBase);
+        var effectiveRelayBase = relayBase;
+        if (string.IsNullOrWhiteSpace(effectiveRelayBase))
+        {
+            effectiveRelayBase = Environment.GetEnvironmentVariable("API2SKILL_OAUTH_RELAY_BASE");
+        }
+
+        var resolvedMode = CaptureModeResolver.Resolve(callbackUri, mode, effectiveRelayBase);
         if (resolvedMode is null)
         {
             ConsoleColorWriter.WriteError(
@@ -161,9 +168,9 @@ public static class OAuthCaptureCommand
             return ExitCodes.UsageError;
         }
 
-        if (resolvedMode is CaptureMode.HttpsLoopback or CaptureMode.CustomScheme or CaptureMode.Hosted)
+        // Soft-stub until US2/US3 (parallel tracks) — Hosted is implemented in US4.
+        if (resolvedMode is CaptureMode.HttpsLoopback or CaptureMode.CustomScheme)
         {
-            // Soft-stub until US2–US4: validation passes for HTTPS flags above; other modes deferred.
             if (resolvedMode != CaptureMode.HttpsLoopback)
             {
                 ConsoleColorWriter.WriteError(
@@ -172,7 +179,6 @@ public static class OAuthCaptureCommand
                 return ExitCodes.UsageError;
             }
 
-            // HTTPS: cert material load validates non-TTY early; listen comes in US2.
             try
             {
                 _ = CertMaterial.Load(
@@ -198,12 +204,22 @@ public static class OAuthCaptureCommand
             CertPassword: certPassword,
             CertPemPath: certPemPath,
             CertKeyPath: certKeyPath,
-            RelayBaseUrl: relayBase,
+            RelayBaseUrl: effectiveRelayBase,
             State: state);
 
-        ConsoleColorWriter.WriteInfo($"Listening for OAuth callback on {callbackUri} …", stderr);
+        if (resolvedMode == CaptureMode.Hosted)
+        {
+            ConsoleColorWriter.WriteInfo("Starting hosted OAuth relay capture …", stderr);
+        }
+        else
+        {
+            ConsoleColorWriter.WriteInfo($"Listening for OAuth callback on {callbackUri} …", stderr);
+        }
 
-        var capture = httpCapture ?? new LoopbackHttpCapture();
+        IRedirectCapture capture = resolvedMode == CaptureMode.Hosted
+            ? hostedCapture ?? new HostedRelayCapture(progress: stderr)
+            : httpCapture ?? new LoopbackHttpCapture();
+
         CaptureResult result;
         try
         {
@@ -231,7 +247,6 @@ public static class OAuthCaptureCommand
             return ExitCodes.CaptureTimeout;
         }
 
-        // IdP error= on redirect (or state mismatch treated as OAuth-ish failure)
         if (!string.IsNullOrEmpty(result.Error))
         {
             return ExitCodes.OAuthRedirectError;

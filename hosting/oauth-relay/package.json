@@ -1,0 +1,14 @@
+{
+  "name": "api2skill-oauth-relay",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Hosted OAuth redirect relay for api2skill (Cloudflare Worker)",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^4.20.0"
+  }
+}

@@ -158,15 +158,15 @@ Ready work now: `br ready` → claim `.1` (foundation) first. Story children are
 
 ### Tests (FAIL first)
 
-- [ ] T030 [P] [US4] Add hosted session/poll client tests with in-process stub in `tests/Api2Skill.Tests/OAuth/HostedRelayCaptureTests.cs`
-- [ ] T031 [P] [US4] Add relay contract stub tests matching `contracts/hosted-relay.md` in `tests/Api2Skill.Tests/OAuth/HostedRelayStubTests.cs`
+- [x] T030 [P] [US4] Add hosted session/poll client tests with in-process stub in `tests/Api2Skill.Tests/OAuth/HostedRelayCaptureTests.cs`
+- [x] T031 [P] [US4] Add relay contract stub tests matching `contracts/hosted-relay.md` in `tests/Api2Skill.Tests/OAuth/HostedRelayStubTests.cs`
 
 ### Implementation
 
-- [ ] T032 [US4] Implement in-repo relay (Worker or Azure Function — pick one) under `hosting/oauth-relay/` per `contracts/hosted-relay.md` (session/callback/poll; TTL ≤5m; code/error only)
-- [ ] T033 [US4] Implement `HostedRelayCapture` client in `src/Api2Skill/OAuth/HostedRelayCapture.cs` (`--relay-base` / `API2SKILL_OAUTH_RELAY_BASE`)
-- [ ] T034 [US4] Wire `Hosted` mode + unsupported non-loopback URL errors in `src/Api2Skill/Cli/OAuthCaptureCommand.cs`
-- [ ] T035 [US4] Add test stub host usable without cloud deploy in `tests/Api2Skill.Tests/OAuth/TestHostedRelayServer.cs`
+- [x] T032 [US4] Implement in-repo relay (Worker or Azure Function — pick one) under `hosting/oauth-relay/` per `contracts/hosted-relay.md` (session/callback/poll; TTL ≤5m; code/error only)
+- [x] T033 [US4] Implement `HostedRelayCapture` client in `src/Api2Skill/OAuth/HostedRelayCapture.cs` (`--relay-base` / `API2SKILL_OAUTH_RELAY_BASE`)
+- [x] T034 [US4] Wire `Hosted` mode + unsupported non-loopback URL errors in `src/Api2Skill/Cli/OAuthCaptureCommand.cs`
+- [x] T035 [US4] Add test stub host usable without cloud deploy in `tests/Api2Skill.Tests/OAuth/TestHostedRelayServer.cs`
 
 **Checkpoint**: Scenario D passes locally via stub
 
