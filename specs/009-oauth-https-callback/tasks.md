@@ -133,16 +133,16 @@ Ready work now: `br ready` → claim `.1` (foundation) first. Story children are
 
 ### Tests (FAIL first)
 
-- [ ] T023 [P] [US3] Add protocol registration unit/OS-conditional tests in `tests/Api2Skill.Tests/OAuth/ProtocolRegistrationTests.cs`
-- [ ] T024 [P] [US3] Add custom-scheme capture tests (handoff simulation) in `tests/Api2Skill.Tests/OAuth/CustomSchemeCaptureTests.cs`
+- [x] T023 [P] [US3] Add protocol registration unit/OS-conditional tests in `tests/Api2Skill.Tests/OAuth/ProtocolRegistrationTests.cs`
+- [x] T024 [P] [US3] Add custom-scheme capture tests (handoff simulation) in `tests/Api2Skill.Tests/OAuth/CustomSchemeCaptureTests.cs`
 
 ### Implementation
 
-- [ ] T025 [US3] Implement `ProtocolRegistration` for macOS/Windows/Linux in `src/Api2Skill/OAuth/ProtocolRegistration.cs`
-- [ ] T026 [US3] Implement `RegisterProtocolCommand` + `UnregisterProtocolCommand` in `src/Api2Skill/Cli/RegisterProtocolCommand.cs`
-- [ ] T027 [US3] Register both commands in `src/Api2Skill/Program.cs`
-- [ ] T028 [US3] Implement `CustomSchemeCapture` in `src/Api2Skill/OAuth/CustomSchemeCapture.cs` (wait for OS invocation / second-instance handoff)
-- [ ] T029 [US3] Wire `CustomScheme` mode in `src/Api2Skill/Cli/OAuthCaptureCommand.cs`; unregistered → colored exit 6
+- [x] T025 [US3] Implement `ProtocolRegistration` for macOS/Windows/Linux in `src/Api2Skill/OAuth/ProtocolRegistration.cs`
+- [x] T026 [US3] Implement `RegisterProtocolCommand` + `UnregisterProtocolCommand` in `src/Api2Skill/Cli/RegisterProtocolCommand.cs`
+- [x] T027 [US3] Register both commands in `src/Api2Skill/Program.cs`
+- [x] T028 [US3] Implement `CustomSchemeCapture` in `src/Api2Skill/OAuth/CustomSchemeCapture.cs` (wait for OS invocation / second-instance handoff)
+- [x] T029 [US3] Wire `CustomScheme` mode in `src/Api2Skill/Cli/OAuthCaptureCommand.cs`; unregistered → colored exit 6
 
 **Checkpoint**: Scenario C passes on at least one supported OS; others document best-effort
 
