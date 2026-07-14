@@ -353,11 +353,21 @@ public static class SkillModelBuilder
             return null;
         }
 
-        var (contentType, media) = content.TryGetValue("application/json", out var json)
-            ? ("application/json", json)
-            : (content.Keys.First(), content.Values.First());
+        var (contentType, media) = PreferJsonMedia(content);
+        var detail = DescribeSchema(media.Schema);
+        return new RequestBodyModel(contentType, body.Required, detail?.Summary ?? SummarizeSchema(media.Schema), detail);
+    }
 
-        return new RequestBodyModel(contentType, body.Required, SummarizeSchema(media.Schema));
+    private static (string ContentType, IOpenApiMediaType Media) PreferJsonMedia(
+        IDictionary<string, IOpenApiMediaType> content)
+    {
+        if (content.TryGetValue("application/json", out var json))
+        {
+            return ("application/json", json);
+        }
+
+        var first = content.First();
+        return (first.Key, first.Value);
     }
 
     private static string? SummarizeSchema(IOpenApiSchema? schema)
@@ -367,12 +377,216 @@ public static class SkillModelBuilder
             return null;
         }
 
+        schema = UnwrapSchema(schema);
         if (schema.Type == JsonSchemaType.Object && schema.Properties is { Count: > 0 })
         {
             return $"object {{ {string.Join(", ", schema.Properties.Keys)} }}";
         }
 
-        return schema.Type?.ToString() ?? "object";
+        if (schema.Type == JsonSchemaType.Array)
+        {
+            var items = SummarizeSchema(schema.Items);
+            return items is null ? "array" : $"array<{items}>";
+        }
+
+        return FormatType(schema) ?? "object";
+    }
+
+    /// <summary>
+    /// Build property tables + JSON example for reference docs (request/response bodies).
+    /// Depth-capped to avoid runaway recursion on circular schemas.
+    /// </summary>
+    private static SchemaDetailModel? DescribeSchema(IOpenApiSchema? schema, int depth = 0)
+    {
+        if (schema is null || depth > 4)
+        {
+            return null;
+        }
+
+        schema = UnwrapSchema(schema);
+        var summary = SummarizeSchema(schema);
+        var properties = new List<SchemaPropertyModel>();
+
+        if (schema.Type == JsonSchemaType.Object && schema.Properties is { Count: > 0 })
+        {
+            var required = schema.Required ?? new HashSet<string>();
+            foreach (var (name, prop) in schema.Properties)
+            {
+                if (prop is null)
+                {
+                    continue;
+                }
+
+                var unwrapped = UnwrapSchema(prop);
+                properties.Add(new SchemaPropertyModel(
+                    Name: name,
+                    Type: FormatType(unwrapped) ?? "object",
+                    Required: required.Contains(name),
+                    Description: unwrapped.Description,
+                    Format: unwrapped.Format));
+            }
+        }
+        else if (schema.Type == JsonSchemaType.Array && schema.Items is not null)
+        {
+            var items = UnwrapSchema(schema.Items);
+            properties.Add(new SchemaPropertyModel(
+                Name: "items",
+                Type: FormatType(items) ?? "object",
+                Required: false,
+                Description: items.Description,
+                Format: items.Format));
+        }
+
+        var example = BuildExampleJson(schema, depth);
+        if (properties.Count == 0 && string.IsNullOrWhiteSpace(example) && string.IsNullOrWhiteSpace(summary))
+        {
+            return null;
+        }
+
+        return new SchemaDetailModel(summary, properties, example);
+    }
+
+    private static IOpenApiSchema UnwrapSchema(IOpenApiSchema schema)
+    {
+        // Prefer the first allOf / anyOf / oneOf branch that carries usable shape.
+        foreach (var group in new[] { schema.AllOf, schema.AnyOf, schema.OneOf })
+        {
+            if (group is not { Count: > 0 })
+            {
+                continue;
+            }
+
+            foreach (var candidate in group)
+            {
+                if (candidate is null)
+                {
+                    continue;
+                }
+
+                var inner = UnwrapSchema(candidate);
+                if (inner.Properties is { Count: > 0 } || inner.Type is not null || inner.Items is not null)
+                {
+                    return inner;
+                }
+            }
+        }
+
+        return schema;
+    }
+
+    private static string? FormatType(IOpenApiSchema schema)
+    {
+        if (schema.Type is null)
+        {
+            if (schema.Properties is { Count: > 0 })
+            {
+                return "object";
+            }
+
+            if (schema.Items is not null)
+            {
+                return "array";
+            }
+
+            return null;
+        }
+
+        // JsonSchemaType can be a flags combo (e.g. String | Null).
+        return schema.Type.Value.ToString().Replace(", ", "|", StringComparison.Ordinal);
+    }
+
+    private static string? BuildExampleJson(IOpenApiSchema schema, int depth)
+    {
+        try
+        {
+            return SerializeExample(schema, depth);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? SerializeExample(IOpenApiSchema schema, int depth)
+    {
+        if (depth > 4)
+        {
+            return "null";
+        }
+
+        schema = UnwrapSchema(schema);
+
+        if (schema.Example is not null)
+        {
+            return schema.Example.ToJsonString();
+        }
+
+        if (schema.Default is not null)
+        {
+            return schema.Default.ToJsonString();
+        }
+
+        if (schema.Type == JsonSchemaType.Object || schema.Properties is { Count: > 0 })
+        {
+            if (schema.Properties is not { Count: > 0 })
+            {
+                return "{}";
+            }
+
+            var parts = new List<string>();
+            foreach (var (name, prop) in schema.Properties)
+            {
+                if (prop is null)
+                {
+                    continue;
+                }
+
+                var value = SerializeExample(prop, depth + 1) ?? "null";
+                parts.Add($"{System.Text.Json.JsonSerializer.Serialize(name)}: {value}");
+            }
+
+            return "{ " + string.Join(", ", parts) + " }";
+        }
+
+        if (schema.Type == JsonSchemaType.Array)
+        {
+            if (schema.Items is null)
+            {
+                return "[]";
+            }
+
+            var item = SerializeExample(schema.Items, depth + 1) ?? "null";
+            return "[ " + item + " ]";
+        }
+
+        if (schema.Type is null)
+        {
+            return "null";
+        }
+
+        var t = schema.Type.Value;
+        if (t.HasFlag(JsonSchemaType.Boolean))
+        {
+            return "false";
+        }
+
+        if (t.HasFlag(JsonSchemaType.Integer) || t.HasFlag(JsonSchemaType.Number))
+        {
+            return "0";
+        }
+
+        if (t.HasFlag(JsonSchemaType.String))
+        {
+            return schema.Format switch
+            {
+                "date" => "\"2026-01-01\"",
+                "date-time" => "\"2026-01-01T00:00:00Z\"",
+                "uuid" => "\"00000000-0000-0000-0000-000000000000\"",
+                _ => "\"string\"",
+            };
+        }
+
+        return "null";
     }
 
     private static List<ResponseModel> MapResponses(OpenApiResponses? responses)
@@ -382,7 +596,21 @@ public static class SkillModelBuilder
             return [];
         }
 
-        return [.. responses.Select(kvp => new ResponseModel(kvp.Key, kvp.Value.Description))];
+        return [.. responses.Select(kvp =>
+        {
+            string? contentType = null;
+            string? summary = null;
+            SchemaDetailModel? detail = null;
+            if (kvp.Value.Content is { Count: > 0 } content)
+            {
+                var (ct, media) = PreferJsonMedia(content);
+                contentType = ct;
+                detail = DescribeSchema(media.Schema);
+                summary = detail?.Summary ?? SummarizeSchema(media.Schema);
+            }
+
+            return new ResponseModel(kvp.Key, kvp.Value.Description, contentType, summary, detail);
+        })];
     }
 
     private static List<(string Tag, string OperationId, OperationModel Op)> ApplyFilters(

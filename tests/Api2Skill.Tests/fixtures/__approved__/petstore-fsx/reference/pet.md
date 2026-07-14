@@ -16,12 +16,32 @@ Returns a single pet.
 |---|---|---|---|---|
 | `petId` | Path | yes | Integer | ID of pet to return |
 
+**Request body**: none
+
 **Auth**: `api_key`
 
 **Responses**
 
-- `200`: successful operation
-- `404`: Pet not found
+### `200`: successful operation
+
+- Content-Type: `application/json`
+- Shape: object { id, name, status }
+
+| property | type | required | description |
+|---|---|---|---|
+| `id` | Integer (int64) | yes | Pet id |
+| `name` | String | yes | Pet name |
+| `status` | String | no | Pet status in the store |
+
+Example:
+
+```json
+{ "id": 0, "name": "string", "status": "string" }
+```
+
+### `404`: Pet not found
+
+- Body: none documented in the OpenAPI response
 
 ---
 
@@ -36,11 +56,37 @@ Add a new pet to the store
 - Content-Type: `application/json` (required)
 - Shape: object { name, status }
 
+| property | type | required | description |
+|---|---|---|---|
+| `name` | String | yes | Pet name |
+| `status` | String | no | Pet status in the store |
+
+Example:
+
+```json
+{ "name": "string", "status": "string" }
+```
+
 **Auth**: `petstore_auth`
 
 **Responses**
 
-- `200`: successful operation
+### `200`: successful operation
+
+- Content-Type: `application/json`
+- Shape: object { id, name, status }
+
+| property | type | required | description |
+|---|---|---|---|
+| `id` | Integer (int64) | yes | Pet id |
+| `name` | String | yes | Pet name |
+| `status` | String | no | Pet status in the store |
+
+Example:
+
+```json
+{ "id": 0, "name": "string", "status": "string" }
+```
 
 ---
 

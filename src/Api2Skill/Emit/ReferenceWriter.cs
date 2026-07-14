@@ -69,10 +69,12 @@ public static class ReferenceWriter
             sb.AppendLine("**Request body**");
             sb.AppendLine();
             sb.AppendLine($"- Content-Type: `{body.ContentType}`{(body.Required ? " (required)" : " (optional)")}");
-            if (!string.IsNullOrWhiteSpace(body.SchemaSummary))
-            {
-                sb.AppendLine($"- Shape: {body.SchemaSummary}");
-            }
+            WriteSchemaDetail(sb, body.SchemaSummary, body.Schema);
+            sb.AppendLine();
+        }
+        else
+        {
+            sb.AppendLine("**Request body**: none");
             sb.AppendLine();
         }
 
@@ -87,12 +89,55 @@ public static class ReferenceWriter
             sb.AppendLine();
             foreach (var r in op.Responses)
             {
-                sb.AppendLine($"- `{r.StatusCode}`: {r.Description ?? string.Empty}");
+                sb.AppendLine($"### `{r.StatusCode}`{(string.IsNullOrWhiteSpace(r.Description) ? string.Empty : $": {r.Description}")}");
+                sb.AppendLine();
+                if (!string.IsNullOrWhiteSpace(r.ContentType))
+                {
+                    sb.AppendLine($"- Content-Type: `{r.ContentType}`");
+                }
+
+                WriteSchemaDetail(sb, r.SchemaSummary, r.Schema);
+                if (string.IsNullOrWhiteSpace(r.ContentType) && r.Schema is null && string.IsNullOrWhiteSpace(r.SchemaSummary))
+                {
+                    sb.AppendLine("- Body: none documented in the OpenAPI response");
+                }
+
+                sb.AppendLine();
             }
-            sb.AppendLine();
         }
 
         sb.AppendLine("---");
         sb.AppendLine();
+    }
+
+    private static void WriteSchemaDetail(StringBuilder sb, string? summary, SchemaDetailModel? schema)
+    {
+        var shape = schema?.Summary ?? summary;
+        if (!string.IsNullOrWhiteSpace(shape))
+        {
+            sb.AppendLine($"- Shape: {shape}");
+        }
+
+        if (schema is { Properties.Count: > 0 })
+        {
+            sb.AppendLine();
+            sb.AppendLine("| property | type | required | description |");
+            sb.AppendLine("|---|---|---|---|");
+            foreach (var p in schema.Properties)
+            {
+                var type = string.IsNullOrWhiteSpace(p.Format) ? p.Type : $"{p.Type} ({p.Format})";
+                sb.AppendLine($"| `{p.Name}` | {type} | {(p.Required ? "yes" : "no")} | {p.Description ?? string.Empty} |");
+            }
+        }
+
+        if (schema is { ExampleJson: { Length: > 0 } example })
+        {
+            sb.AppendLine();
+            sb.AppendLine("Example:");
+            sb.AppendLine();
+            sb.AppendLine("```json");
+            sb.AppendLine(example);
+            sb.AppendLine("```");
+        }
     }
 }

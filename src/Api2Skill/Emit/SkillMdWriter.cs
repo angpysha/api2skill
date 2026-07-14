@@ -100,6 +100,31 @@ public static class SkillMdWriter
                 sb.AppendLine($"| `{profile.Name}` | {ProfileTypeLabel(profile.Type)} | {attach} | {ProfileNotes(profile)} |");
             }
             sb.AppendLine();
+
+            if (authConfig.Profiles.Any(p => p.Type == AuthType.OAuth2 && p.OAuth?.Grant == OAuthGrant.AuthorizationCode))
+            {
+                sb.AppendLine("### OAuth login");
+                sb.AppendLine();
+                sb.AppendLine("Interactive login writes `.auth-cache.json` in this skill directory. Prefer the tool (any callback mode):");
+                sb.AppendLine();
+                sb.AppendLine("```bash");
+                sb.AppendLine("api2skill login --skill . --profile <name>");
+                sb.AppendLine("```");
+                sb.AppendLine();
+                sb.AppendLine("Or: `dotnet run scripts/call.cs -- login <name>` (shells to `api2skill oauth-capture` when on PATH).");
+                sb.AppendLine();
+                sb.AppendLine("**Callback URL** comes from `auth.json` → `callbackUrl` and must match the IdP redirect URI exactly.");
+                sb.AppendLine();
+                sb.AppendLine("| Mode | `callbackUrl` example | How to login |");
+                sb.AppendLine("|---|---|---|");
+                sb.AppendLine("| HTTP loopback | `http://localhost:8400/callback` | `api2skill login --skill . --profile <name>` (HTTP can fall back in-script if tool missing) |");
+                sb.AppendLine("| HTTPS loopback | `https://127.0.0.1:8443/callback` | Create a PFX (`dotnet dev-certs https -ep ./dev.pfx -p pass --trust`), then `api2skill login --skill . --profile <name> --cert ./dev.pfx --cert-password pass` (HTTPS **requires** the tool) |");
+                sb.AppendLine("| Custom scheme | `api2skill://oauth/callback` | Run `api2skill register-protocol` once, then login as usual |");
+                sb.AppendLine("| Hosted relay | non-loopback HTTPS relay URL | Set `API2SKILL_OAUTH_RELAY_BASE` / `--relay-base`; see wiki Authentication |");
+                sb.AppendLine();
+                sb.AppendLine("Thin capture only: `api2skill oauth-capture --callback-url <url> --json` (add `--cert` / PEM flags for HTTPS).");
+                sb.AppendLine();
+            }
         }
 
         sb.AppendLine("## How to call");
@@ -108,6 +133,8 @@ public static class SkillMdWriter
         sb.AppendLine($"{emitter.RunnerDescription} <operationId> [--<param> <value> ...] [--body <json|@file>]");
         sb.AppendLine("```");
         sb.AppendLine();
+
+        WriteAuthoredExamplesGuidance(sb);
 
         sb.AppendLine("## Operations");
         sb.AppendLine();
@@ -145,6 +172,42 @@ public static class SkillMdWriter
         File.WriteAllText(Path.Combine(skillDirectory.FullName, "SKILL.md"), sb.ToString());
     }
 
+    /// <summary>
+    /// Prefer authored examples + fail→ask→propose→await-approval + chat authorship
+    /// (contracts/skill-guidance.md, FR-006/FR-007).
+    /// </summary>
+    private static void WriteAuthoredExamplesGuidance(StringBuilder sb)
+    {
+        sb.AppendLine("## Authored examples");
+        sb.AppendLine();
+        sb.AppendLine("Optional request/response payloads live under `examples/<operationId>/<name>/` (`request.json` and/or `response.json`). Tag markdown in `reference/` links them. Skills ship with **no** examples until you add them.");
+        sb.AppendLine();
+        sb.AppendLine("### Prefer authored examples");
+        sb.AppendLine();
+        sb.AppendLine("When calling or testing an operation:");
+        sb.AppendLine();
+        sb.AppendLine("1. Look under `examples/<operationId>/` for named examples.");
+        sb.AppendLine("2. If one name → use its `request.json` as `--body` (or equivalent).");
+        sb.AppendLine("3. If several → ask the user which `name` to use (or pick `default` if present and the user did not specify).");
+        sb.AppendLine("4. Do **not** invent a JSON body when an authored request example exists, unless the user explicitly overrides.");
+        sb.AppendLine();
+        sb.AppendLine("### Failure protocol (mandatory)");
+        sb.AppendLine();
+        sb.AppendLine("If a call that used an authored example fails (non-success HTTP, auth error, unexpected body):");
+        sb.AppendLine();
+        sb.AppendLine("1. **Ask** the user whether the example should be updated.");
+        sb.AppendLine("2. Optionally **propose** a concrete patch to `request.json` / `response.json` and/or a contract (OpenAPI / auth) change.");
+        sb.AppendLine("3. **Do not apply** any write to examples or contracts until the user **explicitly approves**.");
+        sb.AppendLine("4. Never “fix forward” by silently overwriting examples.");
+        sb.AppendLine();
+        sb.AppendLine("### Adding examples (chat or CLI)");
+        sb.AppendLine();
+        sb.AppendLine("1. Create `examples/<operationId>/<name>/request.json` and/or `response.json` (secret-free payloads only).");
+        sb.AppendLine("2. Run `api2skill example sync --skill .` (or `api2skill example add --skill . --op <operationId> --name <name> --request …`).");
+        sb.AppendLine("3. Confirm `reference/<tag>.md` lists the example under **Authored examples**.");
+        sb.AppendLine();
+    }
+
     private static string Describe(SkillModel model)
     {
         var desc = $"Call the {model.Title} API.";
@@ -171,7 +234,7 @@ public static class SkillMdWriter
         AuthType.Basic => "Set `username`/`password` in `secrets.json`; sent as `Authorization: Basic ...`.",
         AuthType.Custom => $"Sends {profile.Custom!.Headers.Count} header(s): {string.Join(", ", profile.Custom.Headers.Select(h => h.Name))}. Set the referenced values in `secrets.json`.",
         AuthType.Script => $"Runs the user-provided local command `{profile.Script!.Command}` on every call; its trimmed stdout becomes the `{profile.Script.Header}` header{(profile.Script.BearerPrefix ? " (`Bearer ` added when absent)" : "")}.",
-        AuthType.OAuth2 => "OAuth2 profile (see `auth.json` for endpoints/scopes). **Interactive login is not yet executed by this generated dispatcher version.**",
+        AuthType.OAuth2 => "OAuth2 (`auth.json`). Login: `api2skill login --skill . --profile <name>` (HTTPS needs `--cert`); or `dotnet run scripts/call.cs -- login <name>`.",
         _ => string.Empty,
     };
 }

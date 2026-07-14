@@ -44,5 +44,6 @@ authoritative source.
 | [Getting-Started.md](Getting-Started.md) | Install, first skill, Claude setup |
 | [Generate-Command.md](Generate-Command.md) | `generate` reference |
 | [Update-Command.md](Update-Command.md) | `update` reference |
-| [Authentication.md](Authentication.md) | Auth profiles, OAuth, script auth |
+| [Authentication.md](Authentication.md) | Auth profiles, OAuth, HTTPS loopback / `dev-certs`, script auth |
+| [Examples.md](Examples.md) | Authored request/response examples |
 | [Releasing.md](Releasing.md) | Version bumps, tags, release flow |

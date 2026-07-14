@@ -30,7 +30,22 @@
           }
         ],
         "responses": {
-          "200": { "description": "successful operation" },
+          "200": {
+            "description": "successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "integer", "format": "int64", "description": "Pet id" },
+                    "name": { "type": "string", "description": "Pet name" },
+                    "status": { "type": "string", "description": "Pet status in the store" }
+                  },
+                  "required": ["id", "name"]
+                }
+              }
+            }
+          },
           "404": { "description": "Pet not found" }
         }
       }
@@ -48,8 +63,8 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "name": { "type": "string" },
-                  "status": { "type": "string" }
+                  "name": { "type": "string", "description": "Pet name" },
+                  "status": { "type": "string", "description": "Pet status in the store" }
                 },
                 "required": ["name"]
               }
@@ -57,7 +72,22 @@
           }
         },
         "responses": {
-          "200": { "description": "successful operation" }
+          "200": {
+            "description": "successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "integer", "format": "int64", "description": "Pet id" },
+                    "name": { "type": "string", "description": "Pet name" },
+                    "status": { "type": "string", "description": "Pet status in the store" }
+                  },
+                  "required": ["id", "name"]
+                }
+              }
+            }
+          }
         }
       }
     },

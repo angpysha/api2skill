@@ -610,6 +610,78 @@ let applyExplicitProfileAsync (http: HttpClient) (profile: JsonElement) (profile
             raise (AuthResolutionException (sprintf "Auth profile type '%s' is not supported by this generated dispatcher yet." other))
     }
 
+let tryStartOAuthCaptureProcess (callbackUrl: string) (state: string) : Process option =
+    try
+        let psi = ProcessStartInfo(
+            FileName = "api2skill",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false)
+        psi.ArgumentList.Add("oauth-capture")
+        psi.ArgumentList.Add("--callback-url")
+        psi.ArgumentList.Add(callbackUrl)
+        psi.ArgumentList.Add("--state")
+        psi.ArgumentList.Add(state)
+        psi.ArgumentList.Add("--json")
+        match Process.Start(psi) with
+        | null -> None
+        | p ->
+            // Old/wrong binaries exit immediately — treat as missing so HTTP can fall back.
+            p.WaitForExit(150) |> ignore
+            if p.HasExited then
+                p.Dispose()
+                None
+            else
+                Some p
+    with _ ->
+        None
+
+let isHttpLoopbackCallback (callbackUrl: string) : bool =
+    match Uri.TryCreate(callbackUrl, UriKind.Absolute) with
+    | false, _ -> false
+    | true, uri ->
+        uri.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase)
+        && (uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+            || uri.Host = "127.0.0.1" || uri.Host = "::1" || uri.Host = "[::1]")
+
+let parseOAuthCaptureJson (line: string) (exitCode: int) : Dictionary<string, string> =
+    if line.Length = 0 then
+        raise (AuthResolutionException (sprintf "api2skill oauth-capture exited %d with empty stdout." exitCode))
+    try
+        use doc = JsonDocument.Parse(line)
+        let root = doc.RootElement
+        let result = Dictionary<string, string>(StringComparer.Ordinal)
+        match root.TryGetProperty("code") with | true, el when not (isNull (el.GetString())) -> result.["code"] <- el.GetString() | _ -> ()
+        match root.TryGetProperty("state") with | true, el when not (isNull (el.GetString())) -> result.["state"] <- el.GetString() | _ -> ()
+        match root.TryGetProperty("error") with | true, el when not (isNull (el.GetString())) -> result.["error"] <- el.GetString() | _ -> ()
+        match root.TryGetProperty("errorDescription") with | true, el when not (isNull (el.GetString())) -> result.["error_description"] <- el.GetString() | _ -> ()
+        let ok = match root.TryGetProperty("ok") with | true, el -> el.ValueKind = JsonValueKind.True | _ -> false
+        if not ok && not (result.ContainsKey("code")) then
+            let err = match result.TryGetValue("error") with | true, e -> e | _ -> "oauth-capture failed"
+            raise (AuthResolutionException err)
+        result
+    with
+    | :? JsonException as ex ->
+        raise (AuthResolutionException (sprintf "Failed to parse oauth-capture JSON: %s" ex.Message))
+
+let awaitOAuthCaptureProcessAsync (process': Process) : Task<Dictionary<string, string>> =
+    task {
+        let! stdout = process'.StandardOutput.ReadToEndAsync()
+        do! process'.WaitForExitAsync()
+        return parseOAuthCaptureJson (stdout.Trim()) process'.ExitCode
+    }
+
+let presentAuthorizeUrl (profileName: string) (authorizeUrl: string) (browserLaunch: string) : unit =
+    if browserLaunch = "clipboard" then
+        let copied = tryCopyToClipboard authorizeUrl
+        printfn "%s" (if copied then sprintf "Copied the sign-in URL to your clipboard for profile '%s'. Paste it into your browser:" profileName else sprintf "Could not copy the sign-in URL to the clipboard automatically. Open this URL to sign in for profile '%s':" profileName)
+        printfn "%s" authorizeUrl
+    else
+        printfn "Opening your browser to sign in for profile '%s'..." profileName
+        let browserLaunched = tryLaunchBrowser authorizeUrl
+        printfn "%s" (if browserLaunched then "If it did not open, visit this URL to sign in:" else "Could not launch a browser automatically. Open this URL to sign in:")
+        printfn "%s" authorizeUrl
+
 let loginAsync (profileName: string) : Task<int> =
     task {
         try
@@ -652,22 +724,28 @@ let loginAsync (profileName: string) : Task<int> =
             let state = generateState ()
             let authorizeUrl = buildAuthorizeUrl authUrl clientId callbackUrl scopes challenge state profile
 
-            let callbackListener = beginCallbackListener callbackUrl
-            printfn "Listening for OAuth callback on %s ..." callbackUrl
-
-            let browserLaunch = getProp profile "browserLaunch"
-            if browserLaunch = "clipboard" then
-                let copied = tryCopyToClipboard authorizeUrl
-                printfn "%s" (if copied then sprintf "Copied the sign-in URL to your clipboard for profile '%s'. Paste it into your browser:" profileName else sprintf "Could not copy the sign-in URL to the clipboard automatically. Open this URL to sign in for profile '%s':" profileName)
-                printfn "%s" authorizeUrl
-            else
-                printfn "Opening your browser to sign in for profile '%s'..." profileName
-                let browserLaunched = tryLaunchBrowser authorizeUrl
-                printfn "%s" (if browserLaunched then "If it did not open, visit this URL to sign in:" else "Could not launch a browser automatically. Open this URL to sign in:")
-                printfn "%s" authorizeUrl
-
-            let! callbackParams = awaitOAuthCallbackAsync callbackListener
-
+            // Prefer app-owned capture (api2skill oauth-capture). HTTP HttpListener is fallback only.
+            let captureProc = tryStartOAuthCaptureProcess callbackUrl state
+            let! callbackParams =
+                task {
+                    match captureProc with
+                    | Some proc ->
+                        printfn "Listening for OAuth callback on %s ..." callbackUrl
+                        do! Task.Delay(200)
+                        presentAuthorizeUrl profileName authorizeUrl (getProp profile "browserLaunch")
+                        try
+                            return! awaitOAuthCaptureProcessAsync proc
+                        finally
+                            proc.Dispose()
+                    | None when isHttpLoopbackCallback callbackUrl ->
+                        let callbackListener = beginCallbackListener callbackUrl
+                        printfn "Listening for OAuth callback on %s ..." callbackUrl
+                        presentAuthorizeUrl profileName authorizeUrl (getProp profile "browserLaunch")
+                        return! awaitOAuthCallbackAsync callbackListener
+                    | None ->
+                        eprintfn "Could not start 'api2skill oauth-capture'. Install or upgrade api2skill and ensure it is on PATH. HTTPS / custom-scheme / hosted callbacks require the tool (HTTP loopback can fall back to an in-script listener)."
+                        return raise (AuthResolutionException "api2skill oauth-capture unavailable")
+                }
             let stateMatches = match callbackParams.TryGetValue("state") with | true, returnedState -> returnedState = state | false, _ -> false
             if not stateMatches then
                 eprintfn "The callback's state did not match what was sent \u2014 rejecting (possible CSRF/mix-up). No token was stored. Run login again."

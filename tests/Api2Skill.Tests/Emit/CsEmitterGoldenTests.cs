@@ -110,5 +110,11 @@ public class CsEmitterGoldenTests : IDisposable
 
         var referenceMd = File.ReadAllText(Path.Combine(outputDir, "reference", "pet.md"));
         Assert.Contains("ID of pet to return", referenceMd);
+        Assert.Contains("**Request body**", referenceMd);
+        Assert.Contains("| property | type | required | description |", referenceMd);
+        Assert.Contains("Example:", referenceMd);
+        Assert.Contains("```json", referenceMd);
+        Assert.Contains("### `200`", referenceMd);
+        Assert.Contains("Content-Type: `application/json`", referenceMd);
     }
 }

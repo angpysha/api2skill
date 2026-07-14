@@ -105,6 +105,33 @@ public class AuthEngineGoldenTests : IDisposable
         Assert.Contains("code_challenge_method=S256", text, StringComparison.Ordinal);
         Assert.Contains("WithTokenCacheLockAsync", text, StringComparison.Ordinal);
         Assert.Contains("case \"oauth2\":", text, StringComparison.Ordinal);
+        AssertOAuthCaptureHandoffMarkers_Cs(text);
+    }
+
+    /// <summary>T036: Process handoff to <c>api2skill oauth-capture</c> with HTTP fallback.</summary>
+    private static void AssertOAuthCaptureHandoffMarkers_Cs(string text)
+    {
+        Assert.Contains("TryStartOAuthCaptureProcess", text, StringComparison.Ordinal);
+        Assert.Contains("oauth-capture", text, StringComparison.Ordinal);
+        Assert.Contains("--json", text, StringComparison.Ordinal);
+        Assert.Contains("AwaitOAuthCaptureProcessAsync", text, StringComparison.Ordinal);
+        Assert.Contains("IsHttpLoopbackCallback", text, StringComparison.Ordinal);
+        Assert.Contains("Install or upgrade api2skill", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task FsxEmitter_EmitsOAuthCaptureHandoffMarkers()
+    {
+        var model = await BuildModelWithBearerProfileAsync();
+        var outDir = Path.Combine(_workDir, "fsx-handoff");
+        SkillWriter.Write(model, outDir, force: false, new FsxEmitter(), AuthConfigLoader.Serialize(model.AuthConfig!));
+
+        var text = await File.ReadAllTextAsync(Path.Combine(outDir, "scripts", "call.fsx"));
+        Assert.Contains("tryStartOAuthCaptureProcess", text, StringComparison.Ordinal);
+        Assert.Contains("oauth-capture", text, StringComparison.Ordinal);
+        Assert.Contains("awaitOAuthCaptureProcessAsync", text, StringComparison.Ordinal);
+        Assert.Contains("isHttpLoopbackCallback", text, StringComparison.Ordinal);
+        Assert.Contains("Install or upgrade api2skill", text, StringComparison.Ordinal);
     }
 
     [Fact]

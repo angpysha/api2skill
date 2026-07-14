@@ -381,17 +381,85 @@ version (a follow-up if id_token lifetime diverges from `expires_in`).
 ### Interactive login
 
 ```bash
-# After generation — primes .auth-cache.json
+# Preferred: end-to-end login owned by the tool (any callback mode)
+api2skill login --skill ./path-to-skill --profile user
+
+# After generation — primes .auth-cache.json via the skill's login script
 api2skill generate ./api.json --auth-config ./auth.json --login
 
-# Or later, inside the skill directory
+# Or later, from the skill directory (shells to `api2skill oauth-capture` when on PATH)
 dotnet run scripts/call.cs -- login user
 ```
 
-`login` starts a local HTTP listener on `callbackUrl` **before** opening the browser, so a fast
-IdP redirect is not missed. The terminal prints `Listening for OAuth callback on …` when the
-listener is ready. Both `localhost` and `127.0.0.1` are accepted on loopback when either host
-appears in `callbackUrl`.
+`api2skill login --skill` and generated `login` both write `.auth-cache.json` in the skill root.
+Capture prefers the tool’s `oauth-capture` command; HTTP loopback can fall back to an in-script
+listener if the tool is missing. HTTPS / custom-scheme / hosted callbacks **require** `api2skill`
+on PATH.
+
+The capture side starts listening **before** the browser opens. Both `localhost` and `127.0.0.1`
+are accepted on loopback when either host appears in `callbackUrl`.
+
+### Callback modes (`oauth-capture` / `login --skill`)
+
+| Mode | Typical `callbackUrl` | Notes |
+|------|------------------------|-------|
+| HTTP loopback | `http://127.0.0.1:8400/callback` | Default; BCL `HttpListener` fallback in skills if tool missing |
+| HTTPS loopback | `https://127.0.0.1:8443/callback` | Needs `--cert` (PFX) or `--cert-pem` + `--cert-key`; non-TTY without cert → exit 2 |
+| Custom scheme | `api2skill://oauth/callback` | Requires **explicit** `api2skill register-protocol` (never silent) |
+| Hosted relay | relay `/v1/callback` | `--mode hosted` or non-loopback HTTPS matching relay host; `--relay-base` / `API2SKILL_OAUTH_RELAY_BASE` |
+
+```bash
+api2skill oauth-capture --callback-url http://127.0.0.1:8400/callback --json
+api2skill oauth-capture --callback-url https://127.0.0.1:8443/callback --cert ./dev.pfx --cert-password pass --json
+api2skill register-protocol   # once per machine for api2skill://
+api2skill oauth-capture --callback-url 'api2skill://oauth/callback' --json
+api2skill unregister-protocol
+```
+
+#### HTTPS loopback login (step-by-step)
+
+1. Register an **HTTPS** redirect URI on the IdP that matches `callbackUrl` exactly, e.g. `https://127.0.0.1:8443/callback`.
+2. Set that URL in `auth.json` → `callbackUrl`.
+3. Create (and trust) a local certificate:
+
+```bash
+dotnet dev-certs https \
+  -ep ./dev.pfx \
+  -p pass \
+  --trust
+```
+
+4. Login with the cert flags (HTTPS **requires** the tool — no in-script HTTPS fallback):
+
+```bash
+api2skill login --skill ./path-to-skill --profile user \
+  --cert ./dev.pfx \
+  --cert-password pass
+```
+
+Or capture only:
+
+```bash
+api2skill oauth-capture \
+  --callback-url https://127.0.0.1:8443/callback \
+  --cert ./dev.pfx \
+  --cert-password pass \
+  --json
+```
+
+PEM alternative: `--cert-pem ./cert.pem --cert-key ./key.pem` instead of `--cert` / `--cert-password`.
+
+See `specs/009-oauth-https-callback/contracts/cli.md` and `quickstart.md` for full flags.
+
+### Exit codes (`oauth-capture` / `login`)
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success |
+| `2` | Usage / validation (missing cert on non-TTY, bad URL, unknown mode) |
+| `4` | Skill/auth/secrets acquisition failure (`login`) |
+| `6` | Capture timeout / hosted unreachable / protocol not registered |
+| `7` | OAuth error on redirect (`error=` query) |
 
 `client_credentials` profiles fetch tokens on demand — they are not valid `login` targets.
 
@@ -399,8 +467,7 @@ By default (`browserLaunch` omitted, or `"auto"`) `login` tries to open the auth
 OS default browser. Set `"browserLaunch": "clipboard"` on an `authorization_code` profile to skip
 launching a browser entirely — `login` instead copies the authorize URL to the system clipboard
 (native OS clipboard tool, no new dependency) and prints it, so you can paste it into whichever
-browser you prefer. The local callback listener behavior (`callbackUrl`, default
-`http://localhost:8400/callback`) is unchanged either way.
+browser you prefer.
 
 ```json
 {
