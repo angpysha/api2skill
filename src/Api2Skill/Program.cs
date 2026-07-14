@@ -6,6 +6,7 @@ var root = new RootCommand("api2skill — convert an OpenAPI/Swagger document in
     GenerateCommand.Create(),
     UpdateCommand.Create(),
     InstallCreatorCommand.Create(),
+    OAuthCaptureCommand.Create(),
 };
 
 return await root.Parse(args).InvokeAsync();

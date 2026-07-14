@@ -44,10 +44,10 @@ Ready work now: `br ready` → claim `.1` (foundation) first. Story children are
 
 **Beads**: `api2skill-009-oauth-capture-ol0.1` (shared with Phase 2)
 
-- [ ] T001 Create `src/Api2Skill/OAuth/` directory and empty namespace files listed in plan.md (`CaptureMode.cs`, `CaptureOptions.cs`, `CaptureResult.cs`, `IRedirectCapture.cs` stubs)
-- [ ] T002 [P] Add colored console helper in `src/Api2Skill/Cli/ConsoleColorWriter.cs` (honor `NO_COLOR`)
-- [ ] T003 [P] Add stub folder `hosting/oauth-relay/README.md` describing deploy intent per `contracts/hosted-relay.md`
-- [ ] T004 [P] Document exit codes 6/7 in a short comment block near new CLI (or `contracts/cli.md` already — verify linked from `wiki/Authentication.md` stub section heading only)
+- [x] T001 Create `src/Api2Skill/OAuth/` directory and empty namespace files listed in plan.md (`CaptureMode.cs`, `CaptureOptions.cs`, `CaptureResult.cs`, `IRedirectCapture.cs` stubs)
+- [x] T002 [P] Add colored console helper in `src/Api2Skill/Cli/ConsoleColorWriter.cs` (honor `NO_COLOR`)
+- [x] T003 [P] Add stub folder `hosting/oauth-relay/README.md` describing deploy intent per `contracts/hosted-relay.md`
+- [x] T004 [P] Document exit codes 6/7 in a short comment block near new CLI (or `contracts/cli.md` already — verify linked from `wiki/Authentication.md` stub section heading only)
 
 ---
 
@@ -61,16 +61,16 @@ Ready work now: `br ready` → claim `.1` (foundation) first. Story children are
 
 ### Tests (write first — must FAIL)
 
-- [ ] T005 [P] Add unit tests for capture mode inference in `tests/Api2Skill.Tests/OAuth/CaptureModeInferenceTests.cs`
-- [ ] T006 [P] Add unit tests for `CaptureResult` JSON round-trip in `tests/Api2Skill.Tests/OAuth/CaptureResultJsonTests.cs`
+- [x] T005 [P] Add unit tests for capture mode inference in `tests/Api2Skill.Tests/OAuth/CaptureModeInferenceTests.cs`
+- [x] T006 [P] Add unit tests for `CaptureResult` JSON round-trip in `tests/Api2Skill.Tests/OAuth/CaptureResultJsonTests.cs`
 
 ### Implementation
 
-- [ ] T007 Implement `CaptureMode`, `CaptureOptions`, `CaptureResult` in `src/Api2Skill/OAuth/` per `data-model.md`
-- [ ] T008 Implement mode inference (`auto`) from callback URL in `src/Api2Skill/OAuth/CaptureModeResolver.cs`
-- [ ] T009 Implement `CertMaterial` load (PFX + PEM/key) and TTY password prompt in `src/Api2Skill/OAuth/CertMaterial.cs` using `ConsoleColorWriter`
-- [ ] T010 Implement `OAuthCaptureCommand` skeleton (parse flags per `contracts/cli.md`, return exit 2 on validation) in `src/Api2Skill/Cli/OAuthCaptureCommand.cs`
-- [ ] T011 Register `oauth-capture` on root command in `src/Api2Skill/Program.cs`
+- [x] T007 Implement `CaptureMode`, `CaptureOptions`, `CaptureResult` in `src/Api2Skill/OAuth/` per `data-model.md`
+- [x] T008 Implement mode inference (`auto`) from callback URL in `src/Api2Skill/OAuth/CaptureModeResolver.cs`
+- [x] T009 Implement `CertMaterial` load (PFX + PEM/key) and TTY password prompt in `src/Api2Skill/OAuth/CertMaterial.cs` using `ConsoleColorWriter`
+- [x] T010 Implement `OAuthCaptureCommand` skeleton (parse flags per `contracts/cli.md`, return exit 2 on validation) in `src/Api2Skill/Cli/OAuthCaptureCommand.cs`
+- [x] T011 Register `oauth-capture` on root command in `src/Api2Skill/Program.cs`
 
 **Checkpoint**: `dotnet test` compiles; mode/JSON tests green; `oauth-capture --help` works; HTTPS without cert on non-TTY fails validation (may soft-stub until US2)
 
@@ -86,14 +86,14 @@ Ready work now: `br ready` → claim `.1` (foundation) first. Story children are
 
 ### Tests (FAIL first)
 
-- [ ] T012 [P] [US1] Add HTTP loopback capture tests in `tests/Api2Skill.Tests/OAuth/LoopbackHttpCaptureTests.cs`
-- [ ] T013 [P] [US1] Add CLI integration test invoking `oauth-capture` HTTP path in `tests/Api2Skill.Tests/Cli/OAuthCaptureHttpCliTests.cs`
+- [x] T012 [P] [US1] Add HTTP loopback capture tests in `tests/Api2Skill.Tests/OAuth/LoopbackHttpCaptureTests.cs`
+- [x] T013 [P] [US1] Add CLI integration test invoking `oauth-capture` HTTP path in `tests/Api2Skill.Tests/Cli/OAuthCaptureHttpCliTests.cs`
 
 ### Implementation
 
-- [ ] T014 [US1] Implement `LoopbackHttpCapture` in `src/Api2Skill/OAuth/LoopbackHttpCapture.cs` (dual localhost/127.0.0.1 prefixes; ignore favicon; start listen before return)
-- [ ] T015 [US1] Wire HTTP mode into `OAuthCaptureCommand` in `src/Api2Skill/Cli/OAuthCaptureCommand.cs` (stdout JSON per `contracts/oauth-capture.md`)
-- [ ] T016 [US1] Map capture timeout / IdP `error=` to exit codes 6/7 in `src/Api2Skill/Cli/OAuthCaptureCommand.cs`
+- [x] T014 [US1] Implement `LoopbackHttpCapture` in `src/Api2Skill/OAuth/LoopbackHttpCapture.cs` (dual localhost/127.0.0.1 prefixes; ignore favicon; start listen before return)
+- [x] T015 [US1] Wire HTTP mode into `OAuthCaptureCommand` in `src/Api2Skill/Cli/OAuthCaptureCommand.cs` (stdout JSON per `contracts/oauth-capture.md`)
+- [x] T016 [US1] Map capture timeout / IdP `error=` to exit codes 6/7 in `src/Api2Skill/Cli/OAuthCaptureCommand.cs`
 
 **Checkpoint**: Scenario A passes; MVP capturable over HTTP
 

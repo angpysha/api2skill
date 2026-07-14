@@ -393,6 +393,20 @@ IdP redirect is not missed. The terminal prints `Listening for OAuth callback on
 listener is ready. Both `localhost` and `127.0.0.1` are accepted on loopback when either host
 appears in `callbackUrl`.
 
+### App-owned capture (`oauth-capture`) — exit codes
+
+Redirect capture is moving into the **api2skill** tool (`oauth-capture`, `login --skill`).
+See `specs/009-oauth-https-callback/contracts/cli.md` for flags and exit codes:
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success |
+| `2` | Usage / validation (missing cert on non-TTY, bad URL, unknown mode) |
+| `6` | Capture timeout / hosted unreachable / protocol not registered |
+| `7` | OAuth error on redirect (`error=` query) |
+
+Full multi-mode docs (HTTPS, custom schemes, hosted relay) land with feature 009.
+
 `client_credentials` profiles fetch tokens on demand — they are not valid `login` targets.
 
 By default (`browserLaunch` omitted, or `"auto"`) `login` tries to open the authorize URL in the

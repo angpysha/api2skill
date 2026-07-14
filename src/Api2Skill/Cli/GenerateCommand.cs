@@ -9,7 +9,7 @@ using Api2Skill.Parsing;
 
 namespace Api2Skill.Cli;
 
-/// <summary>Exit codes per contracts/cli.md.</summary>
+/// <summary>Exit codes per contracts/cli.md (generate 0–5; oauth-capture/login add 6–7).</summary>
 public static class ExitCodes
 {
     public const int Success = 0;
@@ -18,6 +18,12 @@ public static class ExitCodes
     public const int OutputExists = 3;
     public const int AcquisitionFailure = 4;
     public const int AuthConfigError = 5;
+
+    /// <summary>Capture timeout / hosted unreachable / protocol not registered (<c>oauth-capture</c>).</summary>
+    public const int CaptureTimeout = 6;
+
+    /// <summary>OAuth error returned on redirect (<c>error=</c> query).</summary>
+    public const int OAuthRedirectError = 7;
 }
 
 /// <summary>
