@@ -6,7 +6,7 @@
 
 **Updated**: 2026-07-14
 
-**Status**: Grill complete — ready for `/speckit.plan`
+**Status**: Planned — see [plan.md](./plan.md); next `/speckit.tasks`
 
 **Input**: Capture OAuth redirects in the **api2skill app** (not HTTPS-listener-only). Must support:
 
