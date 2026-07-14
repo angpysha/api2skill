@@ -6,7 +6,7 @@
 
 **Updated**: 2026-07-14
 
-**Status**: Draft — grill in progress
+**Status**: Grill complete — ready for `/speckit.plan`
 
 **Input**: Capture OAuth redirects in the **api2skill app** (not HTTPS-listener-only). Must support:
 
@@ -27,6 +27,7 @@
 | HTTPS cert / trust | **Tool parameter** for cert path (when IdP/browser requires a trusted cert). If missing when HTTPS bind needs it, **prompt the user** (interactive). Use **colored CLI output** so the trust/prompt is impossible to miss |
 | Non-loopback / any address | **B — hosted capture URL in v1** (Postman-style analogue); complements local HTTP/HTTPS + schemes |
 | Skill ↔ app handoff | **C** — both: `api2skill login --skill …` for humans; thin `api2skill oauth-capture` (name TBD in plan) for scripts / generated skill; skill may shell out then continue token/cache |
+| Custom scheme registration | **C — explicit only**: `api2skill register-protocol` (and unregister if planned); no silent install/first-login registration |
 
 ## Background
 
@@ -68,9 +69,7 @@ User registers the **app-provided hosted** HTTPS Callback URL (or a custom URL) 
 
 ### Edge Cases
 
-- Scheme registered but different version of tool installed — **[NEEDS CLARIFICATION]**
-- HTTPS without cert param and non-interactive session → fail with clear colored error (do not hang)
-- User’s own non-loopback HTTPS without relay — fail with docs pointing to hosted URL, loopback, or scheme
+- Scheme used before `register-protocol` — clear colored error telling user to run register
 - Hosted page unavailable / timeout — clear colored error; no hang
 
 ## Requirements

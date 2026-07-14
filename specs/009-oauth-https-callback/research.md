@@ -48,3 +48,4 @@ Generated skill should **call** app capture, not reimplement HTTPS TLS.
 | How non-loopback arbitrary HTTPS is received | **B — hosted capture URL in v1** (Postman-style); plus loopback HTTP/HTTPS + schemes | 2026-07-14 |
 | HTTPS cert strategy | **Tool parameter** for cert; if required for trust and missing → **prompt user**; **colored** CLI for visibility; fail fast if non-TTY and unset | 2026-07-14 |
 | Skill ↔ app handoff command shape | **C** — `api2skill login --skill …` + thin `oauth-capture` for skill/scripts | 2026-07-14 |
+| `api2skill://` OS registration | **C — explicit only** via `api2skill register-protocol`; no silent install/first-login | 2026-07-14 |
