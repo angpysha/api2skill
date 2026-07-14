@@ -15,7 +15,7 @@ open System.Threading.Tasks
 type ParamSpec = { Name: string; Location: string }
 type OperationSpec = { Method: string; PathTemplate: string; Parameters: ParamSpec list; HasBody: bool; BodyContentType: string option; SecuritySchemeIds: string list; AuthProfileNames: string list }
 type SchemeSpec = { Id: string; Kind: string; ApiKeyName: string option; ApiKeyLocation: string option; OAuthTokenUrl: string option }
-type TokenResponse = { AccessToken: string; RefreshToken: string option; ExpiresIn: int }
+type TokenResponse = { AccessToken: string; RefreshToken: string option; ExpiresIn: int; IdToken: string option }
 
 exception AuthResolutionException of string
 
@@ -385,13 +385,22 @@ let postTokenRequestAsync (http: HttpClient) (profile: JsonElement) (tokenUrl: s
             try
                 use doc = JsonDocument.Parse(text)
                 let root = doc.RootElement
-                match root.TryGetProperty("access_token") with
-                | true, atEl when atEl.GetString() <> null ->
-                    let accessToken = atEl.GetString()
-                    let refreshToken = match root.TryGetProperty("refresh_token") with | true, rtEl -> (match rtEl.GetString() with | null -> None | s -> Some s) | false, _ -> None
+                let preferred = match profile.TryGetProperty("tokenField") with | true, tfEl -> (match tfEl.GetString() with | null | "" -> "access_token" | s -> s) | false, _ -> "access_token"
+                let other = if preferred = "id_token" then "access_token" else "id_token"
+                let readField (name: string) = match root.TryGetProperty(name) with | true, el -> (match el.GetString() with | null -> None | s -> Some s) | false, _ -> None
+                let mutable accessToken = readField preferred
+                if accessToken.IsNone then
+                    accessToken <- readField other
+                    match accessToken with
+                    | Some _ -> eprintfn "warning: token response missing '%s'; using '%s' instead." preferred other
+                    | None -> ()
+                match accessToken with
+                | None -> return None
+                | Some tokenValue ->
+                    let refreshToken = readField "refresh_token"
+                    let idToken = readField "id_token"
                     let expiresIn = match root.TryGetProperty("expires_in") with | true, eiEl -> (match eiEl.TryGetInt32() with | true, ei -> ei | false, _ -> 3600) | false, _ -> 3600
-                    return Some { AccessToken = accessToken; RefreshToken = refreshToken; ExpiresIn = expiresIn }
-                | _ -> return None
+                    return Some { AccessToken = tokenValue; RefreshToken = refreshToken; ExpiresIn = expiresIn; IdToken = idToken }
             with :? JsonException ->
                 return None
     }
@@ -451,6 +460,9 @@ let storeTokenInCache (cache: Dictionary<string, JsonElement>) (profileName: str
     obj.["expires_at"] <- JsonValue.Create(DateTimeOffset.UtcNow.AddSeconds(float token.ExpiresIn).ToString("o"))
     (match token.RefreshToken with
      | Some rt -> obj.["refresh_token"] <- JsonValue.Create(rt)
+     | None -> ())
+    (match token.IdToken with
+     | Some idt -> obj.["id_token"] <- JsonValue.Create(idt)
      | None -> ())
     cache.[profileName] <- JsonDocument.Parse(obj.ToJsonString()).RootElement.Clone()
 

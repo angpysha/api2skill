@@ -14,7 +14,7 @@
     <PackageId>api2skill</PackageId>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>api2skill</ToolCommandName>
-    <Version>0.4.3</Version>
+    <Version>0.5.0</Version>
     <Authors>angpysha</Authors>
     <Description>Converts an OpenAPI/Swagger document into a self-contained Claude Agent Skill (SKILL.md + a runnable .cs/.fsx/.csx dispatcher + reference docs + a secrets scaffold) so an existing REST API becomes something Claude can call correctly, with authentication.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -33,6 +33,14 @@
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <!-- Bundled agent skill for `install-creator` (specs/008). CopyToOutputDirectory so
+       AppContext.BaseDirectory resolves at runtime; PackAsTool ships output files. -->
+  <ItemGroup>
+    <Content Include="templates\api2skill-creator\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>

@@ -1,0 +1,20 @@
+{
+  "profiles": [
+    {
+      "name": "entra",
+      "type": "oauth2",
+      "grant": "authorization_code",
+      "preset": "entra",
+      "tenant": "YOUR_TENANT_ID_OR_DOMAIN",
+      "clientId": "{secret:CLIENT_ID}",
+      "callbackUrl": "http://localhost:8400/callback",
+      "browserLaunch": "clipboard",
+      "scopes": [
+        "openid",
+        "profile",
+        "offline_access"
+      ],
+      "attach": { "scope": "global" }
+    }
+  ]
+}

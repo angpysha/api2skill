@@ -45,6 +45,8 @@ public sealed class AuthProfileDto
     public string? ClientSecret { get; set; }
     public OAuthRequestExtrasDto? AuthorizeRequest { get; set; }
     public OAuthRequestExtrasDto? TokenRequest { get; set; }
+    /// <summary>JSON property from the token response to use as Bearer (<c>access_token</c> or <c>id_token</c>).</summary>
+    public string? TokenField { get; set; }
 }
 
 public sealed class AttachDto

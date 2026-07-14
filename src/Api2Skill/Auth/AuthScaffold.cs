@@ -136,7 +136,8 @@ public static class AuthScaffold
                 ClientId: $"{{secret:{scheme.Id}_CLIENT_ID}}",
                 ClientSecret: $"{{secret:{scheme.Id}_CLIENT_SECRET}}",
                 AuthorizeRequest: OAuthRequestExtras.Empty,
-                TokenRequest: OAuthRequestExtras.Empty)),
+                TokenRequest: OAuthRequestExtras.Empty,
+                TokenField: "access_token")),
         _ => null,
     };
 

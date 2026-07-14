@@ -57,7 +57,7 @@ public class DispatcherOAuthTokenLifecycleTests : IAsyncLifetime
                     Scopes: ["offline_access"], CallbackUrl: "http://localhost:18400/callback",
                     BrowserLaunch: "auto",
                     ClientAuth: ClientAuthMethod.Body, ClientId: "{secret:CLIENT_ID}", ClientSecret: null,
-                    AuthorizeRequest: OAuthRequestExtras.Empty, TokenRequest: OAuthRequestExtras.Empty)),
+                    AuthorizeRequest: OAuthRequestExtras.Empty, TokenRequest: OAuthRequestExtras.Empty, TokenField: "access_token")),
         ]);
 
         await using var stream = new MemoryStream(await File.ReadAllBytesAsync(

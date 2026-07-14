@@ -61,6 +61,10 @@ api2skill update ./skills/my-petstore   # re-fetch original spec source
 
 # Rename or relocate while updating (secrets.json, auth.json, .auth-cache.json move with it)
 api2skill update ./skills/my-petstore ./petstore-v2.json --name petstore-prod --out ./apis/petstore
+
+# Install the creator skill so an agent can interview you and build generate/update commands
+api2skill install-creator                          # TTY: pick Cursor / Claude / Copilot / Agentic
+api2skill install-creator --target .cursor/skills --force
 ```
 
 Then, inside the generated skill directory:
@@ -96,6 +100,15 @@ api2skill generate ./api.json --auth-config ./auth.json --login
 [wiki/Authentication.md](wiki/Authentication.md) for profile types, Entra preset, and script
 auth examples.
 
+## Install creator skill
+
+`api2skill install-creator` copies a bundled helper skill into project agent skill roots so
+an agent can ask about OpenAPI path, `--out`, `--name`, `--script`, `--auth` /
+`--auth-config`, `--login`, `callbackUrl`, `--force`, and `--insecure`, then emit exact CLI
+commands. Supported roots (exactly four): `.cursor/skills/`, `.claude/skills/`,
+`.github/skills/`, `.agents/skills/`. Non-TTY runs require `--target`. Details:
+[wiki/Install-Creator.md](wiki/Install-Creator.md).
+
 ## Project layout
 
 ```
@@ -108,6 +121,6 @@ specs/               feature specs (Spec Kit)
 ## Status
 
 MVP complete: three script emitters (`cs`/`fsx`/`csx`), explicit auth (`bearer`, `basic`,
-`custom`, `script`, OAuth2/Entra), `generate` and `update` commands, filtering, and atomic
-output staging. See [specs/001-openapi-to-skill/spec.md](specs/001-openapi-to-skill/spec.md)
-for milestone scope.
+`custom`, `script`, OAuth2/Entra), `generate` / `update` / `install-creator` commands,
+filtering, and atomic output staging. See
+[specs/001-openapi-to-skill/spec.md](specs/001-openapi-to-skill/spec.md) for milestone scope.

@@ -647,7 +647,7 @@ public sealed class CsxEmitter : IScriptEmitter
         sb.AppendLine("}");
         sb.AppendLine();
 
-        sb.AppendLine("async Task<(string AccessToken, string? RefreshToken, int ExpiresIn)?> PostTokenRequestAsync(HttpClient http, JsonElement profile, string tokenUrl, string clientId, Dictionary<string, string> form, JsonElement? secrets)");
+        sb.AppendLine("async Task<(string AccessToken, string? RefreshToken, int ExpiresIn, string? IdToken)?> PostTokenRequestAsync(HttpClient http, JsonElement profile, string tokenUrl, string clientId, Dictionary<string, string> form, JsonElement? secrets)");
         sb.AppendLine("{");
         sb.AppendLine("    var clientAuth = GetProp(profile, \"clientAuth\");");
         sb.AppendLine("    var clientSecretRaw = profile.TryGetProperty(\"clientSecret\", out var csEl) ? csEl.GetString() : null;");
@@ -685,10 +685,23 @@ public sealed class CsxEmitter : IScriptEmitter
         sb.AppendLine("    {");
         sb.AppendLine("        using var doc = JsonDocument.Parse(text);");
         sb.AppendLine("        var root = doc.RootElement;");
-        sb.AppendLine("        if (!root.TryGetProperty(\"access_token\", out var atEl) || atEl.GetString() is not { } accessToken) return null;");
-        sb.AppendLine("        var refreshToken = root.TryGetProperty(\"refresh_token\", out var rtEl) ? rtEl.GetString() : null;");
+        sb.AppendLine("        var preferred = profile.TryGetProperty(\"tokenField\", out var tfEl) && tfEl.GetString() is { Length: > 0 } tf ? tf : \"access_token\";");
+        sb.AppendLine("        var other = preferred == \"id_token\" ? \"access_token\" : \"id_token\";");
+        sb.AppendLine("        string? ReadField(string name) => root.TryGetProperty(name, out var el) ? el.GetString() : null;");
+        sb.AppendLine("        var accessToken = ReadField(preferred);");
+        sb.AppendLine("        if (accessToken is null)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            accessToken = ReadField(other);");
+        sb.AppendLine("            if (accessToken is not null)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                Console.Error.WriteLine($\"warning: token response missing '{preferred}'; using '{other}' instead.\");");
+        sb.AppendLine("            }");
+        sb.AppendLine("        }");
+        sb.AppendLine("        if (accessToken is null) return null;");
+        sb.AppendLine("        var refreshToken = ReadField(\"refresh_token\");");
+        sb.AppendLine("        var idToken = ReadField(\"id_token\");");
         sb.AppendLine("        var expiresIn = root.TryGetProperty(\"expires_in\", out var eiEl) && eiEl.TryGetInt32(out var ei) ? ei : 3600;");
-        sb.AppendLine("        return (accessToken, refreshToken, expiresIn);");
+        sb.AppendLine("        return (accessToken, refreshToken, expiresIn, idToken);");
         sb.AppendLine("    }");
         sb.AppendLine("    catch (JsonException)");
         sb.AppendLine("    {");
@@ -697,15 +710,15 @@ public sealed class CsxEmitter : IScriptEmitter
         sb.AppendLine("}");
         sb.AppendLine();
 
-        sb.AppendLine("Task<(string AccessToken, string? RefreshToken, int ExpiresIn)?> ExchangeCodeForTokenAsync(HttpClient http, JsonElement profile, string tokenUrl, string clientId, string code, string verifier, string callbackUrl, JsonElement? secrets) =>");
+        sb.AppendLine("Task<(string AccessToken, string? RefreshToken, int ExpiresIn, string? IdToken)?> ExchangeCodeForTokenAsync(HttpClient http, JsonElement profile, string tokenUrl, string clientId, string code, string verifier, string callbackUrl, JsonElement? secrets) =>");
         sb.AppendLine("    PostTokenRequestAsync(http, profile, tokenUrl, clientId, new Dictionary<string, string> { [\"grant_type\"] = \"authorization_code\", [\"code\"] = code, [\"redirect_uri\"] = callbackUrl, [\"code_verifier\"] = verifier, [\"client_id\"] = clientId }, secrets);");
         sb.AppendLine();
 
-        sb.AppendLine("Task<(string AccessToken, string? RefreshToken, int ExpiresIn)?> FetchClientCredentialsTokenAsync(HttpClient http, JsonElement profile, string tokenUrl, string clientId, JsonElement? secrets) =>");
+        sb.AppendLine("Task<(string AccessToken, string? RefreshToken, int ExpiresIn, string? IdToken)?> FetchClientCredentialsTokenAsync(HttpClient http, JsonElement profile, string tokenUrl, string clientId, JsonElement? secrets) =>");
         sb.AppendLine("    PostTokenRequestAsync(http, profile, tokenUrl, clientId, new Dictionary<string, string> { [\"grant_type\"] = \"client_credentials\", [\"client_id\"] = clientId }, secrets);");
         sb.AppendLine();
 
-        sb.AppendLine("Task<(string AccessToken, string? RefreshToken, int ExpiresIn)?> RefreshOAuthTokenAsync(HttpClient http, JsonElement profile, string tokenUrl, string clientId, string refreshToken, JsonElement? secrets) =>");
+        sb.AppendLine("Task<(string AccessToken, string? RefreshToken, int ExpiresIn, string? IdToken)?> RefreshOAuthTokenAsync(HttpClient http, JsonElement profile, string tokenUrl, string clientId, string refreshToken, JsonElement? secrets) =>");
         sb.AppendLine("    PostTokenRequestAsync(http, profile, tokenUrl, clientId, new Dictionary<string, string> { [\"grant_type\"] = \"refresh_token\", [\"refresh_token\"] = refreshToken, [\"client_id\"] = clientId }, secrets);");
         sb.AppendLine();
 
@@ -740,10 +753,11 @@ public sealed class CsxEmitter : IScriptEmitter
         sb.AppendLine("}");
         sb.AppendLine();
 
-        sb.AppendLine("void StoreTokenInCache(Dictionary<string, JsonElement> cache, string profileName, (string AccessToken, string? RefreshToken, int ExpiresIn) token)");
+        sb.AppendLine("void StoreTokenInCache(Dictionary<string, JsonElement> cache, string profileName, (string AccessToken, string? RefreshToken, int ExpiresIn, string? IdToken) token)");
         sb.AppendLine("{");
         sb.AppendLine("    var obj = new JsonObject { [\"access_token\"] = token.AccessToken, [\"expires_at\"] = DateTimeOffset.UtcNow.AddSeconds(token.ExpiresIn).ToString(\"o\") };");
         sb.AppendLine("    if (token.RefreshToken is not null) obj[\"refresh_token\"] = token.RefreshToken;");
+        sb.AppendLine("    if (token.IdToken is not null) obj[\"id_token\"] = token.IdToken;");
         sb.AppendLine("    cache[profileName] = JsonDocument.Parse(obj.ToJsonString()).RootElement.Clone();");
         sb.AppendLine("}");
         sb.AppendLine();

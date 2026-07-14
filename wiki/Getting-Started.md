@@ -66,4 +66,5 @@ Claude reads `SKILL.md` and can invoke operations through the dispatcher.
 
 - [Generate Command](Generate-Command.md) — filtering, custom name/path, `--force`
 - [Update Command](Update-Command.md) — refresh when the spec changes
+- [Install Creator](Install-Creator.md) — install `api2skill-creator` into agent skill roots
 - [Authentication](Authentication.md) — bearer, basic, custom, OAuth2/Entra, script auth

@@ -1,0 +1,5 @@
+auth.json
+secrets.json
+skill/
+.auth-cache.json
+.auth-cache.json.lock

@@ -342,6 +342,42 @@ exchange and refresh. `tokenRequest.body` fields are merged alongside the standa
 - `clientAuth: "body"` (default) sends `client_id` (and `client_secret` when set) in the form;
   use `"basic"` only when the provider expects `Authorization: Basic …` instead.
 
+#### Choosing Bearer from `access_token` vs `id_token`
+
+Some IdPs (for example Azure AD B2C transitional APIs) expect the **ID token** as
+`Authorization: Bearer …` instead of the access token. Set optional `tokenField` on an
+`oauth2` profile:
+
+| `tokenField` | Behavior |
+|--------------|----------|
+| omitted / `"access_token"` (default) | Use the response `access_token` as Bearer |
+| `"id_token"` | Use the response `id_token` as Bearer |
+
+Only the exact keys `access_token` and `id_token` are allowed. On non-`oauth2` profiles,
+`tokenField` is rejected at generation time.
+
+If the configured field is missing but the other token is present, the dispatcher **warns on
+stderr** and uses the other. If neither is present, the exchange fails as today.
+
+`.auth-cache.json` always stores the **selected** Bearer value under `access_token`. When the
+IdP response includes `id_token`, that raw value is also stored under `id_token`. Expiry uses
+response `expires_in` when present, otherwise **3600** — JWT `exp` is not parsed in this
+version (a follow-up if id_token lifetime diverges from `expires_in`).
+
+```json
+{
+  "name": "b2c",
+  "type": "oauth2",
+  "grant": "authorization_code",
+  "authUrl": "https://auth.example.com/authorize",
+  "tokenUrl": "https://auth.example.com/token",
+  "callbackUrl": "http://localhost:8400/callback",
+  "clientId": "{secret:CLIENT_ID}",
+  "scopes": ["openid", "offline_access"],
+  "tokenField": "id_token"
+}
+```
+
 ### Interactive login
 
 ```bash

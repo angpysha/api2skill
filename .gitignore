@@ -8,3 +8,10 @@ TestResults/
 # local indexes (regeneratable)
 .codesearch.db/
 graphify-out/
+
+# Live Entra OAuth debug session (credentials / generated skill / token cache)
+debug/entra-oauth/auth.json
+debug/entra-oauth/secrets.json
+debug/entra-oauth/skill/
+debug/entra-oauth/.auth-cache.json
+debug/entra-oauth/.auth-cache.json.lock
