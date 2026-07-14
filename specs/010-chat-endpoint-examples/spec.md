@@ -6,7 +6,7 @@
 
 **Updated**: 2026-07-14
 
-**Status**: Grill complete — ready for `/speckit.plan`
+**Status**: Planned — see [plan.md](./plan.md); next `/speckit.tasks`
 
 **Input**: Allow humans and chat agents to add **request/response examples** for endpoints into a generated skill so LLMs use real payloads when calling/testing APIs — not invented JSON.
 
