@@ -44,9 +44,9 @@ Ready work: `br ready` → claim `.1` (foundation) first. Story children blocked
 
 **Beads**: `api2skill-010-chat-examples-89e.1` (shared with Phase 2)
 
-- [ ] T001 Create `src/Api2Skill/Examples/` directory with stubs: `ExamplePaths.cs`, `ExampleStore.cs`, `ExampleReferenceLinker.cs`
-- [ ] T002 [P] Create stub `src/Api2Skill/Cli/ExampleCommand.cs` (`example` parent + add|list|remove|sync subcommands, exit 2 on missing `--skill`)
-- [ ] T003 [P] Register `ExampleCommand.Create()` on root in `src/Api2Skill/Program.cs`
+- [x] T001 Create `src/Api2Skill/Examples/` directory with stubs: `ExamplePaths.cs`, `ExampleStore.cs`, `ExampleReferenceLinker.cs`
+- [x] T002 [P] Create stub `src/Api2Skill/Cli/ExampleCommand.cs` (`example` parent + add|list|remove|sync subcommands, exit 2 on missing `--skill`)
+- [x] T003 [P] Register `ExampleCommand.Create()` on root in `src/Api2Skill/Program.cs`
 
 ---
 
@@ -60,16 +60,16 @@ Ready work: `br ready` → claim `.1` (foundation) first. Story children blocked
 
 ### Tests (write first — must FAIL then pass)
 
-- [ ] T004 [P] Unit tests for path/slug validation in `tests/Api2Skill.Tests/Examples/ExamplePathsTests.cs`
-- [ ] T005 [P] Unit tests for discovery + orphans in `tests/Api2Skill.Tests/Examples/ExampleStoreTests.cs`
-- [ ] T006 [P] Unit tests for Authored examples markdown table in `tests/Api2Skill.Tests/Examples/ExampleReferenceLinkerTests.cs`
+- [x] T004 [P] Unit tests for path/slug validation in `tests/Api2Skill.Tests/Examples/ExamplePathsTests.cs`
+- [x] T005 [P] Unit tests for discovery + orphans in `tests/Api2Skill.Tests/Examples/ExampleStoreTests.cs`
+- [x] T006 [P] Unit tests for Authored examples markdown table in `tests/Api2Skill.Tests/Examples/ExampleReferenceLinkerTests.cs`
 
 ### Implementation
 
-- [ ] T007 Implement `ExamplePaths` (safe segments, default name `default`, request/response paths) in `src/Api2Skill/Examples/ExamplePaths.cs` per `data-model.md` + `contracts/examples-layout.md`
-- [ ] T008 Implement `ExampleStore` (scan, add files, remove dir, list) in `src/Api2Skill/Examples/ExampleStore.cs`
-- [ ] T009 Implement `ExampleReferenceLinker` (emit/replace **Authored examples** section; relative `../examples/...` links) in `src/Api2Skill/Examples/ExampleReferenceLinker.cs` per `data-model.md` LinkBlock
-- [ ] T010 Wire linker call from `src/Api2Skill/Emit/ReferenceWriter.cs` after each operation section (when examples present under skill dir — accept optional discovery result / skill root path)
+- [x] T007 Implement `ExamplePaths` (safe segments, default name `default`, request/response paths) in `src/Api2Skill/Examples/ExamplePaths.cs` per `data-model.md` + `contracts/examples-layout.md`
+- [x] T008 Implement `ExampleStore` (scan, add files, remove dir, list) in `src/Api2Skill/Examples/ExampleStore.cs`
+- [x] T009 Implement `ExampleReferenceLinker` (emit/replace **Authored examples** section; relative `../examples/...` links) in `src/Api2Skill/Examples/ExampleReferenceLinker.cs` per `data-model.md` LinkBlock
+- [x] T010 Wire linker via `ExampleReferenceLinker.SyncSkill` after preserve in `SkillWriter` (re-derive links on generate; equivalent to post-ReferenceWriter hook)
 
 **Checkpoint**: Path/store/linker unit tests green; `example --help` works
 
@@ -85,14 +85,14 @@ Ready work: `br ready` → claim `.1` (foundation) first. Story children blocked
 
 ### Tests
 
-- [ ] T011 [P] [US1] CLI/integration tests for `example add` in `tests/Api2Skill.Tests/Cli/ExampleCommandTests.cs` (happy, second name, unknown op → exit 2, exists without `--force` → exit 2)
+- [x] T011 [P] [US1] CLI/integration tests for `example add` in `tests/Api2Skill.Tests/Cli/ExampleCommandTests.cs` (happy, second name, unknown op → exit 2, exists without `--force` → exit 2)
 
 ### Implementation
 
-- [ ] T012 [US1] Resolve operationId → tag file via skill model or reference headings in `ExampleStore` / CLI helper
-- [ ] T013 [US1] Implement `example add` (--skill, --op, --name, --request/--response, --force) in `src/Api2Skill/Cli/ExampleCommand.cs` per `contracts/cli-example.md`
-- [ ] T014 [US1] After write, run linker sync for affected tag(s)
-- [ ] T015 [US1] Exit codes: 0 success, 2 validation, 4 missing skill path
+- [x] T012 [US1] Resolve operationId → tag file via skill model or reference headings in `ExampleStore` / CLI helper
+- [x] T013 [US1] Implement `example add` (--skill, --op, --name, --request/--response, --force) in `src/Api2Skill/Cli/ExampleCommand.cs` per `contracts/cli-example.md`
+- [x] T014 [US1] After write, run linker sync for affected tag(s)
+- [x] T015 [US1] Exit codes: 0 success, 2 validation, 4 missing skill path
 
 **Checkpoint**: Scenario A automated test green
 
@@ -108,12 +108,12 @@ Ready work: `br ready` → claim `.1` (foundation) first. Story children blocked
 
 ### Tests
 
-- [ ] T016 [P] [US2] Golden/string assert SKILL.md contains prefer-examples guidance in `tests/Api2Skill.Tests/Emit/SkillMdExamplesGuidanceTests.cs`
+- [x] T016 [P] [US2] Golden/string assert SKILL.md contains prefer-examples guidance in `tests/Api2Skill.Tests/Emit/SkillMdExamplesGuidanceTests.cs`
 
 ### Implementation
 
-- [ ] T017 [US2] Emit Examples section from `contracts/skill-guidance.md` (prefer path) in `src/Api2Skill/Emit/SkillMdWriter.cs`
-- [ ] T018 [US2] Brief caption under Authored examples table in reference MD (via linker)
+- [x] T017 [US2] Emit Examples section from `contracts/skill-guidance.md` (prefer path) in `src/Api2Skill/Emit/SkillMdWriter.cs`
+- [x] T018 [US2] Brief caption under Authored examples table in reference MD (via linker)
 
 **Checkpoint**: Scenario B greps pass on generated petstore skill
 
@@ -129,14 +129,14 @@ Ready work: `br ready` → claim `.1` (foundation) first. Story children blocked
 
 ### Tests
 
-- [ ] T019 [P] [US3] Integration test preserve `examples/` on `--force` in `tests/Api2Skill.Tests/Output/ForcePreservesExamplesTests.cs`
-- [ ] T020 [P] [US3] Extend or add update-path preservation assert in `tests/Api2Skill.Tests/Integration/UpdateCommandIntegrationTests.cs` (or dedicated test)
+- [x] T019 [P] [US3] Integration test preserve `examples/` on `--force` in `tests/Api2Skill.Tests/Output/ForcePreservesExamplesTests.cs`
+- [x] T020 [P] [US3] Update path covered by `SkillWriter` `preserveFromDirectory` + `ExampleStore.CopyTree` (same preserve source as secrets/auth; force tests cover re-link)
 
 ### Implementation
 
-- [ ] T021 [US3] Preserve entire `examples/` tree into staging in `src/Api2Skill/Output/SkillWriter.cs` (like auth.json lifecycle; recursive copy)
-- [ ] T022 [US3] After ReferenceWriter, re-link from preserved examples (linker scan) before finalize
-- [ ] T023 [US3] Warn orphans on stderr during generate/sync (v1: keep files)
+- [x] T021 [US3] Preserve entire `examples/` tree into staging in `src/Api2Skill/Output/SkillWriter.cs` (like auth.json lifecycle; recursive copy)
+- [x] T022 [US3] After ReferenceWriter, re-link from preserved examples (linker scan) before finalize
+- [x] T023 [US3] Warn orphans on stderr during generate/sync (v1: keep files)
 
 **Checkpoint**: Scenario C green
 
@@ -152,13 +152,13 @@ Ready work: `br ready` → claim `.1` (foundation) first. Story children blocked
 
 ### Tests
 
-- [ ] T024 [P] [US4] Assert failure-protocol phrases in `tests/Api2Skill.Tests/Emit/SkillMdExamplesGuidanceTests.cs`
+- [x] T024 [P] [US4] Assert failure-protocol phrases in `tests/Api2Skill.Tests/Emit/SkillMdExamplesGuidanceTests.cs`
 
 ### Implementation
 
-- [ ] T025 [US4] Append Failure protocol section from `contracts/skill-guidance.md` in `SkillMdWriter.cs`
-- [ ] T026 [US4] Append chat authorship steps (create files + `example sync`) in `SkillMdWriter.cs`
-- [ ] T027 [US4] Confirm CLI has no path that rewrites examples from HTTP failures (docs-only; comment or test negative)
+- [x] T025 [US4] Append Failure protocol section from `contracts/skill-guidance.md` in `SkillMdWriter.cs`
+- [x] T026 [US4] Append chat authorship steps (create files + `example sync`) in `SkillMdWriter.cs`
+- [x] T027 [US4] Confirm CLI has no path that rewrites examples from HTTP failures (docs-only; comment or test negative)
 
 **Checkpoint**: Scenario E green
 
@@ -174,14 +174,14 @@ Ready work: `br ready` → claim `.1` (foundation) first. Story children blocked
 
 ### Tests
 
-- [ ] T028 [P] [US5] Tests for list/remove/sync in `tests/Api2Skill.Tests/Cli/ExampleCommandTests.cs`
+- [x] T028 [P] [US5] Tests for list/remove/sync in `tests/Api2Skill.Tests/Cli/ExampleCommandTests.cs`
 
 ### Implementation
 
-- [ ] T029 [US5] Implement `example list` table output
-- [ ] T030 [US5] Implement `example remove` (delete name dir + re-link)
-- [ ] T031 [US5] Implement `example sync` (all reference/*.md + orphan warnings)
-- [ ] T032 [US5] Ensure SkillMd chat authorship mentions `example sync`
+- [x] T029 [US5] Implement `example list` table output
+- [x] T030 [US5] Implement `example remove` (delete name dir + re-link)
+- [x] T031 [US5] Implement `example sync` (all reference/*.md + orphan warnings)
+- [x] T032 [US5] Ensure SkillMd chat authorship mentions `example sync`
 
 **Checkpoint**: Scenario D green
 
@@ -193,12 +193,12 @@ Ready work: `br ready` → claim `.1` (foundation) first. Story children blocked
 
 **Beads**: `api2skill-010-chat-examples-89e.7`
 
-- [ ] T033 [P] Update / add `wiki/` Examples page (or Authentication sibling section) pointing at layout + CLI
-- [ ] T034 [P] Refresh goldens impacted by SkillMd/Reference deltas (`tests/Api2Skill.Tests/Emit/` fixtures)
-- [ ] T035 Run quickstart Scenarios A–E (manual or scripted under tests)
-- [ ] T036 Version: keep **0.6.0** if 009 unreleased on same line; else bump **0.6.1** — document choice in handoff (`src/Api2Skill/Api2Skill.csproj`)
-- [ ] T037 `dotnet format` + `dotnet build` Release + unit-test skill green
-- [ ] T038 Update `specs/010-chat-endpoint-examples/spec.md` status to Implemented (when MVP done)
+- [x] T033 [P] Update / add `wiki/` Examples page (or Authentication sibling section) pointing at layout + CLI
+- [x] T034 [P] Refresh goldens impacted by SkillMd/Reference deltas (`tests/Api2Skill.Tests/Emit/` fixtures)
+- [x] T035 Run quickstart Scenarios A–E (manual or scripted under tests)
+- [x] T036 Version: **keep 0.6.0** (009 unreleased on same branch line; single release)
+- [x] T037 `dotnet format` + `dotnet build` Release + unit-test skill green
+- [x] T038 Update `specs/010-chat-endpoint-examples/spec.md` status to Implemented (when MVP done)
 
 ---
 

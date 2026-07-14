@@ -13,6 +13,7 @@ existing REST API becomes something Claude can call correctly, with authenticati
 | [Update Command](Update-Command.md) | Refresh a skill from a new spec via `.api2skill.json` |
 | [Install Creator](Install-Creator.md) | Install `api2skill-creator` into Cursor / Claude / Copilot / Agentic roots |
 | [Authentication](Authentication.md) | `auth.json`, `--auth`, OAuth2/Entra, script auth |
+| [Examples](Examples.md) | Authored request/response examples (`example` CLI) |
 | [Releasing](Releasing.md) | Version bumps, tags, package release notes |
 | [How to Read These Docs](README.md) | Browse on GitHub or locally — no separate wiki repo |
 

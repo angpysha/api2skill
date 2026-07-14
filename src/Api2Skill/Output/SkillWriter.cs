@@ -1,4 +1,5 @@
 using Api2Skill.Emit;
+using Api2Skill.Examples;
 using Api2Skill.Model;
 
 namespace Api2Skill.Output;
@@ -21,11 +22,11 @@ public sealed class SkillDirectoryExistsException(string path)
 /// incomplete directory in its place.
 ///
 /// <c>--force</c> also preserves an existing <c>auth.json</c> (unless this run supplies a new
-/// one via <c>--auth</c>/<c>--auth-config</c>) and always preserves <c>.auth-cache.json</c>
-/// (+ its lock file), since that cache holds live OAuth sessions (contracts/cli.md). The
-/// <c>.api2skill.json</c> generation manifest (specs/003-skill-update-command) is always
-/// (re)written when supplied — it has no preservation logic, since it should always reflect the
-/// most recent invocation.
+/// one via <c>--auth</c>/<c>--auth-config</c>), the entire <c>examples/</c> tree (specs/010),
+/// and always preserves <c>.auth-cache.json</c> (+ its lock file), since that cache holds live
+/// OAuth sessions (contracts/cli.md). The <c>.api2skill.json</c> generation manifest
+/// (specs/003-skill-update-command) is always (re)written when supplied — it has no preservation
+/// logic, since it should always reflect the most recent invocation.
 ///
 /// <c>preserveFromDirectory</c> (specs/004-skill-rename-move-on-update) lets a caller preserve
 /// credential/cache files from a directory other than <paramref name="outputDirectory"/> —
@@ -134,6 +135,23 @@ public static class SkillWriter
                 // Always overwritten (unlike auth.json) — the manifest should always reflect
                 // the most recent invocation's options (spec.md FR-007).
                 File.WriteAllText(Path.Combine(stagingDir.FullName, SkillManifestIo.FileName), manifestJson);
+            }
+
+            // FR-003: preserve authored examples/ then re-link into regenerated reference MD.
+            if (preserveSourceDir.Exists)
+            {
+                ExampleStore.CopyTree(preserveSourceDir.FullName, stagingDir.FullName);
+            }
+
+            var knownOps = model.Tags
+                .SelectMany(t => t.Operations)
+                .Select(o => o.OperationId)
+                .ToHashSet(StringComparer.Ordinal);
+            var orphans = ExampleReferenceLinker.SyncSkill(stagingDir.FullName, knownOps);
+            foreach (var orphan in orphans)
+            {
+                Console.Error.WriteLine(
+                    $"Warning: orphan example operationId '{orphan}' is not in the current skill (preserved under examples/).");
             }
 
             if (targetDir.Exists)

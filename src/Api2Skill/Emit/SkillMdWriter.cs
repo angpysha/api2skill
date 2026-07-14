@@ -134,6 +134,8 @@ public static class SkillMdWriter
         sb.AppendLine("```");
         sb.AppendLine();
 
+        WriteAuthoredExamplesGuidance(sb);
+
         sb.AppendLine("## Operations");
         sb.AppendLine();
         foreach (var tag in model.Tags)
@@ -168,6 +170,42 @@ public static class SkillMdWriter
         }
 
         File.WriteAllText(Path.Combine(skillDirectory.FullName, "SKILL.md"), sb.ToString());
+    }
+
+    /// <summary>
+    /// Prefer authored examples + fail→ask→propose→await-approval + chat authorship
+    /// (contracts/skill-guidance.md, FR-006/FR-007).
+    /// </summary>
+    private static void WriteAuthoredExamplesGuidance(StringBuilder sb)
+    {
+        sb.AppendLine("## Authored examples");
+        sb.AppendLine();
+        sb.AppendLine("Optional request/response payloads live under `examples/<operationId>/<name>/` (`request.json` and/or `response.json`). Tag markdown in `reference/` links them. Skills ship with **no** examples until you add them.");
+        sb.AppendLine();
+        sb.AppendLine("### Prefer authored examples");
+        sb.AppendLine();
+        sb.AppendLine("When calling or testing an operation:");
+        sb.AppendLine();
+        sb.AppendLine("1. Look under `examples/<operationId>/` for named examples.");
+        sb.AppendLine("2. If one name → use its `request.json` as `--body` (or equivalent).");
+        sb.AppendLine("3. If several → ask the user which `name` to use (or pick `default` if present and the user did not specify).");
+        sb.AppendLine("4. Do **not** invent a JSON body when an authored request example exists, unless the user explicitly overrides.");
+        sb.AppendLine();
+        sb.AppendLine("### Failure protocol (mandatory)");
+        sb.AppendLine();
+        sb.AppendLine("If a call that used an authored example fails (non-success HTTP, auth error, unexpected body):");
+        sb.AppendLine();
+        sb.AppendLine("1. **Ask** the user whether the example should be updated.");
+        sb.AppendLine("2. Optionally **propose** a concrete patch to `request.json` / `response.json` and/or a contract (OpenAPI / auth) change.");
+        sb.AppendLine("3. **Do not apply** any write to examples or contracts until the user **explicitly approves**.");
+        sb.AppendLine("4. Never “fix forward” by silently overwriting examples.");
+        sb.AppendLine();
+        sb.AppendLine("### Adding examples (chat or CLI)");
+        sb.AppendLine();
+        sb.AppendLine("1. Create `examples/<operationId>/<name>/request.json` and/or `response.json` (secret-free payloads only).");
+        sb.AppendLine("2. Run `api2skill example sync --skill .` (or `api2skill example add --skill . --op <operationId> --name <name> --request …`).");
+        sb.AppendLine("3. Confirm `reference/<tag>.md` lists the example under **Authored examples**.");
+        sb.AppendLine();
     }
 
     private static string Describe(SkillModel model)

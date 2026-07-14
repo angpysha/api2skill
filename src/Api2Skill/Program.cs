@@ -19,6 +19,7 @@ var root = new RootCommand("api2skill — convert an OpenAPI/Swagger document in
     InstallCreatorCommand.Create(),
     OAuthCaptureCommand.Create(),
     LoginCommand.Create(),
+    ExampleCommand.Create(),
     RegisterProtocolCommand.CreateRegister(),
     RegisterProtocolCommand.CreateUnregister(),
 };
