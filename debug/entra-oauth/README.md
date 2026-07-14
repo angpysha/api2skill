@@ -54,7 +54,18 @@ dotnet run --project src/Api2Skill -- \
   --force
 ```
 
-## 4. Run login — what to watch
+## 4. Run login — HTTP callback
+
+Preferred (tool-owned, any mode):
+
+```bash
+dotnet run --project src/Api2Skill -- \
+  login \
+  --skill debug/entra-oauth/skill \
+  --profile entra
+```
+
+Or via the skill script (shells to `oauth-capture` when `api2skill` is on PATH):
 
 ```bash
 dotnet run debug/entra-oauth/skill/scripts/call.cs -- login entra
@@ -62,13 +73,42 @@ dotnet run debug/entra-oauth/skill/scripts/call.cs -- login entra
 
 **Expected sequence:**
 
-1. Terminal: `Listening for OAuth callback on http://localhost:8400/callback ...`
-2. Browser opens (or URL printed — open it manually)
+1. Tool/script listens for the redirect matching `callbackUrl` (default example: `http://localhost:8400/callback`)
+2. Browser opens or authorize URL is copied (`browserLaunch: clipboard`)
 3. Sign in with your Entra user
-4. Browser redirects to `http://localhost:8400/callback?code=...&state=...`
-5. Browser shows: *Login complete — you can close this window…*
-6. Terminal: `Login succeeded for profile 'entra'.`
+4. Browser redirects to the callback with `?code=...&state=...`
+5. Browser shows success / you can close the window
+6. Terminal: login succeeded
 7. File created: `debug/entra-oauth/skill/.auth-cache.json`
+
+Keep Entra **Redirect URI** identical to `auth.json` → `callbackUrl` (including path and trailing slash).
+
+## 4b. Run login — HTTPS callback
+
+1. Register e.g. `https://127.0.0.1:8443/callback` in Entra (Mobile and desktop applications).
+2. Set `"callbackUrl": "https://127.0.0.1:8443/callback"` in `debug/entra-oauth/auth.json`.
+3. Regenerate the skill (section 3).
+4. Create and trust a local PFX:
+
+```bash
+dotnet dev-certs https \
+  -ep ./debug/entra-oauth/dev.pfx \
+  -p pass \
+  --trust
+```
+
+5. Login with cert flags (HTTPS **requires** the tool):
+
+```bash
+dotnet run --project src/Api2Skill -- \
+  login \
+  --skill debug/entra-oauth/skill \
+  --profile entra \
+  --cert ./debug/entra-oauth/dev.pfx \
+  --cert-password pass
+```
+
+Do **not** commit `dev.pfx`, `auth.json`, `secrets.json`, or `.auth-cache.json`.
 
 ## 5. Capture evidence when it fails
 

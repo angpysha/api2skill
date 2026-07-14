@@ -416,6 +416,39 @@ api2skill oauth-capture --callback-url 'api2skill://oauth/callback' --json
 api2skill unregister-protocol
 ```
 
+#### HTTPS loopback login (step-by-step)
+
+1. Register an **HTTPS** redirect URI on the IdP that matches `callbackUrl` exactly, e.g. `https://127.0.0.1:8443/callback`.
+2. Set that URL in `auth.json` → `callbackUrl`.
+3. Create (and trust) a local certificate:
+
+```bash
+dotnet dev-certs https \
+  -ep ./dev.pfx \
+  -p pass \
+  --trust
+```
+
+4. Login with the cert flags (HTTPS **requires** the tool — no in-script HTTPS fallback):
+
+```bash
+api2skill login --skill ./path-to-skill --profile user \
+  --cert ./dev.pfx \
+  --cert-password pass
+```
+
+Or capture only:
+
+```bash
+api2skill oauth-capture \
+  --callback-url https://127.0.0.1:8443/callback \
+  --cert ./dev.pfx \
+  --cert-password pass \
+  --json
+```
+
+PEM alternative: `--cert-pem ./cert.pem --cert-key ./key.pem` instead of `--cert` / `--cert-password`.
+
 See `specs/009-oauth-https-callback/contracts/cli.md` and `quickstart.md` for full flags.
 
 ### Exit codes (`oauth-capture` / `login`)

@@ -8,11 +8,15 @@ Access to Petstore orders
 
 Returns pet inventories by status
 
+**Request body**: none
+
 **Auth**: `api_key`
 
 **Responses**
 
-- `200`: successful operation
+### `200`: successful operation
+
+- Body: none documented in the OpenAPI response
 
 ---
 

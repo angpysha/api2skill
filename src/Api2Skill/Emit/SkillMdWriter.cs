@@ -105,10 +105,24 @@ public static class SkillMdWriter
             {
                 sb.AppendLine("### OAuth login");
                 sb.AppendLine();
-                sb.AppendLine("- Preferred: `api2skill login --skill . --profile <name>` (writes `.auth-cache.json`).");
-                sb.AppendLine("- Or: generated dispatcher `login <name>` (shells to `api2skill oauth-capture` when available).");
-                sb.AppendLine("- Custom scheme callbacks (`api2skill://…`): run `api2skill register-protocol` once first.");
-                sb.AppendLine("- Non-loopback HTTPS callbacks: use hosted relay (`API2SKILL_OAUTH_RELAY_BASE` / `--relay-base`); see wiki Authentication.");
+                sb.AppendLine("Interactive login writes `.auth-cache.json` in this skill directory. Prefer the tool (any callback mode):");
+                sb.AppendLine();
+                sb.AppendLine("```bash");
+                sb.AppendLine("api2skill login --skill . --profile <name>");
+                sb.AppendLine("```");
+                sb.AppendLine();
+                sb.AppendLine("Or: `dotnet run scripts/call.cs -- login <name>` (shells to `api2skill oauth-capture` when on PATH).");
+                sb.AppendLine();
+                sb.AppendLine("**Callback URL** comes from `auth.json` → `callbackUrl` and must match the IdP redirect URI exactly.");
+                sb.AppendLine();
+                sb.AppendLine("| Mode | `callbackUrl` example | How to login |");
+                sb.AppendLine("|---|---|---|");
+                sb.AppendLine("| HTTP loopback | `http://localhost:8400/callback` | `api2skill login --skill . --profile <name>` (HTTP can fall back in-script if tool missing) |");
+                sb.AppendLine("| HTTPS loopback | `https://127.0.0.1:8443/callback` | Create a PFX (`dotnet dev-certs https -ep ./dev.pfx -p pass --trust`), then `api2skill login --skill . --profile <name> --cert ./dev.pfx --cert-password pass` (HTTPS **requires** the tool) |");
+                sb.AppendLine("| Custom scheme | `api2skill://oauth/callback` | Run `api2skill register-protocol` once, then login as usual |");
+                sb.AppendLine("| Hosted relay | non-loopback HTTPS relay URL | Set `API2SKILL_OAUTH_RELAY_BASE` / `--relay-base`; see wiki Authentication |");
+                sb.AppendLine();
+                sb.AppendLine("Thin capture only: `api2skill oauth-capture --callback-url <url> --json` (add `--cert` / PEM flags for HTTPS).");
                 sb.AppendLine();
             }
         }
@@ -182,7 +196,7 @@ public static class SkillMdWriter
         AuthType.Basic => "Set `username`/`password` in `secrets.json`; sent as `Authorization: Basic ...`.",
         AuthType.Custom => $"Sends {profile.Custom!.Headers.Count} header(s): {string.Join(", ", profile.Custom.Headers.Select(h => h.Name))}. Set the referenced values in `secrets.json`.",
         AuthType.Script => $"Runs the user-provided local command `{profile.Script!.Command}` on every call; its trimmed stdout becomes the `{profile.Script.Header}` header{(profile.Script.BearerPrefix ? " (`Bearer ` added when absent)" : "")}.",
-        AuthType.OAuth2 => "OAuth2 profile (see `auth.json`). Interactive login: `api2skill login --skill . --profile <name>`, or `dotnet run scripts/call.cs -- login <name>` (shells to `api2skill oauth-capture`).",
+        AuthType.OAuth2 => "OAuth2 (`auth.json`). Login: `api2skill login --skill . --profile <name>` (HTTPS needs `--cert`); or `dotnet run scripts/call.cs -- login <name>`.",
         _ => string.Empty,
     };
 }
