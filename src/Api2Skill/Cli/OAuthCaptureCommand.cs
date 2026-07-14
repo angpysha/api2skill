@@ -112,6 +112,7 @@ public static class OAuthCaptureCommand
         TextWriter? stdout = null,
         TextWriter? stderr = null,
         IRedirectCapture? httpCapture = null,
+        IRedirectCapture? httpsCapture = null,
         IRedirectCapture? hostedCapture = null,
         IRedirectCapture? schemeCapture = null,
         Func<string, bool>? isProtocolRegistered = null,
@@ -170,7 +171,7 @@ public static class OAuthCaptureCommand
             return ExitCodes.UsageError;
         }
 
-        
+
         // First-party custom scheme requires explicit register-protocol (FR-009 / Scenario C).
         if (resolvedMode == CaptureMode.CustomScheme
             && ProtocolRegistration.IsFirstPartyScheme(callbackUri.Scheme))
@@ -187,13 +188,12 @@ public static class OAuthCaptureCommand
             }
         }
 
-// Soft-stub until US2/US3 (parallel tracks) — Hosted is implemented in US4.
+        CertMaterial? httpsCert = null;
         if (resolvedMode == CaptureMode.HttpsLoopback)
         {
-
             try
             {
-                _ = CertMaterial.Load(
+                httpsCert = CertMaterial.Load(
                     certPath, certPassword, certPemPath, certKeyPath, isInteractive, stderr);
             }
             catch (InvalidOperationException ex)
@@ -201,11 +201,6 @@ public static class OAuthCaptureCommand
                 ConsoleColorWriter.WriteError(ex.Message, stderr);
                 return ExitCodes.UsageError;
             }
-
-            ConsoleColorWriter.WriteError(
-                "HTTPS loopback listen is not implemented in this build yet (US2).",
-                stderr);
-            return ExitCodes.UsageError;
         }
 
         var options = new CaptureOptions(
@@ -231,6 +226,7 @@ public static class OAuthCaptureCommand
         IRedirectCapture capture = resolvedMode switch
         {
             CaptureMode.Hosted => hostedCapture ?? new HostedRelayCapture(progress: stderr),
+            CaptureMode.HttpsLoopback => httpsCapture ?? new LoopbackHttpsCapture(httpsCert!.Certificate),
             CaptureMode.CustomScheme => schemeCapture ?? new CustomSchemeCapture(),
             _ => httpCapture ?? new LoopbackHttpCapture(),
         };
@@ -244,6 +240,10 @@ public static class OAuthCaptureCommand
         {
             ConsoleColorWriter.WriteError(ex.Message, stderr);
             return ExitCodes.UsageError;
+        }
+        finally
+        {
+            httpsCert?.Certificate.Dispose();
         }
 
         if (json)

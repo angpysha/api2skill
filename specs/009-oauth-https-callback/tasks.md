@@ -109,15 +109,15 @@ Ready work now: `br ready` → claim `.1` (foundation) first. Story children are
 
 ### Tests (FAIL first)
 
-- [ ] T017 [P] [US2] Add HTTPS cert validation / non-TTY fail tests in `tests/Api2Skill.Tests/OAuth/CertMaterialTests.cs`
-- [ ] T018 [P] [US2] Add HTTPS loopback capture tests (test cert) in `tests/Api2Skill.Tests/OAuth/LoopbackHttpsCaptureTests.cs`
+- [x] T017 [P] [US2] Add HTTPS cert validation / non-TTY fail tests in `tests/Api2Skill.Tests/OAuth/CertMaterialTests.cs`
+- [x] T018 [P] [US2] Add HTTPS loopback capture tests (test cert) in `tests/Api2Skill.Tests/OAuth/LoopbackHttpsCaptureTests.cs`
 
 ### Implementation
 
-- [ ] T019 [US2] Add app-only HTTPS hosting dependency if needed in `src/Api2Skill/Api2Skill.csproj` (Kestrel/minimal hosting — **not** emitted to skills)
-- [ ] T020 [US2] Implement `LoopbackHttpsCapture` in `src/Api2Skill/OAuth/LoopbackHttpsCapture.cs`
-- [ ] T021 [US2] Wire `--cert`, `--cert-password`, `--cert-pem`, `--cert-key` + colored prompt into `OAuthCaptureCommand` in `src/Api2Skill/Cli/OAuthCaptureCommand.cs`
-- [ ] T022 [US2] Ensure non-TTY missing cert fails fast (exit 2) with red stderr in `src/Api2Skill/Cli/OAuthCaptureCommand.cs`
+- [x] T019 [US2] Add app-only HTTPS hosting dependency if needed in `src/Api2Skill/Api2Skill.csproj` (Kestrel/minimal hosting — **not** emitted to skills)
+- [x] T020 [US2] Implement `LoopbackHttpsCapture` in `src/Api2Skill/OAuth/LoopbackHttpsCapture.cs`
+- [x] T021 [US2] Wire `--cert`, `--cert-password`, `--cert-pem`, `--cert-key` + colored prompt into `OAuthCaptureCommand` in `src/Api2Skill/Cli/OAuthCaptureCommand.cs`
+- [x] T022 [US2] Ensure non-TTY missing cert fails fast (exit 2) with red stderr in `src/Api2Skill/Cli/OAuthCaptureCommand.cs`
 
 **Checkpoint**: Scenario B passes
 

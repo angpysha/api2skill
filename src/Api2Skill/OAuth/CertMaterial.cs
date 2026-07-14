@@ -101,8 +101,10 @@ public sealed class CertMaterial
                 throw new InvalidOperationException($"Certificate key not found: {certKeyPath}");
             }
 
-            var cert = X509Certificate2.CreateFromPemFile(certPemPath, certKeyPath);
-            // CreateFromPemFile may return ephemeral; for listen we need exportable ephemeral is usually ok on Kestrel
+            using var pemCert = X509Certificate2.CreateFromPemFile(certPemPath, certKeyPath);
+            // Re-import via PKCS#12 so Kestrel can use the private key across platforms.
+            var pfxBytes = pemCert.Export(X509ContentType.Pfx);
+            var cert = X509CertificateLoader.LoadPkcs12(pfxBytes, password: null);
             return new CertMaterial(CertKind.Pem, cert);
         }
 
