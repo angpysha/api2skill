@@ -26,6 +26,7 @@
 | HTTP / HTTPS | Required (must work for `http://…` and `https://…` redirect URIs) |
 | HTTPS cert / trust | **Tool parameter** for cert path (when IdP/browser requires a trusted cert). If missing when HTTPS bind needs it, **prompt the user** (interactive). Use **colored CLI output** so the trust/prompt is impossible to miss |
 | Non-loopback / any address | **B — hosted capture URL in v1** (Postman-style analogue); complements local HTTP/HTTPS + schemes |
+| Skill ↔ app handoff | **C** — both: `api2skill login --skill …` for humans; thin `api2skill oauth-capture` (name TBD in plan) for scripts / generated skill; skill may shell out then continue token/cache |
 
 ## Background
 
@@ -81,6 +82,7 @@ User registers the **app-provided hosted** HTTPS Callback URL (or a custom URL) 
 - **FR-005**: Capture logic MUST live in the **api2skill app**; skill/`login` calls into it then continues token exchange + cache.
 - **FR-006**: For local HTTPS, the app MUST accept a **tool parameter** for TLS certificate material (path and/or related options — exact flag names in plan). If HTTPS capture requires a trusted cert and the parameter is unset, the app MUST **ask the user interactively** (TTY). Prompts and trust-related warnings MUST use **colored output** so they stand out. Non-TTY / CI without the parameter MUST fail fast with an explicit error (no silent hang).
 - **FR-007**: v1 MUST ship a **hosted HTTPS capture URL** (Postman-style) that users can register at the IdP. After redirect, the capture result MUST hand off into the local api2skill app / skill token + cache flow. Privacy/timeout/abuse constraints are documented in plan/wiki. Exact host/path and infra — plan stage (may be temporary staging URL until permanent domain).
+- **FR-008**: App MUST expose both (1) a user-facing `api2skill login --skill …` (profile/options TBD in plan) that owns end-to-end login where appropriate, and (2) a thin capture command (e.g. `api2skill oauth-capture`) for scripts and generated skill shells; capture handoff MUST feed token exchange + `.auth-cache.json` without duplicating capture logic in the skill.
 
 ## Success Criteria
 
@@ -91,6 +93,6 @@ User registers the **app-provided hosted** HTTPS Callback URL (or a custom URL) 
 ## Open questions (remaining grill)
 
 1. ~~HTTPS cert~~ → locked (FR-006).
-2. ~~Hosted capture~~ → locked **B** (FR-007). Hosting vendor / domain / privacy model → plan (or ask if human wants to pin now).
-3. **Handoff CLI**: `api2skill login --skill …` vs skill shells out to `api2skill oauth-capture`?
+2. ~~Hosted capture~~ → locked **B** (FR-007).
+3. ~~Handoff CLI~~ → locked **C** (FR-008): `login` + thin `oauth-capture`.
 4. **Registration** of `api2skill://` on install vs first login vs explicit `api2skill register-protocol`?
