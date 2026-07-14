@@ -97,7 +97,7 @@ dotnet dev-certs https \
   --trust
 ```
 
-5. Login with cert flags (HTTPS **requires** the tool):
+5. Login with cert flags (HTTPS **requires** the tool — no in-script HTTPS fallback):
 
 ```bash
 dotnet run --project src/Api2Skill -- \
@@ -106,6 +106,20 @@ dotnet run --project src/Api2Skill -- \
   --profile entra \
   --cert ./debug/entra-oauth/dev.pfx \
   --cert-password pass
+```
+
+PEM alternative (same login / `oauth-capture`): `--cert-pem ./cert.pem --cert-key ./key.pem`
+instead of `--cert` / `--cert-password`.
+
+Capture only:
+
+```bash
+dotnet run --project src/Api2Skill -- \
+  oauth-capture \
+  --callback-url https://127.0.0.1:8443/callback \
+  --cert ./debug/entra-oauth/dev.pfx \
+  --cert-password pass \
+  --json
 ```
 
 Do **not** commit `dev.pfx`, `auth.json`, `secrets.json`, or `.auth-cache.json`.

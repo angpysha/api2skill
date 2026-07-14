@@ -7,7 +7,8 @@ Maps to Spec 009 success criteria. Run from repo root after `dotnet build`.
 - .NET 10 SDK; `api2skill` built or `dotnet run --project src/Api2Skill`
 - Sample skill with oauth2 `authorization_code` profile (e.g. `debug/entra-oauth` playbook **without
   committing secrets**)
-- For HTTPS loopback: a local PFX (or PEM+key), e.g. `dotnet dev-certs https -ep ./dev.pfx -p pass`
+- For HTTPS loopback: create and trust a local PFX (or use PEM+key):
+  `dotnet dev-certs https -ep ./dev.pfx -p pass --trust`
 - Optional: stub relay (`hosting/oauth-relay` or test stub)
 
 Alias for examples:
@@ -33,7 +34,12 @@ $A2S login --skill ./path-to-skill --profile <oauth-profile>
 
 ## Scenario B — HTTPS loopback + cert param (SC-001 / FR-006)
 
+Set skill `auth.json` → `callbackUrl` to `https://127.0.0.1:8443/callback` (match IdP redirect URI).
+HTTPS **requires** the tool (no in-script HTTPS fallback).
+
 ```bash
+dotnet dev-certs https -ep ./dev.pfx -p pass --trust
+
 $A2S oauth-capture \
   --callback-url https://127.0.0.1:8443/callback \
   --cert ./dev.pfx --cert-password pass \
@@ -41,6 +47,15 @@ $A2S oauth-capture \
 ```
 
 **Expect**: listener starts; browser redirect (trusting cert) yields JSON success.
+
+Full login:
+
+```bash
+$A2S login --skill ./path-to-skill --profile <oauth-profile> \
+  --cert ./dev.pfx --cert-password pass
+```
+
+PEM alternative: `--cert-pem ./cert.pem --cert-key ./key.pem` instead of `--cert` / `--cert-password`.
 
 Non-TTY without `--cert`:
 

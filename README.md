@@ -97,8 +97,8 @@ api2skill generate ./api.json --auth-config ./auth.json --login
 ```
 
 `--auth` and `--auth-config` are mutually exclusive. See
-[wiki/Authentication.md](wiki/Authentication.md) for profile types, Entra preset, and script
-auth examples.
+[wiki/Authentication.md](wiki/Authentication.md) for profile types, Entra preset, script auth,
+and **HTTPS loopback** login (`dotnet dev-certs`, `--cert` / PEM flags).
 
 ## Install creator skill
 
