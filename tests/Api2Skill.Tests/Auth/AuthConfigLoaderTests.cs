@@ -219,6 +219,88 @@ public class AuthConfigLoaderTests
     }
 
     [Fact]
+    public void Parse_OAuth2_DefaultsTokenFieldToAccessToken()
+    {
+        var config = AuthConfigLoader.Parse("""
+            { "profiles": [
+              { "name": "aad", "type": "oauth2", "authUrl": "https://example.com/authorize",
+                "tokenUrl": "https://example.com/token", "clientId": "{secret:CID}" }
+            ] }
+            """);
+
+        Assert.Equal("access_token", config.Profiles[0].OAuth!.TokenField);
+    }
+
+    [Fact]
+    public void Parse_OAuth2_AcceptsIdTokenField()
+    {
+        var config = AuthConfigLoader.Parse("""
+            { "profiles": [
+              { "name": "aad", "type": "oauth2", "authUrl": "https://example.com/authorize",
+                "tokenUrl": "https://example.com/token", "clientId": "{secret:CID}",
+                "tokenField": "id_token" }
+            ] }
+            """);
+
+        Assert.Equal("id_token", config.Profiles[0].OAuth!.TokenField);
+    }
+
+    [Fact]
+    public void Parse_OAuth2_UnknownTokenField_ThrowsAuthConfigException()
+    {
+        var ex = Assert.Throws<AuthConfigException>(() => AuthConfigLoader.Parse("""
+            { "profiles": [
+              { "name": "aad", "type": "oauth2", "authUrl": "https://example.com/authorize",
+                "tokenUrl": "https://example.com/token", "clientId": "{secret:CID}",
+                "tokenField": "refresh_token" }
+            ] }
+            """));
+        Assert.Contains("tokenField", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Parse_TokenFieldOnNonOAuthProfile_ThrowsAuthConfigException()
+    {
+        var ex = Assert.Throws<AuthConfigException>(() => AuthConfigLoader.Parse("""
+            { "profiles": [
+              { "name": "x", "type": "bearer", "token": "{secret:T}", "tokenField": "id_token" }
+            ] }
+            """));
+        Assert.Contains("tokenField", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Serialize_OmitsTokenField_WhenAccessToken()
+    {
+        var config = AuthConfigLoader.Parse("""
+            { "profiles": [
+              { "name": "svc", "type": "oauth2", "grant": "client_credentials",
+                "clientId": "{secret:CID}", "tokenUrl": "https://example.com/token" }
+            ] }
+            """);
+
+        var json = AuthConfigLoader.Serialize(config);
+        Assert.DoesNotContain("tokenField", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Serialize_RoundTripsIdTokenField()
+    {
+        var config = AuthConfigLoader.Parse("""
+            { "profiles": [
+              { "name": "aad", "type": "oauth2", "authUrl": "https://example.com/authorize",
+                "tokenUrl": "https://example.com/token", "clientId": "{secret:CID}",
+                "tokenField": "id_token" }
+            ] }
+            """);
+
+        var json = AuthConfigLoader.Serialize(config);
+        Assert.Contains("\"tokenField\": \"id_token\"", json, StringComparison.Ordinal);
+        var reparsed = AuthConfigLoader.Parse(json);
+        Assert.Equal("id_token", reparsed.Profiles[0].OAuth!.TokenField);
+    }
+
+    [Fact]
     public void Serialize_OmitsBrowserLaunch_WhenAuto()
     {
         var config = AuthConfigLoader.Parse("""

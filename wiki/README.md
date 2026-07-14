@@ -45,3 +45,4 @@ authoritative source.
 | [Generate-Command.md](Generate-Command.md) | `generate` reference |
 | [Update-Command.md](Update-Command.md) | `update` reference |
 | [Authentication.md](Authentication.md) | Auth profiles, OAuth, script auth |
+| [Releasing.md](Releasing.md) | Version bumps, tags, release flow |

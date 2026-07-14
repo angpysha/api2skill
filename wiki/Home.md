@@ -11,7 +11,9 @@ existing REST API becomes something Claude can call correctly, with authenticati
 | [Getting Started](Getting-Started.md) | Install, first skill, where to put it |
 | [Generate Command](Generate-Command.md) | Full `generate` reference, filtering, output layout |
 | [Update Command](Update-Command.md) | Refresh a skill from a new spec via `.api2skill.json` |
+| [Install Creator](Install-Creator.md) | Install `api2skill-creator` into Cursor / Claude / Copilot / Agentic roots |
 | [Authentication](Authentication.md) | `auth.json`, `--auth`, OAuth2/Entra, script auth |
+| [Releasing](Releasing.md) | Version bumps, tags, package release notes |
 | [How to Read These Docs](README.md) | Browse on GitHub or locally — no separate wiki repo |
 
 ## Commands at a glance
@@ -22,6 +24,9 @@ api2skill generate ./petstore.json
 
 # Refresh an existing skill (reuses saved options from .api2skill.json)
 api2skill update ./my-petstore ./petstore-v2.json
+
+# Install the api2skill-creator helper skill into project agent roots
+api2skill install-creator
 ```
 
 ## What gets generated

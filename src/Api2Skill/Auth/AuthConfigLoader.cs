@@ -129,6 +129,12 @@ public static class AuthConfigLoader
                 $"Auth profile '{dto.Name}' sets \"browserLaunch\" but is type '{dto.Type}' — browserLaunch only applies to oauth2 profiles.");
         }
 
+        if (dto.TokenField is not null && type != AuthType.OAuth2)
+        {
+            throw new AuthConfigException(
+                $"Auth profile '{dto.Name}' sets \"tokenField\" but is type '{dto.Type}' — tokenField only applies to oauth2 profiles.");
+        }
+
         var attach = MapAttach(dto.Attach, dto.Name!);
 
         return type switch
@@ -275,6 +281,16 @@ public static class AuthConfigLoader
                     $"Auth profile '{dto.Name}' (oauth2) has an unknown browserLaunch '{dto.BrowserLaunch}'. Supported: auto, clipboard."),
             };
 
+        var tokenField = string.IsNullOrWhiteSpace(dto.TokenField)
+            ? "access_token"
+            : dto.TokenField.Trim().ToLowerInvariant() switch
+            {
+                "access_token" => "access_token",
+                "id_token" => "id_token",
+                _ => throw new AuthConfigException(
+                    $"Auth profile '{dto.Name}' (oauth2) has an unknown tokenField '{dto.TokenField}'. Supported: access_token, id_token."),
+            };
+
         return new OAuthSettings(
             Grant: grant,
             Preset: dto.Preset,
@@ -288,7 +304,8 @@ public static class AuthConfigLoader
             ClientId: dto.ClientId,
             ClientSecret: dto.ClientSecret,
             AuthorizeRequest: MapExtras(dto.AuthorizeRequest),
-            TokenRequest: MapExtras(dto.TokenRequest));
+            TokenRequest: MapExtras(dto.TokenRequest),
+            TokenField: tokenField);
     }
 
     private static OAuthRequestExtras MapExtras(OAuthRequestExtrasDto? dto) =>
@@ -359,6 +376,7 @@ public static class AuthConfigLoader
                 dto.ClientAuth = p.OAuth.ClientAuth == ClientAuthMethod.Basic ? "basic" : "body";
                 dto.ClientId = p.OAuth.ClientId;
                 dto.ClientSecret = p.OAuth.ClientSecret;
+                dto.TokenField = p.OAuth.TokenField == "access_token" ? null : p.OAuth.TokenField;
                 dto.AuthorizeRequest = new OAuthRequestExtrasDto
                 {
                     Headers = new Dictionary<string, string>(p.OAuth.AuthorizeRequest.Headers),

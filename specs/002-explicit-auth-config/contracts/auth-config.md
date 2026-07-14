@@ -77,7 +77,8 @@ call** and surfaces stderr. `command` is user-controlled local execution (docume
   "clientId": "{secret:CLIENT_ID}",
   "clientSecret": "{secret:CLIENT_SECRET}", // OPTIONAL (public client / PKCE)
   "authorizeRequest": { "headers": {}, "body": { "prompt": "consent" } },
-  "tokenRequest":     { "headers": {}, "body": {} } }
+  "tokenRequest":     { "headers": {}, "body": {} },
+  "tokenField": "access_token" }            // optional; or "id_token"
 ```
 
 Rules:
@@ -88,6 +89,14 @@ Rules:
 - `clientAuth: body` sends `client_id`/`client_secret` as form fields; `basic` sends
   `Authorization: Basic base64(id:secret)` and omits them from the body.
 - `clientSecret` is optional — omit for public clients (PKCE-only authorization code).
+- `tokenField` (optional) selects which token-response JSON field becomes the Bearer credential:
+  exact keys only — `access_token` (default when omitted) or `id_token`. Applies to every token
+  POST (authorization code exchange, refresh, client credentials). If the preferred field is
+  missing but the other is present, the dispatcher warns on stderr and falls back; if neither is
+  present, the exchange fails. `.auth-cache.json` always stores the selected Bearer under
+  `access_token` and also stores raw `id_token` when the IdP returned it. Expiry uses response
+  `expires_in` when present, else 3600 — **JWT `exp` is not parsed** (v1; revisit if id_token
+  lifetimes diverge). Rejected on non-`oauth2` profiles; unknown values ⇒ generation exit 5.
 - `authorizeRequest.body` — each key/value is merged as an extra **query parameter** on the
   authorize URL at `login` time. `authorizeRequest.headers` is accepted in the schema but has
   **no runtime effect** (browser navigation cannot attach HTTP headers).

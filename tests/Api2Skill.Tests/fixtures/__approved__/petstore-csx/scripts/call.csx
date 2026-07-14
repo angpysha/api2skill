@@ -490,7 +490,7 @@ string BuildAuthorizeUrl(string authUrl, string clientId, string callbackUrl, Li
     return authUrl + sep + string.Join("&", qs);
 }
 
-async Task<(string AccessToken, string? RefreshToken, int ExpiresIn)?> PostTokenRequestAsync(HttpClient http, JsonElement profile, string tokenUrl, string clientId, Dictionary<string, string> form, JsonElement? secrets)
+async Task<(string AccessToken, string? RefreshToken, int ExpiresIn, string? IdToken)?> PostTokenRequestAsync(HttpClient http, JsonElement profile, string tokenUrl, string clientId, Dictionary<string, string> form, JsonElement? secrets)
 {
     var clientAuth = GetProp(profile, "clientAuth");
     var clientSecretRaw = profile.TryGetProperty("clientSecret", out var csEl) ? csEl.GetString() : null;
@@ -528,10 +528,23 @@ async Task<(string AccessToken, string? RefreshToken, int ExpiresIn)?> PostToken
     {
         using var doc = JsonDocument.Parse(text);
         var root = doc.RootElement;
-        if (!root.TryGetProperty("access_token", out var atEl) || atEl.GetString() is not { } accessToken) return null;
-        var refreshToken = root.TryGetProperty("refresh_token", out var rtEl) ? rtEl.GetString() : null;
+        var preferred = profile.TryGetProperty("tokenField", out var tfEl) && tfEl.GetString() is { Length: > 0 } tf ? tf : "access_token";
+        var other = preferred == "id_token" ? "access_token" : "id_token";
+        string? ReadField(string name) => root.TryGetProperty(name, out var el) ? el.GetString() : null;
+        var accessToken = ReadField(preferred);
+        if (accessToken is null)
+        {
+            accessToken = ReadField(other);
+            if (accessToken is not null)
+            {
+                Console.Error.WriteLine($"warning: token response missing '{preferred}'; using '{other}' instead.");
+            }
+        }
+        if (accessToken is null) return null;
+        var refreshToken = ReadField("refresh_token");
+        var idToken = ReadField("id_token");
         var expiresIn = root.TryGetProperty("expires_in", out var eiEl) && eiEl.TryGetInt32(out var ei) ? ei : 3600;
-        return (accessToken, refreshToken, expiresIn);
+        return (accessToken, refreshToken, expiresIn, idToken);
     }
     catch (JsonException)
     {
@@ -539,13 +552,13 @@ async Task<(string AccessToken, string? RefreshToken, int ExpiresIn)?> PostToken
     }
 }
 
-Task<(string AccessToken, string? RefreshToken, int ExpiresIn)?> ExchangeCodeForTokenAsync(HttpClient http, JsonElement profile, string tokenUrl, string clientId, string code, string verifier, string callbackUrl, JsonElement? secrets) =>
+Task<(string AccessToken, string? RefreshToken, int ExpiresIn, string? IdToken)?> ExchangeCodeForTokenAsync(HttpClient http, JsonElement profile, string tokenUrl, string clientId, string code, string verifier, string callbackUrl, JsonElement? secrets) =>
     PostTokenRequestAsync(http, profile, tokenUrl, clientId, new Dictionary<string, string> { ["grant_type"] = "authorization_code", ["code"] = code, ["redirect_uri"] = callbackUrl, ["code_verifier"] = verifier, ["client_id"] = clientId }, secrets);
 
-Task<(string AccessToken, string? RefreshToken, int ExpiresIn)?> FetchClientCredentialsTokenAsync(HttpClient http, JsonElement profile, string tokenUrl, string clientId, JsonElement? secrets) =>
+Task<(string AccessToken, string? RefreshToken, int ExpiresIn, string? IdToken)?> FetchClientCredentialsTokenAsync(HttpClient http, JsonElement profile, string tokenUrl, string clientId, JsonElement? secrets) =>
     PostTokenRequestAsync(http, profile, tokenUrl, clientId, new Dictionary<string, string> { ["grant_type"] = "client_credentials", ["client_id"] = clientId }, secrets);
 
-Task<(string AccessToken, string? RefreshToken, int ExpiresIn)?> RefreshOAuthTokenAsync(HttpClient http, JsonElement profile, string tokenUrl, string clientId, string refreshToken, JsonElement? secrets) =>
+Task<(string AccessToken, string? RefreshToken, int ExpiresIn, string? IdToken)?> RefreshOAuthTokenAsync(HttpClient http, JsonElement profile, string tokenUrl, string clientId, string refreshToken, JsonElement? secrets) =>
     PostTokenRequestAsync(http, profile, tokenUrl, clientId, new Dictionary<string, string> { ["grant_type"] = "refresh_token", ["refresh_token"] = refreshToken, ["client_id"] = clientId }, secrets);
 
 string TokenCachePath(string scriptDir) => Path.Combine(scriptDir, "..", ".auth-cache.json");
@@ -576,10 +589,11 @@ async Task WriteTokenCacheAsync(string path, Dictionary<string, JsonElement> cac
     File.Move(tmpPath, path, overwrite: true);
 }
 
-void StoreTokenInCache(Dictionary<string, JsonElement> cache, string profileName, (string AccessToken, string? RefreshToken, int ExpiresIn) token)
+void StoreTokenInCache(Dictionary<string, JsonElement> cache, string profileName, (string AccessToken, string? RefreshToken, int ExpiresIn, string? IdToken) token)
 {
     var obj = new JsonObject { ["access_token"] = token.AccessToken, ["expires_at"] = DateTimeOffset.UtcNow.AddSeconds(token.ExpiresIn).ToString("o") };
     if (token.RefreshToken is not null) obj["refresh_token"] = token.RefreshToken;
+    if (token.IdToken is not null) obj["id_token"] = token.IdToken;
     cache[profileName] = JsonDocument.Parse(obj.ToJsonString()).RootElement.Clone();
 }
 

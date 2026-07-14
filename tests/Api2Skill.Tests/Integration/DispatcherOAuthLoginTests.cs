@@ -26,6 +26,7 @@ public class DispatcherOAuthLoginTests : IAsyncLifetime
     private int _tokenPort;
     private int _callbackPort;
     private int _clipboardCallbackPort;
+    private int _idTokenCallbackPort;
     private string _skillDir = "";
 
     public async Task InitializeAsync()
@@ -33,6 +34,7 @@ public class DispatcherOAuthLoginTests : IAsyncLifetime
         (_tokenListener, _tokenPort) = LoopbackHttpListenerFactory.Start();
         _callbackPort = GetFreePort();
         _clipboardCallbackPort = GetFreePort();
+        _idTokenCallbackPort = GetFreePort();
         _skillDir = await GenerateSkillAsync();
         await File.WriteAllTextAsync(Path.Combine(_skillDir, "secrets.json"), """{"CLIENT_ID":"public-client-id"}""");
     }
@@ -72,7 +74,8 @@ public class DispatcherOAuthLoginTests : IAsyncLifetime
                     ClientId: "{secret:CLIENT_ID}",
                     ClientSecret: null,
                     AuthorizeRequest: OAuthRequestExtras.Empty,
-                    TokenRequest: OAuthRequestExtras.Empty)),
+                    TokenRequest: OAuthRequestExtras.Empty,
+                    TokenField: "access_token")),
             new AuthProfile("aad-clipboard", AuthType.OAuth2, new Attachment(AttachScope.Tags, ["unused-tag"]), null, null, null, null,
                 new OAuthSettings(
                     Grant: OAuthGrant.AuthorizationCode,
@@ -87,7 +90,24 @@ public class DispatcherOAuthLoginTests : IAsyncLifetime
                     ClientId: "{secret:CLIENT_ID}",
                     ClientSecret: null,
                     AuthorizeRequest: OAuthRequestExtras.Empty,
-                    TokenRequest: OAuthRequestExtras.Empty)),
+                    TokenRequest: OAuthRequestExtras.Empty,
+                    TokenField: "access_token")),
+            new AuthProfile("aad-id-token", AuthType.OAuth2, new Attachment(AttachScope.Tags, ["unused-tag-2"]), null, null, null, null,
+                new OAuthSettings(
+                    Grant: OAuthGrant.AuthorizationCode,
+                    Preset: null,
+                    Tenant: null,
+                    AuthUrl: "https://fake-idp.example.com/authorize",
+                    TokenUrl: $"http://127.0.0.1:{_tokenPort}/token",
+                    Scopes: ["offline_access"],
+                    CallbackUrl: $"http://localhost:{_idTokenCallbackPort}/callback",
+                    BrowserLaunch: "clipboard",
+                    ClientAuth: ClientAuthMethod.Body,
+                    ClientId: "{secret:CLIENT_ID}",
+                    ClientSecret: null,
+                    AuthorizeRequest: OAuthRequestExtras.Empty,
+                    TokenRequest: OAuthRequestExtras.Empty,
+                    TokenField: "id_token")),
         ]);
 
         await using var stream = new MemoryStream(await File.ReadAllBytesAsync(
@@ -200,13 +220,24 @@ public class DispatcherOAuthLoginTests : IAsyncLifetime
         throw new TimeoutException($"Could not reach the callback listener in time.", last);
     }
 
-    private async Task RespondToTokenRequestAsync(string accessToken = "TESTACCESS123", string? refreshToken = "TESTREFRESH456")
+    private async Task RespondToTokenRequestAsync(
+        string accessToken = "TESTACCESS123",
+        string? refreshToken = "TESTREFRESH456",
+        string? idToken = null)
     {
         var context = await _tokenListener.GetContextAsync().WaitAsync(TimeSpan.FromSeconds(30));
-        var body = new Dictionary<string, object?> { ["access_token"] = accessToken, ["expires_in"] = 3600 };
+        var body = new Dictionary<string, object?> { ["expires_in"] = 3600 };
+        if (accessToken is not null)
+        {
+            body["access_token"] = accessToken;
+        }
         if (refreshToken is not null)
         {
             body["refresh_token"] = refreshToken;
+        }
+        if (idToken is not null)
+        {
+            body["id_token"] = idToken;
         }
         var json = JsonSerializer.Serialize(body);
         context.Response.StatusCode = 200;
@@ -397,5 +428,58 @@ public class DispatcherOAuthLoginTests : IAsyncLifetime
         var cachePath = Path.Combine(_skillDir, ".auth-cache.json");
         using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(cachePath));
         Assert.Equal("TESTACCESS123", doc.RootElement.GetProperty("aad-clipboard").GetProperty("access_token").GetString());
+    }
+
+    [Fact]
+    public async Task TokenFieldIdToken_StoresSelectedBearerAndIdTokenSibling()
+    {
+        using var process = StartLogin("aad-id-token");
+        var authorizeUrl = await CaptureAuthorizeUrlAsync(process);
+        var state = ExtractQueryParam(authorizeUrl, "state");
+
+        var tokenTask = RespondToTokenRequestAsync(
+            accessToken: "ACCESS-SHOULD-NOT-BE-BEARER",
+            refreshToken: "REFRESH-ID",
+            idToken: "ID-TOKEN-AS-BEARER");
+        await SendFakeCallbackAsync($"code=ID_TOKEN_CODE&state={Uri.EscapeDataString(state)}", _idTokenCallbackPort);
+        await tokenTask;
+
+        await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        Assert.Equal(0, process.ExitCode);
+
+        var cachePath = Path.Combine(_skillDir, ".auth-cache.json");
+        using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(cachePath));
+        var entry = doc.RootElement.GetProperty("aad-id-token");
+        Assert.Equal("ID-TOKEN-AS-BEARER", entry.GetProperty("access_token").GetString());
+        Assert.Equal("ID-TOKEN-AS-BEARER", entry.GetProperty("id_token").GetString());
+        Assert.Equal("REFRESH-ID", entry.GetProperty("refresh_token").GetString());
+    }
+
+    [Fact]
+    public async Task TokenFieldIdToken_MissingPreferred_FallsBackWithWarning()
+    {
+        using var process = StartLogin("aad-id-token");
+        var authorizeUrl = await CaptureAuthorizeUrlAsync(process);
+        var state = ExtractQueryParam(authorizeUrl, "state");
+
+        var tokenTask = RespondToTokenRequestAsync(
+            accessToken: "FALLBACK-ACCESS",
+            refreshToken: null,
+            idToken: null);
+        await SendFakeCallbackAsync($"code=FALLBACK_CODE&state={Uri.EscapeDataString(state)}", _idTokenCallbackPort);
+        await tokenTask;
+
+        await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        var stderr = await process.StandardError.ReadToEndAsync();
+
+        Assert.Equal(0, process.ExitCode);
+        Assert.Contains("missing 'id_token'", stderr, StringComparison.Ordinal);
+        Assert.Contains("using 'access_token'", stderr, StringComparison.Ordinal);
+
+        var cachePath = Path.Combine(_skillDir, ".auth-cache.json");
+        using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(cachePath));
+        var entry = doc.RootElement.GetProperty("aad-id-token");
+        Assert.Equal("FALLBACK-ACCESS", entry.GetProperty("access_token").GetString());
+        Assert.False(entry.TryGetProperty("id_token", out _));
     }
 }

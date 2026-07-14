@@ -75,6 +75,11 @@ dotnet run ./out/scripts/call.cs -- someOperation # uses cached token, no browse
 - with no usable refresh token, a call **fails** with `run: … -- login aad` and launches no
   browser.
 
+Optional: set `"tokenField": "id_token"` on the oauth2 profile when the API expects the ID token
+as Bearer (see [auth-config.md](./contracts/auth-config.md) and
+[wiki/Authentication.md](../../../wiki/Authentication.md)). Cache still keys the selected Bearer
+under `access_token`.
+
 ## Scenario E — Token from a script (US4 / FR-012)
 
 ```jsonc

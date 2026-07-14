@@ -76,7 +76,8 @@ public sealed record OAuthSettings(
     string ClientId,
     string? ClientSecret,
     OAuthRequestExtras AuthorizeRequest,
-    OAuthRequestExtras TokenRequest);
+    OAuthRequestExtras TokenRequest,
+    string TokenField);
 
 /// <summary>
 /// One named, validated auth profile from <c>auth.json</c> (data-model.md §1). Exactly one of

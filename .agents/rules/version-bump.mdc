@@ -1,0 +1,40 @@
+---
+description: Require NuGet/tool Version bump for user-facing or behavior changes merged to main
+alwaysApply: true
+---
+
+# Package version bump (project-local)
+
+> **Project-local rule.** This file is **not** from the agentic-tool catalog. Catalog
+> guidance says not to hand-edit package-projected `.cursor/rules/` copies; this rule is an
+> intentional **repo-specific** addition. If `agentic-tool apply` removes it, restore from
+> git history (or re-add) — do not drop the requirement.
+
+## When to bump
+
+Any PR that merges **user-facing** or **behavior** changes to `main` **MUST** bump
+`<Version>` in `src/Api2Skill/Api2Skill.csproj`.
+
+- **Default:** patch (`X.Y.Z` → `X.Y.Z+1`).
+- **Minor / major:** only when a human explicitly asks.
+
+Agents must bump **proactively** whenever the change qualifies — **do not wait** to be told.
+
+## When not to bump
+
+Skip the version bump for:
+
+- Docs-only commits (e.g. `wiki/` only, README-only, comment-only)
+- Debug-folder-only commits (e.g. `debug/**` scaffolds, local OAuth fixtures)
+
+## How to ship the bump
+
+Include either:
+
+1. A short commit: `chore(release): bump package version to X.Y.Z`, or
+2. The bump in the **same** feature PR as the behavior change
+
+## Tags
+
+Do **not** create or push git tags unless a human explicitly requests it. Tagging / publishing
+flow is documented in `wiki/Releasing.md`.

@@ -33,7 +33,7 @@ public class DispatcherOAuthClientCredentialsTests : IAsyncLifetime
                     TokenUrl: $"http://127.0.0.1:{_tokenPort}/token", Scopes: [],
                     CallbackUrl: "http://localhost:18401/callback", BrowserLaunch: "auto", ClientAuth: ClientAuthMethod.Body,
                     ClientId: "{secret:CLIENT_ID}", ClientSecret: "{secret:CLIENT_SECRET}",
-                    AuthorizeRequest: OAuthRequestExtras.Empty, TokenRequest: OAuthRequestExtras.Empty)),
+                    AuthorizeRequest: OAuthRequestExtras.Empty, TokenRequest: OAuthRequestExtras.Empty, TokenField: "access_token")),
         ]);
 
         await using var stream = new MemoryStream(await File.ReadAllBytesAsync(
