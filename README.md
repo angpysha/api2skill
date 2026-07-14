@@ -25,7 +25,8 @@ Claude can use it immediately.
 
 **Full documentation:** [wiki/Home.md](wiki/Home.md) — getting started, CLI reference,
 authentication, and [Mermaid diagrams](wiki/Generate-Command.md). Docs live in this repo under
-`wiki/`; see [wiki/README.md](wiki/README.md) for how to browse them.
+`wiki/`; see [wiki/README.md](wiki/README.md) for how to browse them. Planned directions:
+[ROADMAP.md](ROADMAP.md).
 
 ## Why
 

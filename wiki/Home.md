@@ -15,6 +15,7 @@ existing REST API becomes something Claude can call correctly, with authenticati
 | [Authentication](Authentication.md) | `auth.json`, `--auth`, OAuth2/Entra, script auth |
 | [Examples](Examples.md) | Authored request/response examples (`example` CLI) |
 | [Releasing](Releasing.md) | Version bumps, tags, package release notes |
+| [Roadmap](../ROADMAP.md) | Near / medium / long-term directions (docs only) |
 | [How to Read These Docs](README.md) | Browse on GitHub or locally — no separate wiki repo |
 
 ## Commands at a glance
