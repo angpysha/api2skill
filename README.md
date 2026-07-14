@@ -5,6 +5,10 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
 
+![api2skill — OpenAPI to Agent Skill](docs/images/api2skill-social.png)
+
+> **Repo preview:** To set the GitHub social card, open **Settings → General → Social preview** and upload [`docs/images/api2skill-social.png`](docs/images/api2skill-social.png) (not settable via `gh` API).
+
 Convert an OpenAPI/Swagger document into a self-contained **Claude Agent Skill** — a
 `SKILL.md` plus a runnable dispatcher script — so an existing REST API becomes something
 Claude can call correctly, with authentication, without you hand-writing the wrapper.
