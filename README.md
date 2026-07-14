@@ -1,5 +1,10 @@
 # api2skill
 
+[![NuGet](https://img.shields.io/nuget/v/api2skill.svg?label=NuGet)](https://www.nuget.org/packages/api2skill)
+[![CI](https://github.com/angpysha/api2skill/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/angpysha/api2skill/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
+
 Convert an OpenAPI/Swagger document into a self-contained **Claude Agent Skill** — a
 `SKILL.md` plus a runnable dispatcher script — so an existing REST API becomes something
 Claude can call correctly, with authentication, without you hand-writing the wrapper.
