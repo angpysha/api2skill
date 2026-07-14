@@ -1,98 +1,104 @@
-# Feature Specification: HTTPS OAuth callback listener
+# Feature Specification: App-owned OAuth redirect capture (Postman-style)
 
 **Feature Branch**: `feature/009-oauth-https-callback`
 
 **Created**: 2026-07-14
 
-**Status**: Draft — grill required before plan/implement
+**Updated**: 2026-07-14 — grill pivot: **not** local HTTPS `HttpListener`; instead intercept redirect in **api2skill app**, then hand off to the skill.
 
-**Input**: User description: "Add support for HTTPS on the OAuth callback listener. Suspected reason a real-project login fails when the redirect URI is `https://…` instead of `http://localhost…`."
+**Status**: Draft — grill in progress
 
-## Background (current behavior)
+**Input**: User description: Prefer Postman-style “intercept browser redirect without local bind”. Implement capture logic in the **api2skill tool/app**, not only in generated skill code. Skill/`login` calls that app logic; after capture, control returns to api2skill/skill (token exchange + `.auth-cache.json`).
 
-Generated dispatchers bind an `HttpListener` using prefixes derived from `callbackUrl`'s **scheme**, host, and port (`BeginCallbackListener` / `AddCallbackPrefixes`). HTTP works for `http://localhost:8400/` (and dual `127.0.0.1`).
+## Background
 
-For `https://…` prefixes, `HttpListener.Start()` typically fails or the browser cannot complete TLS unless an OS/server certificate is configured. Windows historically required `netsh http add sslcert` + URL ACL; cross-platform .NET does **not** provide a one-liner for HttpListener HTTPS. ASP.NET Core Kestrel + `dotnet dev-certs` / mkcert is the usual cross-platform approach.
+### Why not local HTTPS bind (deferred)
 
-Hypothesis to validate during grill/implement: real IdP redirect URI is **HTTPS** (Entra/B2C app registration or company policy), while the skill only successfully listens on **HTTP**.
+Local HTTPS `HttpListener` needs OS certificates and is fragile cross-platform. Postman’s HTTPS success usually comes from a **hosted** callback (`https://oauth.pstmn.io/...`) or **in-app capture** of the IdP redirect, not TLS on localhost.
+
+### Current api2skill behavior
+
+Generated dispatcher `login` opens (or clipboard-copies) the authorize URL, then blocks on a **local `HttpListener`** for `callbackUrl`. That requires the browser’s redirect to hit a real local process.
+
+### Target behavior (this feature)
+
+1. **Capture logic lives in the api2skill application** (dotnet tool / CLI), shared and versioned with the product.
+2. Generated skill (or `api2skill login …`) **invokes** that logic rather than owning a full listener implementation long-term (exact call style TBD in grill).
+3. After the authorization `code` (+ `state`) is obtained, the app **returns / continues** into existing token-exchange + cache write (skill path or tool path TBD).
+
+**Out of scope for v1 of this pivot** unless grill re-opens it: local HTTPS certificates, Kestrel TLS on loopback.
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - HTTPS loopback callback completes login (Priority: P1)
+### User Story 1 - Login via app-owned capture (Priority: P1)
 
-A user sets `callbackUrl` to an `https://localhost:<port>/…` (or `https://127.0.0.1:…`) URL matching their IdP redirect registration. Running `login` starts a TLS callback listener; after browser redirect with `code`/`error`, login completes and tokens are cached — same as HTTP today.
+User runs OAuth login for a skill profile. api2skill’s app captures the IdP redirect (without the skill needing its own bind for that mode), then token exchange runs and `.auth-cache.json` under the skill is updated.
 
-**Why this priority**: Unblocks real OAuth apps that require HTTPS redirect URIs.
+**Independent Test**: Point a test profile at a stub IdP; complete login through the app capture path; assert cache file in skill dir.
 
-**Independent Test**: Generate skill with HTTPS `callbackUrl`, trust/config cert per design, run `login`, simulate or complete redirect over HTTPS, assert token cache written.
+### User Story 2 - Existing HTTP listener path remains available (Priority: P1)
 
-**Acceptance Scenarios**:
+Profiles that already work with loopback HTTP listener continue to work (default or explicit mode) so we do not break current Entra HTTP debug.
 
-1. **Given** `callbackUrl` is `https://localhost:8400/callback` and cert material is available per design, **When** the user runs `login`, **Then** the terminal reports listening on that HTTPS URL and the browser can complete the redirect without a permanent TLS failure (after trust if self-signed).
-2. **Given** a successful HTTPS redirect with matching `state` and `code`, **When** token exchange succeeds, **Then** `.auth-cache.json` is written as with HTTP.
+**Independent Test**: Existing `DispatcherOAuthLoginTests` green.
 
----
+### User Story 3 - HTTPS IdP redirect URIs work without local certs (Priority: P1)
 
-### User Story 2 - HTTP callback unchanged (Priority: P1)
+When the registered redirect URI is HTTPS (Postman-like host or other capture target), login succeeds without generating/trusting a localhost TLS certificate.
 
-Existing `http://localhost:…` / `http://127.0.0.1:…` profiles keep working without requiring certificates.
-
-**Independent Test**: Existing `DispatcherOAuthLoginTests` stay green with no cert setup.
-
----
-
-### User Story 3 - Clear failure when HTTPS cannot start (Priority: P2)
-
-If `callbackUrl` is HTTPS but no usable certificate / bind fails, `login` fails with an actionable message (how to provide a cert, trust it, or switch to HTTP if IdP allows).
-
-**Independent Test**: Force missing cert → non-zero exit + message mentioning HTTPS/certificate/`callbackUrl`.
-
----
+**Independent Test**: Profile `callbackUrl` / capture URL is HTTPS-capable per chosen design; login completes in smoke test or documented stub.
 
 ### Edge Cases
 
-- Scheme case / trailing slash / path-only differences still subject to IdP exact redirect match.
-- Self-signed cert not trusted by browser → user sees interstitial; skill should still receive request if user continues **or** docs require trust — **[NEEDS CLARIFICATION]**.
-- Port already in use — same as HTTP conflict message.
-- Non-loopback HTTPS hosts (e.g. company redirect to `https://app.example.com/callback`) — **out of scope for local listener**; redirect must hit the loopback process — **[NEEDS CLARIFICATION: loopback-only vs custom host]**.
-- Windows / macOS / Linux parity for cert install/trust — **[NEEDS CLARIFICATION: supported OS for v1]**.
+- Headless / CI: capture strategy must degrade (print URL + instructions) like today.
+- `state` mismatch still rejects.
+- Multiple concurrent `login` processes — **[NEEDS CLARIFICATION]**.
+- Skill generated by older api2skill versions calling newer tool (or reverse) — **[NEEDS CLARIFICATION: coupling]**.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: When `callbackUrl` uses scheme `http`, behavior MUST remain equivalent to current HTTP listener (including localhost/`127.0.0.1` dual bind).
-- **FR-002**: When `callbackUrl` uses scheme `https`, `login` MUST start a local HTTPS listener capable of accepting the OAuth redirect on that host/port/path and completing the existing state/code/token flow.
-- **FR-003**: Certificate source MUST be configurable or discoverable without embedding private keys in the repo — **[NEEDS CLARIFICATION: auth.json fields vs env vs auto `dotnet dev-certs` / mkcert]**.
-- **FR-004**: On HTTPS listener startup failure, login MUST fail with a clear, actionable error (not hang).
-- **FR-005**: All three emitters (`cs` / `csx` / `fsx`) MUST share the HTTPS-capable behavior.
-- **FR-006**: Wiki/Authentication docs MUST document HTTPS `callbackUrl`, cert/trust steps, and IdP redirect URI exact match.
-- **FR-007**: Automated tests MUST cover at least one HTTPS happy path (integration or unit with test cert) OR document why CI cannot (platform limits) with a compensating manual checklist — **[NEEDS CLARIFICATION]**.
+- **FR-001**: OAuth redirect **capture** for authorization-code login MUST be implemented primarily in the **api2skill app** (CLI/tool), not as skill-only HTTPS listener code.
+- **FR-002**: Generated skill login (and/or a new `api2skill login` command) MUST be able to **invoke** that app capture logic and receive `code`/`state`/`error` (wire format TBD).
+- **FR-003**: After successful capture, existing PKCE token exchange + `.auth-cache.json` write MUST complete for the target skill/profile.
+- **FR-004**: Capture MUST work without requiring the user to install a localhost TLS certificate for the default design.
+- **FR-005**: Docs MUST explain the difference vs Postman’s `oauth.pstmn.io` hosted callback and vs loopback HTTP listener.
+- **FR-006**: Capture mechanism (hosted redirect vs custom URL scheme vs embedded browser vs other) MUST be chosen in grill and recorded here — **[NEEDS CLARIFICATION — Question 1]**.
+- **FR-007**: Skill ↔ app handoff (“then redirect to api2skill”) MUST be defined — **[NEEDS CLARIFICATION — Question 2]**.
 
 ### Key Entities
 
-- **callbackUrl**: Absolute URI in `auth.json`; scheme selects HTTP vs HTTPS listener mode.
-- **Callback TLS material**: Certificate (+ key) used only for the local login listener; never committed as a real secret in git.
+- **Capture session**: Correlates PKCE `state`/`verifier`, profile, skill directory, authorize URL.
+- **Handoff result**: `code` | `error` + `state` returned to token-exchange step.
 
-## Success Criteria *(mandatory)*
+## Success Criteria
 
-### Measurable Outcomes
-
-- **SC-001**: A developer with an IdP redirect URI of `https://localhost:<port>/…` can complete `login` end-to-end on a supported OS without switching the IdP to HTTP.
-- **SC-002**: HTTP-only profiles require zero new config after this feature.
-- **SC-003**: HTTPS misconfiguration produces a diagnostic within seconds of `login` start (no indefinite hang).
+- **SC-001**: User can complete OAuth login for an IdP that does not work with plain HTTP loopback HTTPS-listener, without local cert setup.
+- **SC-002**: Existing HTTP loopback login demos (Entra debug) still work.
+- **SC-003**: Capture + exchange runs with a single clear user flow (`login` / `api2skill login`).
 
 ## Assumptions
 
-- IdP redirect URI must still match `callbackUrl` **exactly** (including `https` and path).
-- Goal is **local loopback** HTTPS for OAuth code capture, not hosting a public TLS endpoint.
-- Private keys / PFX passwords stay out of generated skill templates (user secrets / machine store / developer cert only).
-- Package version bump follows `version-bump` rule when this ships (likely **0.5.1** patch or **0.6.0** if framing as new capability — decide at PR).
+- “App” means the packaged `api2skill` dotnet tool (same binary as `generate` / `install-creator`), not a separate Electron app unless grill chooses that.
+- Hosted Postman URLs are **not** available to us; any hosted URL would need our own infrastructure or a different non-hosted intercept.
 
-## Open questions (grill)
+## Grill decisions so far
 
-1. Cert strategy: auto `dotnet` ASP.NET HTTPS developer certificate, path-based PEM/PFX in `auth.json`, or mkcert-oriented docs only?
-2. v1 OS support: macOS + Windows + Linux, or macOS-first?
-3. Must the browser trust the cert without clicking through, or is click-through OK for v1?
-4. Keep `HttpListener` + OS SSL bind where possible, or switch HTTPS path to Kestrel / `SslStream` for cross-platform reliability?
-5. Allow non-loopback hosts in `callbackUrl` for HTTPS, or restrict to localhost/127.0.0.1?
+| # | Topic | Decision |
+|---|--------|----------|
+| — | Local HTTPS HttpListener as primary fix | **Rejected** in favor of intercept |
+| — | Where logic lives | **api2skill app**, skill calls into it / continues after |
+| 1 | How to intercept without local bind | **OPEN** |
+| 2 | How handoff / “redirect to api2skill” works | **OPEN** |
+
+## Open questions
+
+1. **Intercept mechanism** (pick one for v1):  
+   (A) Custom URL scheme `api2skill://oauth/callback?...` registered by the tool  
+   (B) Our own hosted HTTPS page (ops cost)  
+   (C) Embedded WebView that intercepts navigation (GUI dependency)  
+   (D) Keep a short-lived **HTTP** loopback but register that as redirect (status quo improved) while documenting Entra HTTP localhost  
+   (E) Hybrid  
+
+2. **Handoff**: Does `dotnet run scripts/call.cs -- login` shell out to `api2skill oauth-capture …`, or does user always run `api2skill login --skill ./my-skill --profile entra`?

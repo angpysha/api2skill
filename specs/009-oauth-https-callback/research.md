@@ -1,38 +1,48 @@
-# Research: HTTPS OAuth callback listener
+# Research: App-owned OAuth redirect capture
 
-**Feature**: `009-oauth-https-callback`  
+**Feature**: `009-oauth-https-callback` (title outdated; scope pivoted)  
 **Date**: 2026-07-14
 
-## Current gap
+## Postman (reference)
 
-Emitters already set HttpListener prefixes from `callbackUrl.Scheme`. Using `https://localhost:8400/...` therefore *attempts* HTTPS prefixes, but without certificate binding the listen/accept path fails or browsers reject TLS. HTTP path is proven on macOS (Entra debug session).
+Postman typically does **not** bind local HTTPS for OAuth:
 
-## Options (to choose in grill / plan)
+1. **Hosted callbacks**: `https://oauth.pstmn.io/v1/callback` (desktop), `https://oauth.pstmn.io/v1/browser-callback` (web).
+2. **Intercept**: Desktop/web app observes the IdP redirect (Location / embedded flow) and extracts `code` / tokens; may not need the user’s local server at all.
+3. Custom Callback URL fields are mainly for IdP allow-list match; capture is still in Postman’s control.
 
-| Option | Pros | Cons |
-|--------|------|------|
-| **A. Keep HttpListener; document OS SSL bind** | Minimal emitter rewrite | Windows-centric (`netsh`); weak/fragile on macOS/Linux |
-| **B. HTTPS via Kestrel in generated script** | Cross-platform; `dotnet dev-certs` / explicit cert config well documented | Heavier generated code; dependency on ASP.NET Core shared framework or package |
-| **C. Minimal `TcpListener` + `SslStream` + tiny HTTP parse** | Controlled TLS; no full ASP.NET | More custom code in emitters; security review of parser |
-| **D. External helper process** | Isolates TLS | Extra binary/ship complexity |
+Sources: Postman OAuth 2.0 docs; Postman Community “authorization-code work”; Stack Overflow “handle localhost OAuth 2 redirects”.
 
-**Lean recommendation for plan phase after grill:** prefer **B** or **C** for real cross-platform HTTPS; treat **A** as Windows-only fallback if needed.
+## api2skill options after pivot
 
-## Cert sources
+| Mechanism | Local bind? | HTTPS without local cert? | Fit for CLI tool |
+|-----------|-------------|---------------------------|------------------|
+| Custom URI scheme `api2skill://…` | No listen | Yes (OS handles) | Good; needs install/register |
+| Hosted page (our infra) | No | Yes | Needs hosting + privacy |
+| Embedded WebView | No OS listen | N/A | Heavy for `dotnet tool` |
+| HTTP loopback listener | Yes | N/A | Already works; Entra allows `http://localhost` for public clients |
+| Local HTTPS + cert | Yes | Needs cert | Deferred |
 
-- `dotnet dev-certs https` / `--trust` (ASP.NET Core developer cert; localhost-oriented)
-- File-based PEM/PFX path via `auth.json` (e.g. `callbackCertificatePath` + optional password secret)
-- mkcert for trusted local CA (docs-heavy, good UX after install)
+## Architecture sketch (user direction)
 
-## Doc references
+```
+[browser / IdP]
+      |
+      |  redirect with ?code=&state=
+      v
+[api2skill app capture]  ----handoff---->  [token exchange + .auth-cache.json in skill]
+      ^
+      |
+[skill login]  or  [api2skill login --skill …]
+```
 
-- GitHub Copilot / agent skills paths are unrelated; this is TLS for OAuth redirect only.
-- ASP.NET Core HTTPS developer certificates and Kestrel certificate configuration (Microsoft Learn / Community practice for macOS Keychain trust).
+Generated skill should **call** app capture, not reimplement HTTPS TLS.
 
 ## Decision log
 
-_(fill during grill / `/speckit.plan`)_
-
 | Decision | Choice | Date |
 |----------|--------|------|
-| | | |
+| Primary fix = local HTTPS HttpListener | No | 2026-07-14 |
+| Capture logic in api2skill app | Yes | 2026-07-14 |
+| Intercept mechanism | TBD | |
+| Skill ↔ app handoff command shape | TBD | |
