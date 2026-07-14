@@ -113,6 +113,8 @@ public static class OAuthCaptureCommand
         TextWriter? stderr = null,
         IRedirectCapture? httpCapture = null,
         IRedirectCapture? hostedCapture = null,
+        IRedirectCapture? schemeCapture = null,
+        Func<string, bool>? isProtocolRegistered = null,
         CancellationToken cancellationToken = default)
     {
         stdout ??= Console.Out;
@@ -168,16 +170,26 @@ public static class OAuthCaptureCommand
             return ExitCodes.UsageError;
         }
 
-        // Soft-stub until US2/US3 (parallel tracks) — Hosted is implemented in US4.
-        if (resolvedMode is CaptureMode.HttpsLoopback or CaptureMode.CustomScheme)
+        
+        // First-party custom scheme requires explicit register-protocol (FR-009 / Scenario C).
+        if (resolvedMode == CaptureMode.CustomScheme
+            && ProtocolRegistration.IsFirstPartyScheme(callbackUri.Scheme))
         {
-            if (resolvedMode != CaptureMode.HttpsLoopback)
+            var registered = isProtocolRegistered?.Invoke(callbackUri.Scheme)
+                ?? ProtocolRegistration.IsRegistered(callbackUri.Scheme);
+            if (!registered)
             {
                 ConsoleColorWriter.WriteError(
-                    $"Capture mode {resolvedMode} is not implemented in this build yet.",
+                    $"URL scheme '{callbackUri.Scheme}' is not registered with the OS. " +
+                    "Run: api2skill register-protocol",
                     stderr);
-                return ExitCodes.UsageError;
+                return ExitCodes.CaptureTimeout;
             }
+        }
+
+// Soft-stub until US2/US3 (parallel tracks) — Hosted is implemented in US4.
+        if (resolvedMode == CaptureMode.HttpsLoopback)
+        {
 
             try
             {
@@ -216,9 +228,12 @@ public static class OAuthCaptureCommand
             ConsoleColorWriter.WriteInfo($"Listening for OAuth callback on {callbackUri} …", stderr);
         }
 
-        IRedirectCapture capture = resolvedMode == CaptureMode.Hosted
-            ? hostedCapture ?? new HostedRelayCapture(progress: stderr)
-            : httpCapture ?? new LoopbackHttpCapture();
+        IRedirectCapture capture = resolvedMode switch
+        {
+            CaptureMode.Hosted => hostedCapture ?? new HostedRelayCapture(progress: stderr),
+            CaptureMode.CustomScheme => schemeCapture ?? new CustomSchemeCapture(),
+            _ => httpCapture ?? new LoopbackHttpCapture(),
+        };
 
         CaptureResult result;
         try
