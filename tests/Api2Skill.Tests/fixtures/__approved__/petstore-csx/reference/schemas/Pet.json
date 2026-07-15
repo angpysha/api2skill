@@ -1,0 +1,37 @@
+{
+  "required": [
+    "id",
+    "name"
+  ],
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "integer",
+      "description": "Pet id",
+      "format": "int64"
+    },
+    "name": {
+      "type": "string",
+      "description": "Pet name"
+    },
+    "status": {
+      "enum": [
+        "available",
+        "pending",
+        "sold"
+      ],
+      "type": "string",
+      "description": "Pet status in the store"
+    },
+    "category": {
+      "$ref": "#/components/schemas/Category"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "$ref": "#/components/schemas/Tag"
+      },
+      "description": "Tags attached to this pet"
+    }
+  }
+}

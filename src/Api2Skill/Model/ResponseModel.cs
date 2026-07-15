@@ -5,4 +5,5 @@ public sealed record ResponseModel(
     string? Description,
     string? ContentType = null,
     string? SchemaSummary = null,
-    SchemaDetailModel? Schema = null);
+    SchemaDetailModel? Schema = null,
+    string? SchemaName = null);

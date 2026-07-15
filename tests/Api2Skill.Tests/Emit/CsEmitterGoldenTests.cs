@@ -111,10 +111,23 @@ public class CsEmitterGoldenTests : IDisposable
         var referenceMd = File.ReadAllText(Path.Combine(outputDir, "reference", "pet.md"));
         Assert.Contains("ID of pet to return", referenceMd);
         Assert.Contains("**Request body**", referenceMd);
-        Assert.Contains("| property | type | required | description |", referenceMd);
+        Assert.Contains("| property | type | required | enum | description |", referenceMd);
+        Assert.Contains("| name | in | required | type | enum | description |", referenceMd);
         Assert.Contains("Example:", referenceMd);
         Assert.Contains("```json", referenceMd);
         Assert.Contains("### `200`", referenceMd);
         Assert.Contains("Content-Type: `application/json`", referenceMd);
+        Assert.Contains("`available`", referenceMd);
+        Assert.Contains("category.id", referenceMd);
+        Assert.Contains("schemas/Pet.json", referenceMd);
+        Assert.Contains("schemas/PetInput.json", referenceMd);
+        Assert.Contains("Body: none documented in the OpenAPI response", referenceMd);
+
+        Assert.DoesNotContain("| property | type | required | enum | description |", skillMd);
+        Assert.DoesNotContain("schemas/Pet.json", skillMd);
+        Assert.DoesNotContain("```json", skillMd);
+
+        Assert.True(File.Exists(Path.Combine(outputDir, "reference", "schemas", "Pet.json")));
+        Assert.True(File.Exists(Path.Combine(outputDir, "reference", "schemas", "PetInput.json")));
     }
 }

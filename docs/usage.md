@@ -67,7 +67,8 @@ only swapped into place once every file has been written successfully.
 <slug>/
 ├── SKILL.md               # compact: overview, auth setup, tag-grouped operation index
 ├── reference/
-│   └── <tag>.md            # full parameter/schema/response detail per tag, on demand
+│   ├── <tag>.md            # full parameter/schema/response detail per tag, on demand
+│   └── schemas/            # raw OpenAPI component schemas (<Name>.json), when used
 ├── scripts/
 │   └── call.<ext>          # the dispatcher — cs / fsx / csx per --script
 ├── secrets.example.json    # template — copy to secrets.json (gitignored) and fill in

@@ -58,7 +58,7 @@ public class FilterTests
             new BuildOptions(Name: "petstore", IncludeSelectors: ["path:/pet*"]));
 
         var paths = model.Tags.SelectMany(t => t.Operations).Select(o => o.PathTemplate).OrderBy(p => p, StringComparer.Ordinal);
-        Assert.Equal(["/pet", "/pet/{petId}"], paths);
+        Assert.Equal(["/pet", "/pet/findByStatus", "/pet/{petId}"], paths);
     }
 
     [Fact]
@@ -71,7 +71,7 @@ public class FilterTests
             new BuildOptions(Name: "petstore", ExcludeSelectors: ["tag:default"]));
 
         Assert.DoesNotContain("default", model.Tags.Select(t => t.Tag));
-        Assert.Equal(3, model.Tags.Sum(t => t.Operations.Count)); // 4 total - 1 default (get_health)
+        Assert.Equal(4, model.Tags.Sum(t => t.Operations.Count)); // 5 total - 1 default (get_health)
     }
 
     [Fact]
@@ -79,7 +79,7 @@ public class FilterTests
     {
         var doc = await LoadPetstoreDocumentAsync();
         var model = SkillModelBuilder.Build(doc, Microsoft.OpenApi.OpenApiSpecVersion.OpenApi3_0,
-            new BuildOptions(Name: "petstore", IncludeSelectors: ["tag:pet"], ExcludeSelectors: ["op:addPet"]));
+            new BuildOptions(Name: "petstore", IncludeSelectors: ["tag:pet"], ExcludeSelectors: ["op:addPet", "op:findPetsByStatus"]));
 
         var op = Assert.Single(model.Tags.SelectMany(t => t.Operations));
         Assert.Equal("getPetById", op.OperationId);

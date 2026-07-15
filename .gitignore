@@ -15,3 +15,8 @@ debug/entra-oauth/secrets.json
 debug/entra-oauth/skill/
 debug/entra-oauth/.auth-cache.json
 debug/entra-oauth/.auth-cache.json.lock
+
+# Visual Studio / MSBuild local
+*.user
+*.suo
+packages/

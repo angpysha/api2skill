@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "integer",
+      "description": "Tag id",
+      "format": "int64"
+    },
+    "name": {
+      "type": "string",
+      "description": "Tag name"
+    }
+  }
+}

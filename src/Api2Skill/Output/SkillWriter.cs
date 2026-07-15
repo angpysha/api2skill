@@ -97,6 +97,7 @@ public static class SkillWriter
         {
             SkillMdWriter.Write(model, stagingDir, emitter);
             ReferenceWriter.Write(model, stagingDir);
+            SchemaWriter.Write(model, stagingDir);
             SecretsScaffold.Write(model, stagingDir);
             emitter.Emit(model, stagingDir);
 

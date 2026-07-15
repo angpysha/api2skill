@@ -8,9 +8,17 @@ public enum ParameterLocation
     Header,
 }
 
+/// <summary>
+/// Path/query/header parameter with enough OpenAPI schema detail for reference docs
+/// (type, format, enum, examples, object/array shapes).
+/// </summary>
 public sealed record ParameterModel(
     string Name,
     ParameterLocation In,
     bool Required,
     string Type,
-    string? Description);
+    string? Description,
+    string? Format = null,
+    IReadOnlyList<string>? EnumValues = null,
+    string? Example = null,
+    SchemaDetailModel? Schema = null);
