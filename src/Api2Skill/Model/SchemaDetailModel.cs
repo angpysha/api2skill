@@ -6,7 +6,14 @@ public sealed record SchemaPropertyModel(
     string Type,
     bool Required,
     string? Description,
-    string? Format);
+    string? Format,
+    IReadOnlyList<string>? EnumValues = null);
+
+/// <summary>One <c>oneOf</c>/<c>anyOf</c> branch shown in reference MD.</summary>
+public sealed record SchemaVariantModel(
+    int Index,
+    string Summary,
+    string? SchemaName = null);
 
 /// <summary>
 /// Structured schema detail for progressive-disclosure reference docs so callers know
@@ -15,4 +22,8 @@ public sealed record SchemaPropertyModel(
 public sealed record SchemaDetailModel(
     string? Summary,
     IReadOnlyList<SchemaPropertyModel> Properties,
-    string? ExampleJson);
+    string? ExampleJson,
+    IReadOnlyList<string>? EnumValues = null,
+    string? SchemaName = null,
+    bool Truncated = false,
+    IReadOnlyList<SchemaVariantModel>? Variants = null);

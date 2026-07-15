@@ -5,9 +5,12 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
 
-Convert an OpenAPI/Swagger document into a self-contained **Claude Agent Skill** — a
-`SKILL.md` plus a runnable dispatcher script — so an existing REST API becomes something
-Claude can call correctly, with authentication, without you hand-writing the wrapper.
+![api2skill — OpenAPI to Agent Skill](docs/images/api2skill-social.png)
+
+Convert an OpenAPI/Swagger document into a self-contained **Agent Skill** package — a
+`SKILL.md` plus scripts and reference docs — so an existing REST API becomes something any
+agent that supports the Agent Skills standard can call correctly, with authentication,
+without you hand-writing the wrapper. Works with Claude, Cursor, and other compatible hosts.
 
 ```bash
 api2skill generate ./petstore.json
@@ -20,8 +23,9 @@ api2skill generate ./petstore.json
 #      .gitignore             # excludes secrets.json
 ```
 
-Drop the output directory into `~/.claude/skills/` (or a project's `.claude/skills/`) and
-Claude can use it immediately.
+Drop the output directory into your host's skills root (for example `~/.claude/skills/`,
+`.claude/skills/`, `.cursor/skills/`, or another Agent Skills–compatible path) and the
+agent can use it immediately.
 
 **Full documentation:** [wiki/Home.md](wiki/Home.md) — getting started, CLI reference,
 authentication, and [Mermaid diagrams](wiki/Generate-Command.md). Docs live in this repo under
@@ -30,7 +34,7 @@ authentication, and [Mermaid diagrams](wiki/Generate-Command.md). Docs live in t
 
 ## Why
 
-Writing a correct, well-documented Claude Skill for an API by hand is repetitive: endpoint and
+Writing a correct, well-documented Agent Skill for an API by hand is repetitive: endpoint and
 parameter docs, auth handling, and example requests all have to be derived from the API's own
 OpenAPI spec anyway. api2skill automates that derivation.
 

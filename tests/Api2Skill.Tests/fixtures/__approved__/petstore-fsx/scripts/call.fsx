@@ -21,6 +21,7 @@ exception AuthResolutionException of string
 
 let operations : Map<string, OperationSpec> =
     Map.ofList [
+        "findPetsByStatus", { Method = "GET"; PathTemplate = "/pet/findByStatus"; Parameters = [ { Name = "status"; Location = "query" } ]; HasBody = false; BodyContentType = None; SecuritySchemeIds = [ "petstore_auth" ]; AuthProfileNames = [] }
         "getPetById", { Method = "GET"; PathTemplate = "/pet/{petId}"; Parameters = [ { Name = "petId"; Location = "path" } ]; HasBody = false; BodyContentType = None; SecuritySchemeIds = [ "api_key" ]; AuthProfileNames = [] }
         "addPet", { Method = "POST"; PathTemplate = "/pet"; Parameters = []; HasBody = true; BodyContentType = Some "application/json"; SecuritySchemeIds = [ "petstore_auth" ]; AuthProfileNames = [] }
         "get_store_inventory", { Method = "GET"; PathTemplate = "/store/inventory"; Parameters = []; HasBody = false; BodyContentType = None; SecuritySchemeIds = [ "api_key" ]; AuthProfileNames = [] }

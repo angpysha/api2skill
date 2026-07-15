@@ -64,7 +64,7 @@ public class StdinSourceTests : IDisposable
         var (exitCode, stdout, stderr) = await RunCliAsync(content, "generate", "-", "-o", outDir, "--format", "json");
 
         Assert.Equal(0, exitCode);
-        Assert.Contains("4 operation(s)", stdout);
+        Assert.Contains("5 operation(s)", stdout);
         Assert.True(File.Exists(Path.Combine(outDir, "SKILL.md")), stderr);
     }
 
@@ -77,7 +77,7 @@ public class StdinSourceTests : IDisposable
         var (exitCode, stdout, _) = await RunCliAsync(content, "generate", "-", "-o", outDir);
 
         Assert.Equal(0, exitCode);
-        Assert.Contains("4 operation(s)", stdout);
+        Assert.Contains("5 operation(s)", stdout);
     }
 
     [Fact]
@@ -89,6 +89,6 @@ public class StdinSourceTests : IDisposable
         var (exitCode, stdout, _) = await RunCliAsync(content, "generate", "-", "-o", outDir);
 
         Assert.Equal(0, exitCode);
-        Assert.Contains("4 operation(s)", stdout);
+        Assert.Contains("5 operation(s)", stdout);
     }
 }

@@ -970,6 +970,7 @@ static (Dictionary<string, string> Params, string? Body) ParseArgs(string[] rest
 
 static Dictionary<string, OperationSpec> BuildOperations() => new()
 {
+    ["findPetsByStatus"] = new("GET", "/pet/findByStatus", [new("status", "query")], false, null, ["petstore_auth"], []),
     ["getPetById"] = new("GET", "/pet/{petId}", [new("petId", "path")], false, null, ["api_key"], []),
     ["addPet"] = new("POST", "/pet", [], true, "application/json", ["petstore_auth"], []),
     ["get_store_inventory"] = new("GET", "/store/inventory", [], false, null, ["api_key"], []),

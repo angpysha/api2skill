@@ -26,11 +26,11 @@ public class SkillModelBuilderTests
         Assert.Equal(SpecVersionKind.OpenApi3_0, model.SpecVersion);
 
         var totalOps = model.Tags.Sum(t => t.Operations.Count);
-        Assert.Equal(4, totalOps);
+        Assert.Equal(5, totalOps);
 
-        // Tags: pet (declared, 2 ops), store (declared, 1 op), default (undeclared tag, 1 op — EC-4).
+        // Tags: pet (declared, 3 ops), store (declared, 1 op), default (undeclared tag, 1 op — EC-4).
         Assert.Equal(["pet", "store", "default"], model.Tags.Select(t => t.Tag));
-        Assert.Equal(2, model.Tags.Single(t => t.Tag == "pet").Operations.Count);
+        Assert.Equal(3, model.Tags.Single(t => t.Tag == "pet").Operations.Count);
         Assert.Single(model.Tags.Single(t => t.Tag == "store").Operations);
         Assert.Single(model.Tags.Single(t => t.Tag == "default").Operations);
     }
@@ -122,6 +122,6 @@ public class SkillModelBuilderTests
             new BuildOptions(Name: "petstore", IncludeSelectors: ["tag:pet"]));
 
         Assert.Equal(["pet"], model.Tags.Select(t => t.Tag));
-        Assert.Equal(2, model.Tags.Single().Operations.Count);
+        Assert.Equal(3, model.Tags.Single().Operations.Count);
     }
 }

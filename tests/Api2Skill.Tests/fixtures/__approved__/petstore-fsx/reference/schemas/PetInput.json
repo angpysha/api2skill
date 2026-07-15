@@ -1,0 +1,31 @@
+{
+  "required": [
+    "name"
+  ],
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Pet name"
+    },
+    "status": {
+      "enum": [
+        "available",
+        "pending",
+        "sold"
+      ],
+      "type": "string",
+      "description": "Pet status in the store"
+    },
+    "category": {
+      "$ref": "#/components/schemas/Category"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "$ref": "#/components/schemas/Tag"
+      },
+      "description": "Tags attached to this pet"
+    }
+  }
+}

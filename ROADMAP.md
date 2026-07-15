@@ -9,12 +9,17 @@ commits and not a promise of ship dates. In-flight work lives in feature branche
 Current product focus remains OpenAPI → Claude Skill generation (auth, update, creator
 skill, examples). Track concrete work under `specs/` and open PRs.
 
+**Next emitters** (script kinds beyond `.cs` / `.fsx` / `.csx`):
+
+- **Python** — emit a Python dispatcher script for generated skills
+- **MJS** — emit a Node ESM (`.mjs`) dispatcher script for generated skills
+
 ## Medium-term
 
-Additional **API kinds** / ingest formats and emitters beyond OpenAPI REST:
+Additional **API kinds** / ingest formats beyond OpenAPI REST:
 
-- **OData** — consume OData metadata / service definitions; emit skills for OData endpoints
 - **GraphQL** — ingest GraphQL schemas; emit skills that call GraphQL APIs
+- **OData** — consume OData metadata / service definitions; emit skills for OData endpoints
 - **gRPC** — ingest Protocol Buffers / gRPC service definitions; emit skills for RPC-style APIs
 
 ## Long-term

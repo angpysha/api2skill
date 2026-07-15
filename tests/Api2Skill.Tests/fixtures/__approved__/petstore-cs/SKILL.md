@@ -68,6 +68,7 @@ Everything about your Pets
 
 | operationId | method | path | summary | reference |
 |---|---|---|---|---|
+| `findPetsByStatus` | GET | `/pet/findByStatus` | Finds Pets by status | [reference/pet.md](reference/pet.md) |
 | `getPetById` | GET | `/pet/{petId}` | Find pet by ID | [reference/pet.md](reference/pet.md) |
 | `addPet` | POST | `/pet` | Add a new pet to the store | [reference/pet.md](reference/pet.md) |
 

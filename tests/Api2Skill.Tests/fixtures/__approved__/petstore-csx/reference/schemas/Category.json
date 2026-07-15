@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "integer",
+      "description": "Category id",
+      "format": "int64"
+    },
+    "name": {
+      "type": "string",
+      "description": "Category name"
+    }
+  }
+}

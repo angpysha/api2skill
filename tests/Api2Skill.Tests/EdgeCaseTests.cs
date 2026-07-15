@@ -184,9 +184,8 @@ public class EdgeCaseTests
     public async Task CircularSchemaReference_DoesNotHangOrCrashDuringBuild()
     {
         // A self-referencing schema (a "Node" with a "children" array of itself and a "parent"
-        // pointing back to itself) is legal OpenAPI. SkillModelBuilder only ever summarizes the
-        // *top-level* property names of a request-body schema (SummarizeSchema doesn't recurse
-        // into nested $ref targets), so this must complete promptly rather than looping forever
+        // pointing back to itself) is legal OpenAPI. DescribeSchema depth-caps and NoteSchemaGraph
+        // tracks visited component names, so this must complete promptly rather than looping forever
         // walking the reference graph.
         const string json = """
         {
@@ -231,15 +230,16 @@ public class EdgeCaseTests
         var model = await buildTask;
         var op = Assert.Single(model.Tags.SelectMany(t => t.Operations));
         Assert.NotNull(op.RequestBody);
-        Assert.Contains("object", op.RequestBody!.SchemaSummary);
+        Assert.Equal("Node", op.RequestBody!.SchemaName);
+        Assert.Contains("object", op.RequestBody.SchemaSummary);
+        Assert.Contains(model.ComponentSchemas, s => s.Name == "Node" && s.RawJson.Contains("#/components/schemas/Node"));
     }
 
     [Fact]
     public async Task NonStringEnumValues_OnAQueryParameter_DoNotCrashMapping()
     {
         // An integer-valued enum (e.g. a numeric status code parameter) is legal OpenAPI;
-        // ParameterModel.Type only ever records the schema *type* string ("integer"), never
-        // enumerates/echoes individual enum values, so this must map cleanly.
+        // ParameterModel records the schema type plus stringified enum values for reference docs.
         const string json = """
         {
           "openapi": "3.0.3",
@@ -266,6 +266,7 @@ public class EdgeCaseTests
         var param = Assert.Single(op.Parameters);
         Assert.Equal("status", param.Name);
         Assert.Equal("Integer", param.Type);
+        Assert.Equal(["1", "2", "3"], param.EnumValues);
     }
 
     [Fact]

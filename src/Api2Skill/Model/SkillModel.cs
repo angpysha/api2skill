@@ -30,6 +30,7 @@ public sealed record SkillModel(
     IReadOnlyList<SecuritySchemeModel> SecuritySchemes,
     IReadOnlyList<TagGroup> Tags,
     IReadOnlyList<string> Warnings,
+    IReadOnlyList<ComponentSchemaModel> ComponentSchemas = null!,
     bool InsecureDefault = false,
     AuthConfig? AuthConfig = null,
     AuthScaffoldGuidance? AuthScaffoldGuidance = null);

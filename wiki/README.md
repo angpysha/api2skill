@@ -11,6 +11,8 @@ no separate GitHub wiki git repository to clone or sync.
 
 GitHub renders Markdown (including [Mermaid](https://github.blog/2022-02-14-include-diagrams-markdown-files-mermaid/) diagrams) when you view `.md` files in the repo.
 
+**Repo preview:** Settings → General → Social preview → upload `docs/images/api2skill-social.png` (no `gh` API for this).
+
 ## Read locally
 
 Clone or download this repository and open any file under `wiki/` in your editor or Markdown viewer:

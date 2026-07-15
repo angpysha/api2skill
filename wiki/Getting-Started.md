@@ -37,6 +37,7 @@ The output directory contains:
 |---------------|---------|
 | `SKILL.md` | Compact overview, auth setup, operation index |
 | `reference/<tag>.md` | Full per-operation detail, loaded on demand |
+| `reference/schemas/<Name>.json` | Raw OpenAPI component schemas linked from tag MD |
 | `scripts/call.<ext>` | Dispatcher — `call <operationId> --<param> <value> ...` |
 | `secrets.example.json` | Template — copy to `secrets.json` and fill in credentials |
 | `.api2skill.json` | Generation manifest for `update` |
