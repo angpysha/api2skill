@@ -259,56 +259,56 @@ static async Task ApplyExplicitProfileAsync(HttpClient http, JsonElement profile
     switch (type)
     {
         case "bearer":
-            {
-                var token = ResolveSecretOrLiteral(GetProp(profile, "token"), secrets);
-                var value = token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) ? token : $"Bearer {token}";
-                headers.Add(("Authorization", value));
-                break;
-            }
+        {
+            var token = ResolveSecretOrLiteral(GetProp(profile, "token"), secrets);
+            var value = token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) ? token : $"Bearer {token}";
+            headers.Add(("Authorization", value));
+            break;
+        }
         case "basic":
-            {
-                var user = ResolveSecretOrLiteral(GetProp(profile, "username"), secrets);
-                var pass = ResolveSecretOrLiteral(GetProp(profile, "password"), secrets);
-                var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{user}:{pass}"));
-                headers.Add(("Authorization", $"Basic {encoded}"));
-                break;
-            }
+        {
+            var user = ResolveSecretOrLiteral(GetProp(profile, "username"), secrets);
+            var pass = ResolveSecretOrLiteral(GetProp(profile, "password"), secrets);
+            var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{user}:{pass}"));
+            headers.Add(("Authorization", $"Basic {encoded}"));
+            break;
+        }
         case "custom":
+        {
+            if (profile.TryGetProperty("headers", out var headersEl) && headersEl.ValueKind == JsonValueKind.Array)
             {
-                if (profile.TryGetProperty("headers", out var headersEl) && headersEl.ValueKind == JsonValueKind.Array)
+                foreach (var h in headersEl.EnumerateArray())
                 {
-                    foreach (var h in headersEl.EnumerateArray())
-                    {
-                        var name = GetProp(h, "name");
-                        var value = ResolveSecretOrLiteral(GetProp(h, "value"), secrets);
-                        headers.Add((name, value));
-                    }
+                    var name = GetProp(h, "name");
+                    var value = ResolveSecretOrLiteral(GetProp(h, "value"), secrets);
+                    headers.Add((name, value));
                 }
-                break;
             }
+            break;
+        }
         case "oauth2":
-            {
-                var accessToken = await ResolveOAuthAccessTokenAsync(http, profile, profileName, secrets);
-                headers.Add(("Authorization", $"Bearer {accessToken}"));
-                break;
-            }
+        {
+            var accessToken = await ResolveOAuthAccessTokenAsync(http, profile, profileName, secrets);
+            headers.Add(("Authorization", $"Bearer {accessToken}"));
+            break;
+        }
         case "script":
-            {
-                var command = GetProp(profile, "command");
-                var headerName = GetProp(profile, "header");
-                if (string.IsNullOrEmpty(headerName)) headerName = "Authorization";
-                var bearerPrefix = profile.TryGetProperty("bearerPrefix", out var bpEl) && bpEl.ValueKind == JsonValueKind.True;
-                var scriptDir = Path.GetDirectoryName(callerPath) ?? ".";
-                var skillRoot = Path.GetFullPath(Path.Combine(scriptDir, ".."));
-                var (exitCode, stdout, stderr) = await RunScriptCommandAsync(command, skillRoot);
-                if (exitCode != 0)
-                    throw new AuthResolutionException($"Script command for auth profile '{profileName}' exited with code {exitCode}: {stderr.Trim()}");
-                var token = stdout.Trim();
-                if (bearerPrefix && !token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-                    token = $"Bearer {token}";
-                headers.Add((headerName, token));
-                break;
-            }
+        {
+            var command = GetProp(profile, "command");
+            var headerName = GetProp(profile, "header");
+            if (string.IsNullOrEmpty(headerName)) headerName = "Authorization";
+            var bearerPrefix = profile.TryGetProperty("bearerPrefix", out var bpEl) && bpEl.ValueKind == JsonValueKind.True;
+            var scriptDir = Path.GetDirectoryName(callerPath) ?? ".";
+            var skillRoot = Path.GetFullPath(Path.Combine(scriptDir, ".."));
+            var (exitCode, stdout, stderr) = await RunScriptCommandAsync(command, skillRoot);
+            if (exitCode != 0)
+                throw new AuthResolutionException($"Script command for auth profile '{profileName}' exited with code {exitCode}: {stderr.Trim()}");
+            var token = stdout.Trim();
+            if (bearerPrefix && !token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                token = $"Bearer {token}";
+            headers.Add((headerName, token));
+            break;
+        }
         default:
             throw new AuthResolutionException($"Auth profile type '{type}' is not supported by this generated dispatcher yet.");
     }
@@ -423,31 +423,31 @@ static HttpListener BeginCallbackListener(string callbackUrl)
 
 static async Task<Dictionary<string, string>> AwaitOAuthCallbackAsync(HttpListener listener)
 {
-    try
+  try
+  {
+    while (true)
     {
-        while (true)
+        var context = await listener.GetContextAsync();
+        var result = ParseQuery(context.Request.Url?.Query ?? "");
+        if (result.ContainsKey("code") || result.ContainsKey("error"))
         {
-            var context = await listener.GetContextAsync();
-            var result = ParseQuery(context.Request.Url?.Query ?? "");
-            if (result.ContainsKey("code") || result.ContainsKey("error"))
-            {
-                var page = Encoding.UTF8.GetBytes("<html><body>Login complete \u2014 you can close this window and return to the terminal.</body></html>");
-                context.Response.StatusCode = 200;
-                context.Response.ContentType = "text/html; charset=utf-8";
-                context.Response.ContentLength64 = page.Length;
-                context.Response.OutputStream.Write(page, 0, page.Length);
-                context.Response.Close();
-                return result;
-            }
-            context.Response.StatusCode = 404;
+            var page = Encoding.UTF8.GetBytes("<html><body>Login complete \u2014 you can close this window and return to the terminal.</body></html>");
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "text/html; charset=utf-8";
+            context.Response.ContentLength64 = page.Length;
+            context.Response.OutputStream.Write(page, 0, page.Length);
             context.Response.Close();
+            return result;
         }
+        context.Response.StatusCode = 404;
+        context.Response.Close();
     }
-    finally
-    {
-        listener.Stop();
-        listener.Close();
-    }
+  }
+  finally
+  {
+      listener.Stop();
+      listener.Close();
+  }
 }
 
 static (string? AuthUrl, string? TokenUrl, List<string> Scopes) ResolveOAuthEndpoints(JsonElement profile)
@@ -507,40 +507,40 @@ static async Task ApplyAuthAsync(HttpClient http, SchemeSpec scheme, JsonElement
     switch (scheme.Kind)
     {
         case "apiKey":
-            {
-                var key = SecretValue(secrets, scheme.Id, "apiKey");
-                if (key is null) { Console.Error.WriteLine($"warning: no apiKey configured for scheme '{scheme.Id}' in secrets.json — sending unauthenticated."); break; }
-                if (scheme.ApiKeyLocation == "query") query.Add($"{Uri.EscapeDataString(scheme.ApiKeyName!)}={Uri.EscapeDataString(key)}");
-                else headers.Add((scheme.ApiKeyName!, key));
-                break;
-            }
+        {
+            var key = SecretValue(secrets, scheme.Id, "apiKey");
+            if (key is null) { Console.Error.WriteLine($"warning: no apiKey configured for scheme '{scheme.Id}' in secrets.json — sending unauthenticated."); break; }
+            if (scheme.ApiKeyLocation == "query") query.Add($"{Uri.EscapeDataString(scheme.ApiKeyName!)}={Uri.EscapeDataString(key)}");
+            else headers.Add((scheme.ApiKeyName!, key));
+            break;
+        }
         case "bearer":
-            {
-                var token = SecretValue(secrets, scheme.Id, "bearerToken");
-                if (token is null) { Console.Error.WriteLine($"warning: no bearerToken configured for scheme '{scheme.Id}' in secrets.json — sending unauthenticated."); break; }
-                headers.Add(("Authorization", $"Bearer {token}"));
-                break;
-            }
+        {
+            var token = SecretValue(secrets, scheme.Id, "bearerToken");
+            if (token is null) { Console.Error.WriteLine($"warning: no bearerToken configured for scheme '{scheme.Id}' in secrets.json — sending unauthenticated."); break; }
+            headers.Add(("Authorization", $"Bearer {token}"));
+            break;
+        }
         case "basic":
-            {
-                var user = SecretValue(secrets, scheme.Id, "username");
-                var pass = SecretValue(secrets, scheme.Id, "password");
-                if (user is null || pass is null) { Console.Error.WriteLine($"warning: no username/password configured for scheme '{scheme.Id}' in secrets.json — sending unauthenticated."); break; }
-                var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{user}:{pass}"));
-                headers.Add(("Authorization", $"Basic {encoded}"));
-                break;
-            }
+        {
+            var user = SecretValue(secrets, scheme.Id, "username");
+            var pass = SecretValue(secrets, scheme.Id, "password");
+            if (user is null || pass is null) { Console.Error.WriteLine($"warning: no username/password configured for scheme '{scheme.Id}' in secrets.json — sending unauthenticated."); break; }
+            var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{user}:{pass}"));
+            headers.Add(("Authorization", $"Basic {encoded}"));
+            break;
+        }
         case "oauth2":
-            {
-                var clientId = SecretValue(secrets, scheme.Id, "clientId");
-                var clientSecret = SecretValue(secrets, scheme.Id, "clientSecret");
-                var tokenUrl = SecretValue(secrets, scheme.Id, "tokenUrl") ?? scheme.OAuthTokenUrl;
-                if (clientId is null || clientSecret is null || tokenUrl is null) { Console.Error.WriteLine($"warning: no clientId/clientSecret/tokenUrl configured for scheme '{scheme.Id}' in secrets.json — sending unauthenticated."); break; }
-                var token = await FetchOAuth2TokenAsync(http, tokenUrl, clientId, clientSecret, oauthTokenCache);
-                if (token is null) { Console.Error.WriteLine($"warning: failed to obtain an OAuth2 token for scheme '{scheme.Id}' — sending unauthenticated."); break; }
-                headers.Add(("Authorization", $"Bearer {token}"));
-                break;
-            }
+        {
+            var clientId = SecretValue(secrets, scheme.Id, "clientId");
+            var clientSecret = SecretValue(secrets, scheme.Id, "clientSecret");
+            var tokenUrl = SecretValue(secrets, scheme.Id, "tokenUrl") ?? scheme.OAuthTokenUrl;
+            if (clientId is null || clientSecret is null || tokenUrl is null) { Console.Error.WriteLine($"warning: no clientId/clientSecret/tokenUrl configured for scheme '{scheme.Id}' in secrets.json — sending unauthenticated."); break; }
+            var token = await FetchOAuth2TokenAsync(http, tokenUrl, clientId, clientSecret, oauthTokenCache);
+            if (token is null) { Console.Error.WriteLine($"warning: failed to obtain an OAuth2 token for scheme '{scheme.Id}' — sending unauthenticated."); break; }
+            headers.Add(("Authorization", $"Bearer {token}"));
+            break;
+        }
         default:
             Console.Error.WriteLine($"warning: scheme '{scheme.Id}' ({scheme.Kind}) is not a supported auth kind — sending unauthenticated.");
             break;
