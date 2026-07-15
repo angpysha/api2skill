@@ -11,8 +11,9 @@ namespace Api2Skill.Tests;
 /// prefix-&gt;listener mappings in a process-wide internal registry, and running multiple
 /// listener instances concurrently — even on genuinely distinct ports — was still observed to
 /// intermittently throw <c>HttpListenerException: Address already in use</c> from inside
-/// <c>HttpListener.Close()</c>, not just from <c>Start()</c>. Serializing these three test
-/// classes removed the flakiness where the retry-on-bind fix alone did not.
+/// <c>HttpListener.Close()</c>, not just from <c>Start()</c>. Serializing every test class that
+/// starts a real HttpListener (including hosted-relay stubs) removed the flakiness where the
+/// retry-on-bind fix alone did not.
 ///
 /// No <c>DisableParallelization</c> property is needed here — that's an xUnit v2
 /// <c>[CollectionBehavior]</c> (assembly-level) concern. Membership in the same named

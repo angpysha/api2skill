@@ -4,6 +4,7 @@ using Api2Skill.OAuth;
 
 namespace Api2Skill.Tests.OAuth;
 
+[Collection("LoopbackHttp")]
 public class LoopbackHttpCaptureTests
 {
     [Fact]

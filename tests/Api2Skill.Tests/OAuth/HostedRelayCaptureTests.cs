@@ -5,6 +5,7 @@ using Api2Skill.OAuth;
 namespace Api2Skill.Tests.OAuth;
 
 /// <summary>T030 — hosted session/poll client against in-process stub.</summary>
+[Collection("LoopbackHttp")]
 public class HostedRelayCaptureTests
 {
     [Fact]

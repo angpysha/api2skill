@@ -6,6 +6,7 @@ using Api2Skill.OAuth;
 namespace Api2Skill.Tests.OAuth;
 
 /// <summary>T031 — relay contract stub tests matching <c>contracts/hosted-relay.md</c>.</summary>
+[Collection("LoopbackHttp")]
 public class HostedRelayStubTests
 {
     [Fact]
