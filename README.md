@@ -7,10 +7,6 @@
 
 ![api2skill — OpenAPI to Agent Skill](docs/images/api2skill-social.png)
 
-> **Repo preview:** The social card (`docs/images/api2skill-social.png`) shows OpenAPI →
-> Agent Skill — not Claude-specific. Set it under **Settings → General → Social preview**
-> (not settable via `gh` API).
-
 Convert an OpenAPI/Swagger document into a self-contained **Agent Skill** package — a
 `SKILL.md` plus scripts and reference docs — so an existing REST API becomes something any
 agent that supports the Agent Skills standard can call correctly, with authentication,
