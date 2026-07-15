@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Net;
-using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using Api2Skill.OAuth;
@@ -12,21 +11,25 @@ namespace Api2Skill.Tests.OAuth;
 /// </summary>
 public sealed class TestHostedRelayServer : IAsyncDisposable
 {
-    private readonly HttpListener _listener = new();
+    private readonly HttpListener _listener;
     private readonly ConcurrentDictionary<string, Session> _sessions = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _cts = new();
     private Task? _loop;
     private int _disposed;
 
-    public Uri BaseUri { get; private set; } = null!;
+    public Uri BaseUri { get; }
+
+    private TestHostedRelayServer(HttpListener listener, Uri baseUri)
+    {
+        _listener = listener;
+        BaseUri = baseUri;
+    }
 
     public static async Task<TestHostedRelayServer> StartAsync()
     {
-        var server = new TestHostedRelayServer();
-        var port = GetFreePort();
-        server.BaseUri = new Uri($"http://127.0.0.1:{port}/");
-        server._listener.Prefixes.Add(server.BaseUri.ToString());
-        server._listener.Start();
+        // Reuse bind-with-retry: GetFreePort + Start has a TOCTOU race under xUnit parallelism.
+        var (listener, port) = LoopbackHttpListenerFactory.Start();
+        var server = new TestHostedRelayServer(listener, new Uri($"http://127.0.0.1:{port}/"));
         server._loop = Task.Run(server.AcceptLoopAsync);
         // Brief settle so first request never races Start
         await Task.Delay(10).ConfigureAwait(false);
@@ -53,6 +56,11 @@ public sealed class TestHostedRelayServer : IAsyncDisposable
         catch (ObjectDisposedException)
         {
             // already closed
+        }
+        catch (HttpListenerException)
+        {
+            // Managed HttpListener can throw "Address already in use" from Close() when other
+            // listeners share the process registry — see LoopbackHttpCollection.
         }
 
         if (_loop is not null)
@@ -319,13 +327,6 @@ public sealed class TestHostedRelayServer : IAsyncDisposable
         }
 
         return result;
-    }
-
-    private static int GetFreePort()
-    {
-        using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-        socket.Bind(new IPEndPoint(IPAddress.Loopback, 0));
-        return ((IPEndPoint)socket.LocalEndPoint!).Port;
     }
 
     private sealed record Session(
