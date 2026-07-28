@@ -47,17 +47,49 @@ public static class SkillMdWriter
             : "Untrusted HTTPS (self-signed/invalid certificates) is **off by default**. Set `API2SKILL_INSECURE=1` to accept them — **dev/local use only**, never in production.");
         sb.AppendLine();
 
+        if (model.SpecParts is { Count: > 1 } specParts)
+        {
+            sb.AppendLine("## API parts");
+            sb.AppendLine();
+            sb.AppendLine("| id | label | source | operations |");
+            sb.AppendLine("|---|---|---|---|");
+            foreach (var part in specParts)
+            {
+                sb.AppendLine(
+                    $"| `{part.Id}` | {EscapeTableCell(part.Label)} | `{part.Source}` | {part.OperationCount} |");
+            }
+
+            sb.AppendLine();
+        }
+
         if (model.SecuritySchemes.Count > 0)
         {
+            var showProvenance = model.SpecParts is { Count: > 1 }
+                && model.SecuritySchemes.Any(s => s.SourceSpecId is { Length: > 0 });
             sb.AppendLine("## Auth (from the spec)");
             sb.AppendLine();
-            sb.AppendLine("| scheme | kind | secrets.json keys |");
-            sb.AppendLine("|---|---|---|");
-            foreach (var scheme in model.SecuritySchemes)
+            if (showProvenance)
             {
-                var keys = scheme.SecretKeys.Count > 0 ? string.Join(", ", scheme.SecretKeys) : "(none — manual auth required)";
-                sb.AppendLine($"| `{scheme.Id}` | {scheme.Kind} | {keys} |");
+                sb.AppendLine("| scheme | kind | secrets.json keys | from |");
+                sb.AppendLine("|---|---|---|---|");
+                foreach (var scheme in model.SecuritySchemes)
+                {
+                    var keys = scheme.SecretKeys.Count > 0 ? string.Join(", ", scheme.SecretKeys) : "(none — manual auth required)";
+                    sb.AppendLine(
+                        $"| `{scheme.Id}` | {scheme.Kind} | {keys} | `{scheme.SourceSpecId}` |");
+                }
             }
+            else
+            {
+                sb.AppendLine("| scheme | kind | secrets.json keys |");
+                sb.AppendLine("|---|---|---|");
+                foreach (var scheme in model.SecuritySchemes)
+                {
+                    var keys = scheme.SecretKeys.Count > 0 ? string.Join(", ", scheme.SecretKeys) : "(none — manual auth required)";
+                    sb.AppendLine($"| `{scheme.Id}` | {scheme.Kind} | {keys} |");
+                }
+            }
+
             sb.AppendLine();
         }
 

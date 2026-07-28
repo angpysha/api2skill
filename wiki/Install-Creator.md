@@ -50,7 +50,15 @@ api2skill install-creator --target .github/skills --force
 
 **Without `--target` when stdin/stdout is not a TTY:** exits non-zero and asks for `--target`.
 
-**If the skill already exists:** refuses unless `--force`, or (on a TTY) you confirm overwrite.
+**If the skill already exists:** refuses unless `--force`, or (on a TTY) you confirm overwrite. When the bundled version is **newer** than `.creator-version.json`, the prompt says *"Update available … Install update? [y/N]"*.
+
+**Check for updates without installing:**
+
+```bash
+api2skill creator check-update
+```
+
+Scans `.cursor/skills`, `.claude/skills`, `.github/skills`, and `.agents/skills` under the current directory. Exit code **8** when any installed copy is older than the bundled skill (exit **0** when up to date or not installed).
 
 ## What the creator skill teaches
 

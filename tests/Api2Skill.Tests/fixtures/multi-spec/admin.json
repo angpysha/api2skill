@@ -1,0 +1,91 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Acme Admin API",
+    "description": "Admin surface for multi-spec composition fixtures.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    { "url": "https://api.example.com" }
+  ],
+  "tags": [
+    { "name": "users", "description": "Admin user management" },
+    { "name": "audit", "description": "Audit log" }
+  ],
+  "paths": {
+    "/admin/users": {
+      "get": {
+        "tags": ["users"],
+        "operationId": "listUsers",
+        "summary": "List all users (admin)",
+        "security": [{ "admin_oauth": ["admin:users"] }],
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/AdminUser" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/audit": {
+      "get": {
+        "tags": ["audit"],
+        "operationId": "listAuditEvents",
+        "summary": "List audit events",
+        "security": [{ "admin_oauth": ["admin:audit"] }],
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/AuditEvent" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "admin_oauth": {
+        "type": "oauth2",
+        "flows": {
+          "clientCredentials": {
+            "tokenUrl": "https://api.example.com/oauth/token",
+            "scopes": {
+              "admin:users": "Manage users",
+              "admin:audit": "Read audit log"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "AdminUser": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "role": { "type": "string" }
+        }
+      },
+      "AuditEvent": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "action": { "type": "string" }
+        }
+      }
+    }
+  }
+}

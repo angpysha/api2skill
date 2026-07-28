@@ -1,0 +1,81 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Acme Public API",
+    "description": "Public surface for multi-spec composition fixtures.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    { "url": "https://api.example.com" }
+  ],
+  "tags": [
+    { "name": "users", "description": "Public user endpoints" },
+    { "name": "catalog", "description": "Public catalog" }
+  ],
+  "paths": {
+    "/public/users/me": {
+      "get": {
+        "tags": ["users"],
+        "operationId": "getMyProfile",
+        "summary": "Get the caller's public profile",
+        "security": [{ "public_api_key": [] }],
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PublicUser" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/public/catalog/items": {
+      "get": {
+        "tags": ["catalog"],
+        "operationId": "listCatalogItems",
+        "summary": "List catalog items",
+        "security": [{ "public_api_key": [] }],
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/CatalogItem" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "public_api_key": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Api-Key"
+      }
+    },
+    "schemas": {
+      "PublicUser": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "displayName": { "type": "string" }
+        }
+      },
+      "CatalogItem": {
+        "type": "object",
+        "properties": {
+          "sku": { "type": "string" },
+          "name": { "type": "string" }
+        }
+      }
+    }
+  }
+}

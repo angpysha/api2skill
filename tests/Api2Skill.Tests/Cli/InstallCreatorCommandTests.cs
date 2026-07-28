@@ -54,9 +54,15 @@ public class InstallCreatorCommandTests : IDisposable
             stdout: TextWriter.Null);
 
         Assert.Equal(ExitCodes.Success, exit);
-        var dest = Path.Combine(skillsRoot, SkillHostRoots.CreatorSkillFolder, SkillHostRoots.SkillFileName);
+        var destDir = Path.Combine(skillsRoot, SkillHostRoots.CreatorSkillFolder);
+        var dest = Path.Combine(destDir, SkillHostRoots.SkillFileName);
         Assert.True(File.Exists(dest));
         Assert.Equal("# test creator skill\n", File.ReadAllText(dest));
+        Assert.Equal(
+            CreatorSkillVersion.BundledVersionString(),
+            CreatorSkillVersion.TryGetInstalledVersion(destDir) is { } v
+                ? CreatorSkillVersion.Format(v)
+                : null);
     }
 
     [Fact]
@@ -133,7 +139,7 @@ public class InstallCreatorCommandTests : IDisposable
             isInteractive: true,
             workingDirectory: _workDir,
             templatePath: _templatePath,
-            confirmOverwrite: _ => true,
+            confirmOverwrite: (_, _) => true,
             stdout: TextWriter.Null);
 
         Assert.Equal(ExitCodes.Success, exit);
@@ -190,5 +196,10 @@ public class InstallCreatorCommandTests : IDisposable
         Assert.Contains("api2skill generate", text, StringComparison.Ordinal);
         Assert.Contains("--auth", text, StringComparison.Ordinal);
         Assert.Contains("callbackUrl", text, StringComparison.Ordinal);
+        Assert.Contains("creator check-update", text, StringComparison.Ordinal);
+        Assert.Contains("secrets.example.json", text, StringComparison.Ordinal);
+        Assert.Contains("base URL", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("merge --into", text, StringComparison.Ordinal);
+        Assert.Contains("add-spec", text, StringComparison.Ordinal);
     }
 }
