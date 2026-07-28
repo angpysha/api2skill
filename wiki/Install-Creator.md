@@ -5,14 +5,26 @@ api2skill install-creator [--target <skills-root>] [--force]
 ```
 
 Installs the bundled **api2skill-creator** agent skill so an AI agent can interview you about
-an OpenAPI API and emit the exact `api2skill generate` / `update` command (including auth,
-`--login`, `callbackUrl`, script kind, and so on).
+an OpenAPI API and emit the exact `api2skill generate` / `update` / `merge` / `add-spec`
+command (including auth, base URL, secrets placement, `--login`, `callbackUrl`, script kind,
+and so on).
 
 Layout on disk:
 
 ```text
 <skills-root>/api2skill-creator/SKILL.md
+<skills-root>/api2skill-creator/.creator-version.json   # matches package <Version>
 ```
+
+## Prefer Plan mode for multi-spec
+
+When setting up **several** Swagger docs (or deciding merge vs generate), use **Cursor Plan
+mode** (or another plan-first agent workflow) with the creator skill loaded. The agent should
+plan interview questions — auth per part, shared base URL, secrets placement, merge vs
+`generate --spec` vs `add-spec` — **before** emitting shell commands. See
+[Multi-Spec Skills](Multi-Spec-Skills.md) and the interactive walkthrough
+[`docs/interactive/multi-spec-guide.html`](../docs/interactive/multi-spec-guide.html)
+([Interactive Guides](Interactive-Guides.md) for Canvas / Artifact / Sites).
 
 ## Supported project skill roots (exactly 4)
 
@@ -58,12 +70,18 @@ api2skill install-creator --target .github/skills --force
 api2skill creator check-update
 ```
 
-Scans `.cursor/skills`, `.claude/skills`, `.github/skills`, and `.agents/skills` under the current directory. Exit code **8** when any installed copy is older than the bundled skill (exit **0** when up to date or not installed).
+Scans `.cursor/skills`, `.claude/skills`, `.github/skills`, and `.agents/skills` under the
+current directory. Exit code **8** when any installed copy is older than the bundled skill
+(exit **0** when up to date or not installed). The bundled version always matches the
+api2skill package `<Version>` in `Api2Skill.csproj`.
 
 ## What the creator skill teaches
 
-The installed `SKILL.md` tells the agent to ask about OpenAPI path/URL, `--out`, `--name`,
-`--script`, `--auth` / `--auth-config`, `--login`, OAuth `callbackUrl` / token fields,
-`--force`, and `--insecure` — then print copy-pasteable CLI commands. See also
-[Generate Command](Generate-Command.md), [Update Command](Update-Command.md), and
-[Authentication](Authentication.md).
+The installed `SKILL.md` tells the agent to interview on OpenAPI path/URL(s), base URL,
+secrets placement, `--out`, `--name`, `--script`, `--auth` / `--auth-config`, `--login`,
+OAuth `callbackUrl` / token fields, `--force`, and `--insecure` — including multi-spec
+`generate --spec`, `merge --into`, `add-spec`, and multi-part `update` — then print
+copy-pasteable CLI commands. Prefer Plan mode for that interview on multi-spec setups.
+
+See also [Multi-Spec Skills](Multi-Spec-Skills.md), [Generate Command](Generate-Command.md),
+[Update Command](Update-Command.md), and [Authentication](Authentication.md).

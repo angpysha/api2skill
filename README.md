@@ -84,6 +84,40 @@ cp secrets.example.json secrets.json   # fill in real credentials
 dotnet run scripts/call.cs -- getPetById --petId 3
 ```
 
+## Multi-spec (same base URL)
+
+Several Swagger/OpenAPI docs against one host → **one** skill. Full guide:
+[wiki/Multi-Spec-Skills.md](wiki/Multi-Spec-Skills.md).
+**Interactive walkthrough** (pick scenario → copy command):
+[docs/interactive/multi-spec-guide.html](docs/interactive/multi-spec-guide.html) —
+open in a browser, or follow [wiki/Interactive-Guides.md](wiki/Interactive-Guides.md) for
+Cursor / Copilot Canvas, Claude Artifacts, and Codex sites.
+
+```bash
+# Compose docs at generate time (--base-url when servers disagree or are missing)
+api2skill generate \
+  --spec ./public.json --spec-id public \
+  --spec ./admin.json --spec-id admin \
+  --base-url https://api.example.com \
+  --out ./skills/acme
+
+# Merge skills you already generated separately (sources kept; secrets first-wins)
+api2skill merge --into ./skills/acme ./skills/acme-public ./skills/acme-admin
+
+# Append one OpenAPI file to an existing skill (not merge)
+api2skill add-spec ./skills/acme ./billing.json --spec-id billing
+
+# Refresh all parts, or replace one part's source
+api2skill update ./skills/acme
+api2skill update ./skills/acme ./new-admin.json --spec-id admin
+```
+
+Different auth per document → prefer `auth.json` with tag/global profiles
+([wiki/Authentication.md](wiki/Authentication.md)). For an agent-led setup, install
+`api2skill-creator` and use **Cursor Plan mode** (plan questions on auth, base URL, secrets,
+and merge vs generate before running CLI) — see
+[wiki/Install-Creator.md](wiki/Install-Creator.md).
+
 ## Authentication (basics)
 
 | Approach | When to use |
@@ -113,11 +147,16 @@ and **HTTPS loopback** login (`dotnet dev-certs`, `--cert` / PEM flags).
 ## Install creator skill
 
 `api2skill install-creator` copies a bundled helper skill into project agent skill roots so
-an agent can ask about OpenAPI path, `--out`, `--name`, `--script`, `--auth` /
-`--auth-config`, `--login`, `callbackUrl`, `--force`, and `--insecure`, then emit exact CLI
-commands. Supported roots (exactly four): `.cursor/skills/`, `.claude/skills/`,
-`.github/skills/`, `.agents/skills/`. Non-TTY runs require `--target`. Details:
-[wiki/Install-Creator.md](wiki/Install-Creator.md).
+an agent can ask about OpenAPI path(s), base URL, secrets placement, `--out`, `--name`,
+`--script`, `--auth` / `--auth-config`, `--login`, `callbackUrl`, `--force`, and
+`--insecure` — including multi-spec `generate --spec`, `merge --into`, `add-spec`, and
+multi-part `update` — then emit exact CLI commands.
+
+For multi-spec interviews, prefer **Plan mode** so the agent plans those questions before
+emitting commands. Check for updates with `api2skill creator check-update` (bundled version
+matches the package `<Version>`). Supported roots (exactly four): `.cursor/skills/`,
+`.claude/skills/`, `.github/skills/`, `.agents/skills/`. Non-TTY runs require `--target`.
+Details: [wiki/Install-Creator.md](wiki/Install-Creator.md).
 
 ## Project layout
 
@@ -131,6 +170,7 @@ specs/               feature specs (Spec Kit)
 ## Status
 
 MVP complete: three script emitters (`cs`/`fsx`/`csx`), explicit auth (`bearer`, `basic`,
-`custom`, `script`, OAuth2/Entra), `generate` / `update` / `install-creator` commands,
-filtering, and atomic output staging. See
-[specs/001-openapi-to-skill/spec.md](specs/001-openapi-to-skill/spec.md) for milestone scope.
+`custom`, `script`, OAuth2/Entra), `generate` / `update` / `merge` / `add-spec` /
+`install-creator`, multi-spec composition (same base URL), filtering, and atomic output
+staging. See [specs/001-openapi-to-skill/spec.md](specs/001-openapi-to-skill/spec.md) and
+[specs/012-multi-spec-skill/spec.md](specs/012-multi-spec-skill/spec.md).

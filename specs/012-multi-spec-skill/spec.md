@@ -154,7 +154,7 @@ Emit exact CLI commands first; then post-generate file instructions (never inven
 **Decided**: The bundled `api2skill-creator` version tracks the **api2skill tool package version**. On install, write `<skills-root>/api2skill-creator/.creator-version.json` (`{"version":"X.Y.Z"}`). Legacy installs without that file are treated as `0.0.0`.
 
 - **`api2skill creator check-update`** — scans the four standard project skill roots from the working directory; reports installed vs bundled version; exit code **8** when any installation is older than bundled.
-- **`install-creator`** — when overwriting an existing install on a TTY, prompt explicitly for **updates** (`Update available: 0.6.1 → 0.6.3. Install update? [y/N]`). Never silently upgrade.
+- **`install-creator`** — when overwriting an existing install on a TTY, prompt explicitly for **updates** (e.g. `Update available: <installed> → <bundled matching package Version>. Install update? [y/N]`). Never silently upgrade.
 - **Creator SKILL.md** — at session start, agents run `creator check-update`; if an update is available, **ask the user** before running `install-creator`. Agents must not pass `--force` unless the user explicitly requests it.
 - **Non-TTY `install-creator`** without `--force` when an update is available: refuse with message naming bundled vs installed versions (same as today for overwrite, with update hint).
 
@@ -389,10 +389,11 @@ For **merge**: if sources already had `secrets.json`, explain the merged skill m
 | 4 | Agent (if approved) | `api2skill install-creator --target <root>` — user confirms TTY prompt unless they explicitly said to use `--force` |
 | 5 | Tool | Writes `SKILL.md` + `.creator-version.json` |
 
-**Version file** (committed in skill dir after install):
+**Version file** (committed in skill dir after install; `version` matches the api2skill
+package `<Version>`):
 
 ```json
-{ "version": "0.6.3" }
+{ "version": "<package Version>" }
 ```
 
 Legacy installs missing this file are treated as `0.0.0` and offered an update.

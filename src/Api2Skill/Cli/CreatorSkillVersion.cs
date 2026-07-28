@@ -59,11 +59,19 @@ public static class CreatorSkillVersion
     public static bool IsUpdateAvailable(string creatorSkillDirectory)
     {
         var installed = TryGetInstalledVersion(creatorSkillDirectory);
-        return installed is not null && BundledVersion > installed;
+        // Normalize so Assembly 0.6.4.0 equals parsed "0.6.4" (Revision -1).
+        return installed is not null && Normalize(BundledVersion) > Normalize(installed);
     }
 
-    public static string Format(Version version) =>
-        $"{version.Major}.{version.Minor}.{version.Build}";
+    /// <summary>Three-part package version for stable comparison and display.</summary>
+    internal static Version Normalize(Version version) =>
+        new(version.Major, version.Minor, Math.Max(version.Build, 0));
+
+    public static string Format(Version version)
+    {
+        var n = Normalize(version);
+        return $"{n.Major}.{n.Minor}.{n.Build}";
+    }
 
     public static string DescribeUpdate(Version installed) =>
         $"Update available: api2skill-creator {Format(installed)} → {BundledVersionString()}";

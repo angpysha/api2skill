@@ -44,8 +44,13 @@ authoritative source.
 |------|-------|
 | [Home.md](Home.md) | Wiki home — quick links and overview |
 | [Getting-Started.md](Getting-Started.md) | Install, first skill, Claude setup |
-| [Generate-Command.md](Generate-Command.md) | `generate` reference |
-| [Update-Command.md](Update-Command.md) | `update` reference |
+| [Multi-Spec-Skills.md](Multi-Spec-Skills.md) | Multi-doc / same base URL → one skill |
+| [Interactive-Guides.md](Interactive-Guides.md) | HTML walkthrough + Canvas / Artifact / Sites |
+| [Generate-Command.md](Generate-Command.md) | `generate` reference (incl. `--spec`) |
+| [Update-Command.md](Update-Command.md) | `update` reference (incl. multi-part) |
+| [Merge-Command.md](Merge-Command.md) | `merge --into` — combine existing skills |
+| [Add-Spec-Command.md](Add-Spec-Command.md) | `add-spec` — append one OpenAPI source |
+| [Install-Creator.md](Install-Creator.md) | `install-creator` / `creator check-update` |
 | [Authentication.md](Authentication.md) | Auth profiles, OAuth, HTTPS loopback / `dev-certs`, script auth |
 | [Examples.md](Examples.md) | Authored request/response examples |
 | [Releasing.md](Releasing.md) | Version bumps, tags, release flow |

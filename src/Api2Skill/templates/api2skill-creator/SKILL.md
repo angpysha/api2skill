@@ -3,7 +3,7 @@ name: api2skill-creator
 description: >-
   Interview the user about an OpenAPI/Swagger API (including multi-spec, base URL, and
   authorization), assemble exact api2skill CLI commands, then guide secrets.json setup from
-  secrets.example.json placeholders.
+  secrets.example.json placeholders. Prefer Plan mode for multi-spec interviews.
 ---
 
 # api2skill-creator
@@ -13,7 +13,26 @@ CLI. Ask clarifying questions, emit **exact** shell commands, then walk through 
 **authorization**, and **secrets** file setup. Do not invent flags, URLs, or credential values.
 
 Project docs: `README.md`, `wiki/` (`wiki/Authentication.md`, `wiki/Generate-Command.md`,
-`wiki/Update-Command.md`, `wiki/Install-Creator.md`).
+`wiki/Update-Command.md`, `wiki/Multi-Spec-Skills.md`, `wiki/Interactive-Guides.md`,
+`wiki/Install-Creator.md`). Interactive multi-spec walkthrough:
+`docs/interactive/multi-spec-guide.html`.
+
+## Prefer Plan mode (multi-spec and first setup)
+
+When the user has **multiple** OpenAPI/Swagger docs, existing separate skills to merge, or an
+unclear auth/base-URL setup:
+
+1. Prefer **Cursor Plan mode** (or any plan-first agent workflow) **before** emitting
+   `generate` / `merge` / `add-spec` / `update` commands.
+2. In the plan, list the interview topics below (auth, base URL, secrets placement, which
+   workflow) and get answers — then switch to executing the agreed commands.
+3. Optionally open or present `docs/interactive/multi-spec-guide.html` (browser, Canvas,
+   Artifact, or Codex site — see `wiki/Interactive-Guides.md`) so the user can click a
+   scenario and copy the same commands you will emit.
+4. Do **not** invent credentials or run destructive `--force` / overwrite merges without
+   explicit user approval.
+
+Single-spec, already-answered setups can go straight to a concrete command.
 
 ## Interview order
 
@@ -182,8 +201,8 @@ Before interviewing about the user's API:
    requested that flag.
 
 Installed version is recorded in `<skills-root>/api2skill-creator/.creator-version.json`
-(written on install). Legacy installs without that file are treated as oldest and offered an
-update.
+(written on install; value matches the api2skill package `<Version>`). Legacy installs without
+that file are treated as oldest and offered an update.
 
 ## After install / manual refresh
 

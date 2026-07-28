@@ -18,6 +18,9 @@ namespace Api2Skill.Cli;
 /// credential/cache files are read from the source directory before generation (via
 /// <see cref="GenerateCommand.RunAsync"/>'s <c>preserveFromDirectory</c> parameter) and the
 /// source directory is removed on success (FR-003/FR-004).
+///
+/// Feature 012: multi-part manifests refresh all <c>specSources</c>; positional + <c>--spec-id</c>
+/// replaces one part when N&gt;1 (D10).
 /// </summary>
 public static class UpdateCommand
 {
@@ -40,6 +43,10 @@ public static class UpdateCommand
         {
             Description = "Relocate the skill to a new output directory (same semantics as 'generate --out'). Defaults to <skill-path> (update in place).",
         };
+        var specIdOption = new Option<string?>("--spec-id")
+        {
+            Description = "When the skill has multiple spec parts, required with a positional spec-source to select which part to replace (D10).",
+        };
 
         var command = new Command("update", "Regenerate a previously generated skill from a newer OpenAPI/Swagger document, reusing its saved generation options.")
         {
@@ -47,6 +54,7 @@ public static class UpdateCommand
             specArgument,
             nameOption,
             outOption,
+            specIdOption,
         };
 
         command.SetAction(async (parseResult, cancellationToken) =>
@@ -55,7 +63,8 @@ public static class UpdateCommand
             var specSource = parseResult.GetValue(specArgument);
             var newName = parseResult.GetValue(nameOption);
             var newOutputDirectory = parseResult.GetValue(outOption);
-            return await RunAsync(skillPath, specSource, cancellationToken, newName, newOutputDirectory).ConfigureAwait(false);
+            var specId = parseResult.GetValue(specIdOption);
+            return await RunAsync(skillPath, specSource, cancellationToken, newName, newOutputDirectory, specId).ConfigureAwait(false);
         });
 
         return command;
@@ -63,7 +72,7 @@ public static class UpdateCommand
 
     internal static async Task<int> RunAsync(
         string skillPath, string? newSpecSource, CancellationToken cancellationToken,
-        string? newName = null, string? newOutputDirectory = null)
+        string? newName = null, string? newOutputDirectory = null, string? specId = null)
     {
         var manifest = SkillManifestIo.TryLoad(skillPath);
         if (manifest is null)
@@ -86,20 +95,87 @@ public static class UpdateCommand
             return ExitCodes.UsageError;
         }
 
-        var options = new GenerateOptions(
-            SpecSource: newSpecSource ?? manifest.SpecSource,
-            OutputDirectory: targetDir,
-            Name: newName ?? manifest.Name,
-            ScriptKind: manifest.ScriptKind,
-            Include: manifest.Include,
-            Exclude: manifest.Exclude,
-            Force: true,
-            Insecure: manifest.Insecure,
-            Format: manifest.Format,
-            BaseUrl: manifest.BaseUrl,
-            AuthConfigPath: null,
-            AuthShorthand: null,
-            Login: false);
+        var parts = manifest.GetSpecSources().ToList();
+
+        if (newSpecSource is { Length: > 0 })
+        {
+            if (parts.Count > 1)
+            {
+                if (specId is not { Length: > 0 })
+                {
+                    Console.Error.WriteLine(
+                        "This skill has multiple spec parts. Pass --spec-id <id> with the positional spec-source " +
+                        "to replace one part, or omit the positional source to refresh all parts from the manifest.");
+                    return ExitCodes.UsageError;
+                }
+
+                var id = Slug.Create(specId);
+                var idx = parts.FindIndex(p => string.Equals(p.Id, id, StringComparison.Ordinal));
+                if (idx < 0)
+                {
+                    Console.Error.WriteLine(
+                        $"Unknown --spec-id '{id}'. Known parts: {string.Join(", ", parts.Select(p => p.Id))}.");
+                    return ExitCodes.UsageError;
+                }
+
+                var old = parts[idx];
+                parts[idx] = old with { Source = newSpecSource };
+            }
+            else
+            {
+                // Single-part / legacy: replace the sole source (003 behavior).
+                var only = parts[0];
+                parts[0] = only with { Source = newSpecSource };
+            }
+        }
+        else if (specId is { Length: > 0 })
+        {
+            Console.Error.WriteLine(
+                "--spec-id requires a positional <spec-source> when replacing one part. " +
+                "Omit both to refresh all parts from the manifest.");
+            return ExitCodes.UsageError;
+        }
+
+        GenerateOptions options;
+        if (parts.Count >= 2)
+        {
+            var generateParts = parts
+                .Select(p => new GenerateSpecPart(p.Source, p.Id, p.Label))
+                .ToList();
+            options = new GenerateOptions(
+                SpecSource: generateParts[0].Source,
+                OutputDirectory: targetDir,
+                Name: newName ?? manifest.Name,
+                ScriptKind: manifest.ScriptKind,
+                Include: manifest.Include,
+                Exclude: manifest.Exclude,
+                Force: true,
+                Insecure: manifest.Insecure,
+                Format: manifest.Format,
+                BaseUrl: manifest.BaseUrl,
+                AuthConfigPath: null,
+                AuthShorthand: null,
+                Login: false,
+                SpecParts: generateParts);
+        }
+        else
+        {
+            // Keep single-part path identical to pre-012 update (goldens / SC-005).
+            options = new GenerateOptions(
+                SpecSource: parts[0].Source,
+                OutputDirectory: targetDir,
+                Name: newName ?? manifest.Name,
+                ScriptKind: manifest.ScriptKind,
+                Include: manifest.Include,
+                Exclude: manifest.Exclude,
+                Force: true,
+                Insecure: manifest.Insecure,
+                Format: manifest.Format,
+                BaseUrl: manifest.BaseUrl,
+                AuthConfigPath: null,
+                AuthShorthand: null,
+                Login: false);
+        }
 
         var exitCode = await GenerateCommand.RunAsync(
             options, cancellationToken, preserveFromDirectory: isRelocating ? sourceDir : null).ConfigureAwait(false);

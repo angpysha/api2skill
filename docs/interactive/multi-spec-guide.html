@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>api2skill — Multi-spec skill guide</title>
+  <style>
+    :root {
+      --bg: #f7f7f5;
+      --fg: #1a1a1a;
+      --muted: #5c5c5c;
+      --card: #ffffff;
+      --border: #d8d8d4;
+      --accent: #0b5fff;
+      --accent-fg: #ffffff;
+      --code-bg: #f0f0ec;
+      --ok: #0a7a3e;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #121212;
+        --fg: #ececec;
+        --muted: #a8a8a8;
+        --card: #1c1c1c;
+        --border: #333;
+        --accent: #6b9fff;
+        --accent-fg: #0a0a0a;
+        --code-bg: #262626;
+        --ok: #5dca8a;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.5;
+    }
+    main {
+      max-width: 44rem;
+      margin: 0 auto;
+      padding: 1.5rem 1.25rem 3rem;
+    }
+    h1 { font-size: 1.5rem; font-weight: 650; margin: 0 0 0.35rem; }
+    .lead { color: var(--muted); margin: 0 0 1.5rem; font-size: 0.95rem; }
+    section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.1rem;
+      margin-bottom: 1rem;
+    }
+    h2 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 0 0 0.75rem; font-weight: 600; }
+    label.scenario {
+      display: flex;
+      gap: 0.65rem;
+      align-items: flex-start;
+      padding: 0.55rem 0.4rem;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    label.scenario:hover { background: var(--code-bg); }
+    label.scenario input { margin-top: 0.3rem; }
+    label.scenario strong { display: block; font-size: 0.95rem; }
+    label.scenario span { display: block; color: var(--muted); font-size: 0.85rem; }
+    pre {
+      margin: 0;
+      padding: 0.85rem 1rem;
+      background: var(--code-bg);
+      border-radius: 6px;
+      overflow-x: auto;
+      font-size: 0.8rem;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+      margin-bottom: 0.65rem;
+    }
+    button {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: var(--accent);
+      color: var(--accent-fg);
+      font: inherit;
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding: 0.4rem 0.85rem;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button.secondary {
+      background: transparent;
+      color: var(--fg);
+    }
+    button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    #copy-status { font-size: 0.85rem; color: var(--ok); min-height: 1.2em; }
+    ul.tips { margin: 0; padding-left: 1.2rem; font-size: 0.9rem; }
+    ul.tips li { margin-bottom: 0.4rem; }
+    a { color: var(--accent); }
+    footer { margin-top: 1.25rem; font-size: 0.8rem; color: var(--muted); }
+    code { font-family: ui-monospace, "Cascadia Code", Menlo, monospace; font-size: 0.88em; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Multi-spec skill guide</h1>
+    <p class="lead">
+      Several OpenAPI/Swagger docs on the <strong>same base URL</strong> → one api2skill skill.
+      Pick your situation, copy the command, then fill secrets locally.
+      Offline-friendly — no network calls.
+    </p>
+
+    <section aria-labelledby="scenario-heading">
+      <h2 id="scenario-heading">Your situation</h2>
+      <div id="scenarios" role="radiogroup" aria-labelledby="scenario-heading"></div>
+    </section>
+
+    <section aria-labelledby="cmd-heading">
+      <h2 id="cmd-heading">Command</h2>
+      <div class="toolbar">
+        <button type="button" id="copy-btn">Copy command</button>
+        <button type="button" class="secondary" id="select-btn">Select all</button>
+        <span id="copy-status" aria-live="polite"></span>
+      </div>
+      <pre id="command" tabindex="0"></pre>
+    </section>
+
+    <section aria-labelledby="tips-heading">
+      <h2 id="tips-heading">Tips</h2>
+      <ul class="tips" id="tips"></ul>
+    </section>
+
+    <section aria-labelledby="hosts-heading">
+      <h2 id="hosts-heading">Open in agent hosts</h2>
+      <p style="margin:0;font-size:0.9rem;color:var(--muted)">
+        Cursor Canvas · GitHub Copilot Canvas · Claude Artifacts · Codex sites —
+        see <code>wiki/Interactive-Guides.md</code> in the api2skill repo (paste-HTML fallback included).
+        Prefer <strong>Plan mode</strong> with <code>api2skill-creator</code> before running commands.
+      </p>
+    </section>
+
+    <footer>
+      Source of truth for CLI flags: <code>wiki/Multi-Spec-Skills.md</code>.
+      Never put real credentials in this page.
+    </footer>
+  </main>
+  <script>
+    (function () {
+      var SCENARIOS = [
+        {
+          id: "generate-multi",
+          title: "Multiple OpenAPI files → new skill",
+          blurb: "Compose docs at generate time (recommended greenfield path).",
+          command:
+            "api2skill generate \\\n" +
+            "  --spec ./public.json --spec-id public --spec-label \"Public API\" \\\n" +
+            "  --spec ./admin.json --spec-id admin --spec-label \"Admin API\" \\\n" +
+            "  --base-url https://api.example.com \\\n" +
+            "  --out ./skills/acme",
+          tips: [
+            "All parts must share the same canonical base URL after normalization — use --base-url when servers disagree or are missing.",
+            "Duplicate operationIds fail by default; use --on-conflict prefix only if you need namespaced IDs.",
+            "After generate: cp secrets.example.json secrets.json and fill placeholders (never commit secrets.json).",
+            "Different auth per doc → prefer --auth-config / auth.json with tag-level or global profiles."
+          ]
+        },
+        {
+          id: "merge",
+          title: "Already have separate skills",
+          blurb: "Combine existing skill directories for the same API host.",
+          command:
+            "api2skill merge --into ./skills/acme \\\n" +
+            "  ./skills/acme-public \\\n" +
+            "  ./skills/acme-admin",
+          tips: [
+            "Source skill directories are not deleted.",
+            "secrets.json keys are unioned; on conflicting values the first source wins (CLI warns).",
+            "scriptKind must match across sources (or match the target when --force into an existing skill).",
+            "Do not use merge to append one OpenAPI file — use add-spec instead."
+          ]
+        },
+        {
+          id: "add-spec",
+          title: "Grow an existing skill",
+          blurb: "Append one more OpenAPI document to a skill you already have.",
+          command:
+            "api2skill add-spec ./skills/acme ./billing.json --spec-id billing",
+          tips: [
+            "Regenerates in place (--force semantics); preserves secrets.json, auth.json, and .auth-cache.json.",
+            "Omit --spec-id only when the filename slug is unique in the manifest.",
+            "Prefer add-spec over merge when you have one new document, not multiple skill folders."
+          ]
+        },
+        {
+          id: "update",
+          title: "Refresh or replace one part",
+          blurb: "Re-fetch all recorded sources, or point one part at a new file/URL.",
+          command:
+            "# Refresh every recorded part\n" +
+            "api2skill update ./skills/acme\n\n" +
+            "# Replace one part's source (required --spec-id when N>1 parts)\n" +
+            "api2skill update ./skills/acme ./new-admin.json --spec-id admin",
+          tips: [
+            "With more than one specSources entry, a positional new source requires --spec-id.",
+            "Legacy single-spec manifests (specSource string) still update without migration.",
+            "update does not rewrite auth.json — edit auth separately if schemes changed."
+          ]
+        }
+      ];
+
+      var scenariosEl = document.getElementById("scenarios");
+      var commandEl = document.getElementById("command");
+      var tipsEl = document.getElementById("tips");
+      var statusEl = document.getElementById("copy-status");
+      var selected = SCENARIOS[0].id;
+
+      function render() {
+        var s = SCENARIOS.find(function (x) { return x.id === selected; }) || SCENARIOS[0];
+        commandEl.textContent = s.command;
+        tipsEl.innerHTML = "";
+        s.tips.forEach(function (t) {
+          var li = document.createElement("li");
+          li.textContent = t;
+          tipsEl.appendChild(li);
+        });
+      }
+
+      SCENARIOS.forEach(function (s, i) {
+        var label = document.createElement("label");
+        label.className = "scenario";
+        var input = document.createElement("input");
+        input.type = "radio";
+        input.name = "scenario";
+        input.value = s.id;
+        input.checked = i === 0;
+        input.addEventListener("change", function () {
+          selected = s.id;
+          statusEl.textContent = "";
+          render();
+        });
+        var text = document.createElement("div");
+        var strong = document.createElement("strong");
+        strong.textContent = s.title;
+        var span = document.createElement("span");
+        span.textContent = s.blurb;
+        text.appendChild(strong);
+        text.appendChild(span);
+        label.appendChild(input);
+        label.appendChild(text);
+        scenariosEl.appendChild(label);
+      });
+
+      document.getElementById("copy-btn").addEventListener("click", function () {
+        var text = commandEl.textContent;
+        function ok() {
+          statusEl.textContent = "Copied.";
+        }
+        function fail() {
+          statusEl.textContent = "Copy failed — use Select all, then ⌘/Ctrl+C.";
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(ok).catch(fail);
+        } else {
+          fail();
+        }
+      });
+
+      document.getElementById("select-btn").addEventListener("click", function () {
+        var range = document.createRange();
+        range.selectNodeContents(commandEl);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        statusEl.textContent = "Selected — press ⌘/Ctrl+C.";
+      });
+
+      render();
+    })();
+  </script>
+</body>
+</html>

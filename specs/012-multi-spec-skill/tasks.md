@@ -123,14 +123,14 @@ Ready work: `br ready` → claim `.1` (verify/close) or `.2` (foundation) first.
 
 ### Tests
 
-- [ ] T021 [P] CLI tests: merge requires ≥2 skills; refuse existing target without `--force` — `tests/Api2Skill.Tests/Cli/MergeCommandTests.cs`
-- [ ] T022 Integration: merge two skills; secrets key collision warning; sources unmodified — `CompositeSkillIntegrationTests.cs`
+- [x] T021 [P] CLI tests: merge requires ≥2 skills; refuse existing target without `--force` — `tests/Api2Skill.Tests/Cli/MergeCommandTests.cs`
+- [x] T022 Integration: merge two skills; secrets key collision warning; sources unmodified — `CompositeSkillIntegrationTests.cs`
 
 ### Implementation
 
-- [ ] T023 Implement `MergeCommand` + credential union helper (D9) in `src/Api2Skill/Cli/MergeCommand.cs` (+ SkillWriter/helper as needed)
-- [ ] T024 Register `merge` on `RootCommand` in `src/Api2Skill/Program.cs`
-- [ ] T025 Green T021–T022; steer errors away from using merge as add-spec (D8)
+- [x] T023 Implement `MergeCommand` + credential union helper (D9) in `src/Api2Skill/Cli/MergeCommand.cs` (+ SkillWriter/helper as needed)
+- [x] T024 Register `merge` on `RootCommand` in `src/Api2Skill/Program.cs`
+- [x] T025 Green T021–T022; steer errors away from using merge as add-spec (D8)
 
 **Checkpoint**: US2 merge works; sources preserved
 
@@ -146,14 +146,14 @@ Ready work: `br ready` → claim `.1` (verify/close) or `.2` (foundation) first.
 
 ### Tests
 
-- [ ] T026 [P] CLI tests: add-spec duplicate `spec-id` fails; default id from filename — `tests/Api2Skill.Tests/Cli/AddSpecCommandTests.cs`
-- [ ] T027 Integration: three-part skill; `auth.json` / `.auth-cache.json` preserved (assert both files unchanged when pre-seeded) — `CompositeSkillIntegrationTests.cs`
+- [x] T026 [P] CLI tests: add-spec duplicate `spec-id` fails; default id from filename — `tests/Api2Skill.Tests/Cli/AddSpecCommandTests.cs`
+- [x] T027 Integration: three-part skill; `auth.json` / `.auth-cache.json` preserved (assert both files unchanged when pre-seeded) — `CompositeSkillIntegrationTests.cs`
 
 ### Implementation
 
-- [ ] T028 Implement `AddSpecCommand` using `CompositeGenerateService` in `src/Api2Skill/Cli/AddSpecCommand.cs`
-- [ ] T029 Register `add-spec` in `src/Api2Skill/Program.cs`
-- [ ] T030 Green T026–T027
+- [x] T028 Implement `AddSpecCommand` using `CompositeGenerateService` in `src/Api2Skill/Cli/AddSpecCommand.cs`
+- [x] T029 Register `add-spec` in `src/Api2Skill/Program.cs`
+- [x] T030 Green T026–T027
 
 **Checkpoint**: US3 add-spec works
 
@@ -169,13 +169,13 @@ Ready work: `br ready` → claim `.1` (verify/close) or `.2` (foundation) first.
 
 ### Tests
 
-- [ ] T031 [P] UpdateCommand tests: multi-part without `--spec-id` + positional → usage error; with `--spec-id` replaces one part — `tests/Api2Skill.Tests/Cli/UpdateCommandTests.cs`
-- [ ] T032 Integration: legacy singular `specSource` still updates (SC-005); multi-part refresh all — `CompositeSkillIntegrationTests.cs`
+- [x] T031 [P] UpdateCommand tests: multi-part without `--spec-id` + positional → usage error; with `--spec-id` replaces one part — `tests/Api2Skill.Tests/Cli/UpdateCommandTests.cs`
+- [x] T032 Integration: legacy singular `specSource` still updates (SC-005); multi-part refresh all — `CompositeSkillIntegrationTests.cs`
 
 ### Implementation
 
-- [ ] T033 Extend `UpdateCommand` for multi-part acquire + `--spec-id` (D10) in `src/Api2Skill/Cli/UpdateCommand.cs`
-- [ ] T034 Green T031–T032; quickstart §6–§7
+- [x] T033 Extend `UpdateCommand` for multi-part acquire + `--spec-id` (D10) in `src/Api2Skill/Cli/UpdateCommand.cs`
+- [x] T034 Green T031–T032; quickstart §6–§7
 
 **Checkpoint**: US4 multi-part update + legacy OK
 
@@ -198,7 +198,7 @@ Ready work: `br ready` → claim `.1` (verify/close) or `.2` (foundation) first.
 
 - [x] T037 [P] `SkillMdWriter` API parts section + tag collision prefix + auth provenance — `src/Api2Skill/Emit/SkillMdWriter.cs`
 - [x] T038 Schema collision filenames `{specId}.{schemaName}.json` in schema writer path (as applicable)
-- [ ] T039 Align `templates/api2skill-creator/SKILL.md` with full Creator skill contract (spec §); refresh `wiki/Install-Creator.md` / Generate/Update wiki one-liners
+- [x] T039 Align `templates/api2skill-creator/SKILL.md` with full Creator skill contract (spec §); refresh `wiki/Install-Creator.md` / Generate/Update wiki one-liners
 - [x] T040 Green T035–T036 (T038 covered by composer namespace → SchemaWriter; T039 wiki polish remains)
 
 **Checkpoint**: US5 creator + FR-010 emit complete
@@ -209,10 +209,10 @@ Ready work: `br ready` → claim `.1` (verify/close) or `.2` (foundation) first.
 
 **Beads**: `.8` (depends on `.3`–`.7`)
 
-- [ ] T041 [P] Update `contracts` consumers: README / `wiki/` for `generate --spec`, `merge`, `add-spec`, multi-part `update`
-- [ ] T042 Run full quickstart.md scenarios; fix gaps
-- [ ] T043 Bump `<Version>` in `src/Api2Skill/Api2Skill.csproj` if not already bumped for this PR (behavior change)
-- [ ] T044 Mark feature ready for human review; close eligible `br` children; leave epic for PR merge
+- [x] T041 [P] Update `contracts` consumers: README / `wiki/` for `generate --spec`, `merge`, `add-spec`, multi-part `update`
+- [x] T042 Run full quickstart.md scenarios; fix gaps
+- [x] T043 Bump `<Version>` in `src/Api2Skill/Api2Skill.csproj` if not already bumped for this PR (behavior change)
+- [x] T044 Mark feature ready for human review; close eligible `br` children; leave epic for PR merge
 
 ---
 
