@@ -36,9 +36,30 @@ public static class GenerateCommand
 {
     public static Command Create()
     {
-        var specArgument = new Argument<string>("spec-source")
+        var specArgument = new Argument<string?>("spec-source")
         {
-            Description = "Local file path, remote URL, or '-' for stdin.",
+            Description = "Local file path, remote URL, or '-' for stdin. Optional when --spec is used.",
+            Arity = ArgumentArity.ZeroOrOne,
+        };
+        var specOption = new Option<string[]>("--spec")
+        {
+            Description = "OpenAPI source (repeatable). When present, positional spec-source is optional.",
+            DefaultValueFactory = _ => [],
+        };
+        var specIdOption = new Option<string[]>("--spec-id")
+        {
+            Description = "Id for the corresponding --spec (same order). Defaults to slug of source.",
+            DefaultValueFactory = _ => [],
+        };
+        var specLabelOption = new Option<string[]>("--spec-label")
+        {
+            Description = "Display label for the corresponding --spec (same order). Defaults to id.",
+            DefaultValueFactory = _ => [],
+        };
+        var onConflictOption = new Option<string>("--on-conflict")
+        {
+            Description = "operationId collision across parts: fail (default) or prefix.",
+            DefaultValueFactory = _ => "fail",
         };
         var outOption = new Option<string?>("--out", "-o")
         {
@@ -95,6 +116,10 @@ public static class GenerateCommand
         var command = new Command("generate", "Generate a Claude Skill from an OpenAPI/Swagger document")
         {
             specArgument,
+            specOption,
+            specIdOption,
+            specLabelOption,
+            onConflictOption,
             outOption,
             nameOption,
             scriptOption,
@@ -111,8 +136,14 @@ public static class GenerateCommand
 
         command.SetAction(async (parseResult, cancellationToken) =>
         {
+            var positional = parseResult.GetValue(specArgument);
+            var specs = parseResult.GetValue(specOption) ?? [];
+            var ids = parseResult.GetValue(specIdOption) ?? [];
+            var labels = parseResult.GetValue(specLabelOption) ?? [];
+            var parts = BuildSpecParts(positional, specs, ids, labels);
+
             var options = new GenerateOptions(
-                SpecSource: parseResult.GetValue(specArgument)!,
+                SpecSource: parts.Count > 0 ? parts[0].Source : positional ?? "",
                 OutputDirectory: parseResult.GetValue(outOption),
                 Name: parseResult.GetValue(nameOption),
                 ScriptKind: parseResult.GetValue(scriptOption)!,
@@ -124,12 +155,46 @@ public static class GenerateCommand
                 BaseUrl: parseResult.GetValue(baseUrlOption),
                 AuthConfigPath: parseResult.GetValue(authConfigOption),
                 AuthShorthand: parseResult.GetValue(authOption),
-                Login: parseResult.GetValue(loginOption));
+                Login: parseResult.GetValue(loginOption),
+                SpecParts: parts,
+                OnConflict: parseResult.GetValue(onConflictOption)!);
 
             return await RunAsync(options, cancellationToken).ConfigureAwait(false);
         });
 
         return command;
+    }
+
+    /// <summary>
+    /// Resolves positional + repeatable <c>--spec</c>/<c>--spec-id</c>/<c>--spec-label</c>
+    /// into ordered parts. When any <c>--spec</c> is present, positional is ignored.
+    /// </summary>
+    internal static IReadOnlyList<GenerateSpecPart> BuildSpecParts(
+        string? positional,
+        string[] specs,
+        string[] ids,
+        string[] labels)
+    {
+        if (specs.Length > 0)
+        {
+            var list = new List<GenerateSpecPart>(specs.Length);
+            for (var i = 0; i < specs.Length; i++)
+            {
+                list.Add(new GenerateSpecPart(
+                    specs[i],
+                    Id: i < ids.Length ? ids[i] : null,
+                    Label: i < labels.Length ? labels[i] : null));
+            }
+
+            return list;
+        }
+
+        if (positional is { Length: > 0 })
+        {
+            return [new GenerateSpecPart(positional)];
+        }
+
+        return [];
     }
 
     /// <summary>
@@ -152,6 +217,25 @@ public static class GenerateCommand
         if (options.AuthConfigPath is { Length: > 0 } && options.AuthShorthand is { Length: > 0 })
         {
             Console.Error.WriteLine("--auth and --auth-config are mutually exclusive. Pass one or the other.");
+            return ExitCodes.UsageError;
+        }
+
+        if (!string.Equals(options.OnConflict, "fail", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(options.OnConflict, "prefix", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.Error.WriteLine($"Unknown --on-conflict '{options.OnConflict}'. Valid values: fail, prefix.");
+            return ExitCodes.UsageError;
+        }
+
+        var rawParts = options.SpecParts is { Count: > 0 }
+            ? options.SpecParts
+            : options.SpecSource is { Length: > 0 }
+                ? [new GenerateSpecPart(options.SpecSource)]
+                : Array.Empty<GenerateSpecPart>();
+
+        if (rawParts.Count == 0)
+        {
+            Console.Error.WriteLine("Missing spec source. Pass a positional <spec-source> or one or more --spec options.");
             return ExitCodes.UsageError;
         }
 
@@ -188,6 +272,140 @@ public static class GenerateCommand
             }
         }
 
+        if (rawParts.Count >= 2)
+        {
+            return await RunCompositeAsync(options, rawParts, authConfig, authConfigJson, cancellationToken, preserveFromDirectory)
+                .ConfigureAwait(false);
+        }
+
+        // Single-spec path (unchanged behavior for existing callers / goldens).
+        options = options with { SpecSource = rawParts[0].Source };
+        return await RunSingleAsync(options, authConfig, authConfigJson, cancellationToken, preserveFromDirectory)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<int> RunCompositeAsync(
+        GenerateOptions options,
+        IReadOnlyList<GenerateSpecPart> rawParts,
+        AuthConfig? authConfig,
+        string? authConfigJson,
+        CancellationToken cancellationToken,
+        string? preserveFromDirectory)
+    {
+        List<CompositeGenerateService.PartRequest> requests;
+        try
+        {
+            requests = rawParts.Select(ToPartRequest).ToList();
+        }
+        catch (CompositionException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return ExitCodes.UsageError;
+        }
+
+        var skillName = options.Name is { Length: > 0 }
+            ? Slug.Create(options.Name)
+            : Slug.Create(string.Join("-", requests.Select(r => r.Manifest.Id)));
+
+        try
+        {
+            var result = await CompositeGenerateService.GenerateAsync(
+                    skillName,
+                    requests,
+                    options,
+                    authConfig,
+                    authConfigJson,
+                    cancellationToken,
+                    preserveFromDirectory)
+                .ConfigureAwait(false);
+
+            foreach (var warning in result.Warnings)
+            {
+                Console.Error.WriteLine($"warning: {warning}");
+            }
+
+            var opCount = result.Model.Tags.Sum(t => t.Operations.Count);
+            Console.WriteLine($"{result.Written.FullName} ({opCount} operation(s), {result.Model.Tags.Count} tag(s), {requests.Count} spec part(s))");
+
+            if (options.Login && authConfig is not null)
+            {
+                IScriptEmitter emitter = options.ScriptKind switch
+                {
+                    "cs" => new CsFileEmitter(),
+                    "fsx" => new FsxEmitter(),
+                    "csx" => new CsxEmitter(),
+                    _ => new CsFileEmitter(),
+                };
+                await RunLoginForAuthorizationCodeProfilesAsync(authConfig, emitter, result.Written, cancellationToken);
+            }
+
+            return ExitCodes.Success;
+        }
+        catch (CompositionException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return ExitCodes.UsageError;
+        }
+        catch (SkillDirectoryExistsException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return ExitCodes.OutputExists;
+        }
+        catch (FileNotFoundException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return ExitCodes.AcquisitionFailure;
+        }
+        catch (HttpRequestException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            if (!options.Insecure)
+            {
+                Console.Error.WriteLine("If the server uses a self-signed/untrusted certificate, pass --insecure (dev-only).");
+            }
+
+            return ExitCodes.AcquisitionFailure;
+        }
+        catch (OpenApiParseException ex)
+        {
+            Console.Error.WriteLine("Failed to parse the OpenAPI document:");
+            foreach (var error in ex.Errors)
+            {
+                Console.Error.WriteLine(error.Pointer is { Length: > 0 }
+                    ? $"  {error.Pointer}: {error.Message}"
+                    : $"  {error.Message}");
+            }
+
+            return ExitCodes.ParseFailure;
+        }
+        catch (AuthConfigCollisionException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return ExitCodes.AuthConfigError;
+        }
+    }
+
+    internal static CompositeGenerateService.PartRequest ToPartRequest(GenerateSpecPart part)
+    {
+        var id = part.Id is { Length: > 0 }
+            ? Slug.Create(part.Id)
+            : SkillManifest.DeriveLegacyPartId("part", part.Source);
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            throw new CompositionException($"Could not derive a spec-id for source '{part.Source}'.");
+        }
+
+        var label = part.Label is { Length: > 0 } ? part.Label : id;
+        return new CompositeGenerateService.PartRequest(new SpecPartManifest(id, part.Source, label));
+    }
+
+    private static async Task<int> RunSingleAsync(
+        GenerateOptions options,
+        AuthConfig? authConfig,
+        string? authConfigJson,
+        CancellationToken cancellationToken,
+        string? preserveFromDirectory)
+    {
         MemoryStream stream;
         string format;
         try
@@ -280,6 +498,8 @@ public static class GenerateCommand
 
         // FR-001 (specs/003-skill-update-command): every generate records the options needed to
         // reproduce it later via `update`, without any secret/credential values.
+        // Always emit v2 specSources[] (DD2); single-part synthesizes one entry.
+        var partId = SkillManifest.DeriveLegacyPartId(name, options.SpecSource);
         var manifestJson = SkillManifestIo.Serialize(new SkillManifest(
             Name: name,
             SpecSource: options.SpecSource,
@@ -288,7 +508,8 @@ public static class GenerateCommand
             Exclude: options.Exclude,
             Format: options.Format,
             BaseUrl: options.BaseUrl,
-            Insecure: options.Insecure));
+            Insecure: options.Insecure,
+            SpecSources: [new SpecPartManifest(partId, options.SpecSource, partId)]));
 
         DirectoryInfo written;
         try

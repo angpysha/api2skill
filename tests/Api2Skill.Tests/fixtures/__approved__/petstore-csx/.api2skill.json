@@ -1,6 +1,12 @@
 {
   "name": "petstore",
   "specSource": "tests/Api2Skill.Tests/fixtures/petstore.json",
+  "specSources": [
+    {
+      "id": "petstore",
+      "source": "tests/Api2Skill.Tests/fixtures/petstore.json"
+    }
+  ],
   "scriptKind": "csx",
   "include": [],
   "exclude": [],

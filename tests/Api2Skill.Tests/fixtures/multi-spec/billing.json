@@ -1,0 +1,81 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Acme Billing API",
+    "description": "Billing surface for multi-spec composition fixtures.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    { "url": "https://api.example.com" }
+  ],
+  "tags": [
+    { "name": "invoices", "description": "Invoice endpoints" }
+  ],
+  "paths": {
+    "/billing/invoices": {
+      "get": {
+        "tags": ["invoices"],
+        "operationId": "listInvoices",
+        "summary": "List invoices",
+        "security": [{ "billing_bearer": [] }],
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Invoice" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/billing/invoices/{invoiceId}": {
+      "get": {
+        "tags": ["invoices"],
+        "operationId": "getInvoice",
+        "summary": "Get one invoice",
+        "security": [{ "billing_bearer": [] }],
+        "parameters": [
+          {
+            "name": "invoiceId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Invoice" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "billing_bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "Invoice": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "amount": { "type": "number" }
+        }
+      }
+    }
+  }
+}

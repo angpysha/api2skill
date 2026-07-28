@@ -33,4 +33,8 @@ public sealed record SecuritySchemeModel(
     ApiKeyLocation? ApiKeyLocation,
     string? OAuthTokenUrl,
     IReadOnlyList<string> OAuthScopes,
-    IReadOnlyList<string> SecretKeys);
+    IReadOnlyList<string> SecretKeys)
+{
+    /// <summary>Spec part id that contributed this scheme (set by <see cref="SkillModelComposer"/>).</summary>
+    public string? SourceSpecId { get; init; }
+}

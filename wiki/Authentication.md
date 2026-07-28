@@ -31,6 +31,10 @@ Profiles are defined in `auth.json` (or scaffolded by `--auth`, or auto-scaffold
 `generate` — see below). Multiple profiles can apply to one operation; header-name collisions
 across applicable profiles fail at generation time.
 
+**Multi-spec skills** (several OpenAPI docs, same base URL) often mix security schemes. Prefer
+tag-level or global profiles in `auth.json` over a single `--auth` shorthand; colliding scheme
+IDs may be namespaced as `{specId}_{schemeId}`. See [Multi-Spec Skills](Multi-Spec-Skills.md).
+
 ## Auto-scaffold `auth.json` (first generate)
 
 When you run `generate` **without** `--auth` or `--auth-config`, and the filtered spec

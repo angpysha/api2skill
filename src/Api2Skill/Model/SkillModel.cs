@@ -33,7 +33,8 @@ public sealed record SkillModel(
     IReadOnlyList<ComponentSchemaModel> ComponentSchemas = null!,
     bool InsecureDefault = false,
     AuthConfig? AuthConfig = null,
-    AuthScaffoldGuidance? AuthScaffoldGuidance = null);
+    AuthScaffoldGuidance? AuthScaffoldGuidance = null,
+    IReadOnlyList<SpecPartSummary>? SpecParts = null);
 
 /// <summary>A tag-grouped bucket of operations for the SKILL.md operation index (D6).</summary>
 public sealed record TagGroup(

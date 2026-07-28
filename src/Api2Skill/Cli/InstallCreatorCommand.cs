@@ -51,7 +51,7 @@ public static class InstallCreatorCommand
         string? workingDirectory = null,
         string? templatePath = null,
         IReadOnlyList<string>? preselectedRelativeRoots = null,
-        Func<string, bool>? confirmOverwrite = null,
+        Func<string, string, bool>? confirmOverwrite = null,
         TextWriter? stdout = null,
         TextWriter? stderr = null)
     {
@@ -124,15 +124,19 @@ public static class InstallCreatorCommand
                         if (interactive)
                         {
                             var confirm = confirmOverwrite ?? DefaultConfirmOverwrite;
-                            allowOverwrite = confirm(destFile);
+                            allowOverwrite = confirm(destFile, destDir);
                         }
                     }
 
                     if (!allowOverwrite)
                     {
+                        var installed = CreatorSkillVersion.TryGetInstalledVersion(destDir);
+                        var hint = installed is not null && CreatorSkillVersion.IsUpdateAvailable(destDir)
+                            ? $" {CreatorSkillVersion.DescribeUpdate(installed)}."
+                            : string.Empty;
                         stderr.WriteLine(
-                            $"Refusing to overwrite existing '{destFile}'. Re-run with --force " +
-                            (interactive ? "or confirm overwrite." : "."));
+                            $"Refusing to overwrite existing '{destFile}'.{hint} Re-run with --force " +
+                            (interactive ? "or confirm when prompted." : "after explicit approval."));
                         anySkippedExists = true;
                         anyFailure = true;
                         continue;
@@ -141,7 +145,9 @@ public static class InstallCreatorCommand
 
                 Directory.CreateDirectory(destDir);
                 File.Copy(template, destFile, overwrite: true);
-                stdout.WriteLine($"Installed api2skill-creator → {destFile}");
+                CreatorSkillVersion.WriteInstalledVersion(destDir, CreatorSkillVersion.BundledVersion);
+                stdout.WriteLine(
+                    $"Installed api2skill-creator {CreatorSkillVersion.BundledVersionString()} → {destFile}");
                 successCount++;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -164,9 +170,24 @@ public static class InstallCreatorCommand
         return ExitCodes.UsageError;
     }
 
-    private static bool DefaultConfirmOverwrite(string destFile)
+    private static bool DefaultConfirmOverwrite(string destFile, string destDir)
     {
-        Console.Write($"Overwrite existing '{destFile}'? [y/N] ");
+        var installed = CreatorSkillVersion.TryGetInstalledVersion(destDir);
+        if (installed is not null && CreatorSkillVersion.IsUpdateAvailable(destDir))
+        {
+            Console.Write($"{CreatorSkillVersion.DescribeUpdate(installed)} Install update? [y/N] ");
+        }
+        else if (installed is not null)
+        {
+            Console.Write(
+                $"api2skill-creator {CreatorSkillVersion.Format(installed)} is already installed at '{destFile}'. " +
+                "Overwrite anyway? [y/N] ");
+        }
+        else
+        {
+            Console.Write($"Overwrite existing '{destFile}'? [y/N] ");
+        }
+
         var line = Console.ReadLine();
         return line is not null && line.Trim().Equals("y", StringComparison.OrdinalIgnoreCase);
     }

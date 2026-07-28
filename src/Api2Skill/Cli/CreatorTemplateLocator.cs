@@ -10,6 +10,13 @@ public static class CreatorTemplateLocator
     private static readonly string[] RelativeSegments =
         ["templates", SkillHostRoots.CreatorSkillFolder, SkillHostRoots.SkillFileName];
 
+    /// <summary>Directory containing the bundled <c>api2skill-creator</c> template files.</summary>
+    public static string? TryFindTemplateDirectory()
+    {
+        var skill = TryFind();
+        return skill is null ? null : Path.GetDirectoryName(skill);
+    }
+
     /// <summary>Returns the full path to the bundled SKILL.md, or null if not found.</summary>
     public static string? TryFind()
     {

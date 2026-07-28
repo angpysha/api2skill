@@ -1,7 +1,7 @@
 # Update Command
 
 ```
-api2skill update <skill-path> [<spec-source>] [--name <name>] [--out <dir>]
+api2skill update <skill-path> [<spec-source>] [--spec-id <id>] [--name <name>] [--out <dir>]
 ```
 
 Regenerates a previously generated skill from a newer OpenAPI document, reusing the options
@@ -15,6 +15,19 @@ recorded in `.api2skill.json`. Pure delegation to the `generate` pipeline with `
 | `[<spec-source>]` | New spec (file, URL, or `-`). Defaults to the source recorded at generation time |
 | `--name <name>` | Rename the skill (same semantics as `generate --name`) |
 | `--out <dir>` | `-o` | Relocate the skill (same semantics as `generate --out`) |
+| `--spec-id <id>` | | Required with a positional source when the skill has multiple `specSources` |
+
+### Multi-part skills
+
+Skills with `specSources[]` in `.api2skill.json` refresh **all** parts when you omit the
+positional source. With a new source and more than one part, `--spec-id` is **required**.
+
+```bash
+api2skill update ./skills/acme                    # refresh all recorded parts
+api2skill update ./skills/acme ./new-admin.json --spec-id admin
+```
+
+See [Multi-Spec Skills](Multi-Spec-Skills.md).
 
 ## Update flow
 
@@ -92,9 +105,14 @@ non-empty directory.
 | Situation | Command |
 |-----------|---------|
 | First-time skill from a spec | `generate` |
+| First-time composite from several docs | `generate --spec …` ([Multi-Spec](Multi-Spec-Skills.md)) |
 | Spec changed, same options | `update <path> <new-spec>` |
+| Multi-part: refresh all / replace one part | `update <path>` / `update <path> <spec> --spec-id` |
+| Append one new OpenAPI file | [`add-spec`](Add-Spec-Command.md) |
+| Combine existing skill dirs | [`merge --into`](Merge-Command.md) |
 | Change filters, script kind, or auth | `generate --force` with new flags |
 | Refresh + rename or move | `update` with `--name` / `--out` |
 
-See [specs/003-skill-update-command](../specs/003-skill-update-command/spec.md) and
-[specs/004-skill-rename-move-on-update](../specs/004-skill-rename-move-on-update/spec.md).
+See [specs/003-skill-update-command](../specs/003-skill-update-command/spec.md),
+[specs/004-skill-rename-move-on-update](../specs/004-skill-rename-move-on-update/spec.md), and
+[specs/012-multi-spec-skill](../specs/012-multi-spec-skill/spec.md).

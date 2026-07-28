@@ -1,91 +1,214 @@
 ---
 name: api2skill-creator
 description: >-
-  Interview the user about an OpenAPI/Swagger API and assemble the exact api2skill
-  generate or update CLI command (auth, out path, script kind, login, force, insecure).
+  Interview the user about an OpenAPI/Swagger API (including multi-spec, base URL, and
+  authorization), assemble exact api2skill CLI commands, then guide secrets.json setup from
+  secrets.example.json placeholders. Prefer Plan mode for multi-spec interviews.
 ---
 
 # api2skill-creator
 
 Help the user turn a REST API (OpenAPI/Swagger) into an agent skill using the **api2skill**
-CLI. Ask clarifying questions, then output **exact** shell commands they can copy-paste.
-Do not invent flags that are not listed here.
+CLI. Ask clarifying questions, emit **exact** shell commands, then walk through **base URL**,
+**authorization**, and **secrets** file setup. Do not invent flags, URLs, or credential values.
 
-Project docs: repository `README.md` and `wiki/` (especially `wiki/Authentication.md`,
-`wiki/Generate-Command.md`, `wiki/Update-Command.md`, `wiki/Install-Creator.md`).
+Project docs: `README.md`, `wiki/` (`wiki/Authentication.md`, `wiki/Generate-Command.md`,
+`wiki/Update-Command.md`, `wiki/Multi-Spec-Skills.md`, `wiki/Interactive-Guides.md`,
+`wiki/Install-Creator.md`). Interactive multi-spec walkthrough:
+`docs/interactive/multi-spec-guide.html`.
 
-## What to ask
+## Prefer Plan mode (multi-spec and first setup)
 
-Work through these topics (skip any the user already answered):
+When the user has **multiple** OpenAPI/Swagger docs, existing separate skills to merge, or an
+unclear auth/base-URL setup:
 
-1. **OpenAPI / Swagger path or URL** — local file, `https://…` URL, or stdin (`-`).
-2. **`--out` / `-o`** — output skill directory (default: slug of `info.title`).
-3. **`--name`** — skill name override (optional).
-4. **`--script`** — emitter: `cs` (default), `fsx`, or `csx`.
-5. **Auth**
-   - Simple one-profile: `--auth bearer|basic|custom`
-   - Full / OAuth2 / Entra / script / multi-profile: `--auth-config <path-to-auth.json>`
-   - `--auth` and `--auth-config` are mutually exclusive.
-   - First generate with neither flag can write an inactive `auth.json` scaffold when the
-     spec has security schemes — then edit and re-run with `--auth-config` + `--force`.
-6. **`--login`** — after generate, run interactive OAuth for `authorization_code` profiles
-   (needs `callbackUrl` in `auth.json`).
-7. **OAuth fields in `auth.json`** (when relevant): `callbackUrl` (e.g.
-   `http://localhost:8400/callback`), `tokenField` / token response mapping as documented
-   in `wiki/Authentication.md`.
-8. **`--force` / `-f`** — overwrite an existing output directory.
-9. **`--insecure`** — accept untrusted TLS when fetching the spec URL (dev only; also
-   affects generated dispatcher default for HTTPS).
-10. **Update vs generate** — if a skill with `.api2skill.json` already exists, prefer
-    `api2skill update <skill-path> [new-spec] [--name …] [--out …]`.
+1. Prefer **Cursor Plan mode** (or any plan-first agent workflow) **before** emitting
+   `generate` / `merge` / `add-spec` / `update` commands.
+2. In the plan, list the interview topics below (auth, base URL, secrets placement, which
+   workflow) and get answers — then switch to executing the agreed commands.
+3. Optionally open or present `docs/interactive/multi-spec-guide.html` (browser, Canvas,
+   Artifact, or Codex site — see `wiki/Interactive-Guides.md`) so the user can click a
+   scenario and copy the same commands you will emit.
+4. Do **not** invent credentials or run destructive `--force` / overwrite merges without
+   explicit user approval.
 
-Also ask about optional filters when useful: `--include` / `--exclude` (`tag:…`, `path:…`,
-`op:…`), `--format json|yaml`, `--base-url`.
+Single-spec, already-answered setups can go straight to a concrete command.
+
+## Interview order
+
+Work through these topics (skip any the user already answered). Ask **one topic at a time**
+when the user has not provided a batch answer.
+
+### 1. OpenAPI / Swagger source(s)
+
+- **Single doc**: local file, `https://…` URL, or stdin (`-`).
+- **Multiple docs, same API host**: list each path/URL; optional `--spec-id` / `--spec-label`
+  per part.
+- **Workflow**:
+  - New composite → `generate --spec … --spec …`
+  - Existing separate skills → `merge --into <target> <skill-dir> …`
+  - Add one doc to existing skill → `add-spec <skill-path> <spec> --spec-id …` (not `merge`)
+  - Refresh → `update <skill-path>` or `update <path> <new-spec> --spec-id …` when N>1 parts
+
+### 2. Base URL (required — always ask)
+
+Ask explicitly:
+
+1. What **base URL** should API calls use? (e.g. `https://api.example.com/v1`)
+2. Do the spec(s) define the same `servers` URL, or none?
+3. Dev/staging with self-signed TLS? → may need `--insecure` (dev only).
+
+**Emit `--base-url <url>` when**:
+
+- Spec has no `servers` entry.
+- Multiple parts disagree on URL but user wants one skill.
+- User's canonical URL differs from the spec.
+
+The value is recorded in `.api2skill.json` (safe to commit). If the spec had no servers, the
+user may also set top-level `baseUrl` in `secrets.json` at call time.
+
+### 3. Authorization (required — always ask)
+
+For **each spec part** in a composite, ask:
+
+1. Public or authenticated operations?
+2. Auth type: API key, Bearer, Basic, OAuth2, Entra, custom headers, script, or mixed?
+3. One credential set or several (e.g. public key + admin OAuth)?
+
+**Generate flags**:
+
+- Simple single global profile: `--auth bearer|basic|custom`
+- OAuth2 / Entra / multi-profile / per-tag: `--auth-config <path-to-auth.json>`
+- `--auth` and `--auth-config` are **mutually exclusive**.
+- Scaffold path: generate without auth flags → edit inactive `auth.json` →
+  `generate … --auth-config ./auth.json --force`
+- OAuth authorization-code: `--login` after generate (needs `callbackUrl` in `auth.json`)
+
+Multi-part skills: recommend **tag-level or global** profiles in `auth.json`; scheme IDs may
+be prefixed on collision (`{specId}_{schemeId}`). See `wiki/Authentication.md`.
+**Never invent** client IDs, secrets, or tokens.
+
+### 4. Output and tooling
+
+- **`--out` / `-o`** — skill directory (default: slug of `info.title`).
+- **`--name`** — skill name override (optional).
+- **`--script`** — `cs` (default), `fsx`, or `csx`.
+- **`--force` / `-f`** — overwrite existing output.
+- Optional: `--include` / `--exclude`, `--format json|yaml`, filters.
+
+### 5. Update vs generate
+
+If `.api2skill.json` exists, prefer `update` unless merging or adding specs.
 
 ## Commands to emit
 
-Always print complete commands. Examples (adapt to the user's answers):
+Print complete commands first. Examples (adapt to answers):
 
 ```bash
-# Basic generate
+# Single spec
 api2skill generate ./openapi.json --out ./skills/my-api --name my-api --script cs
 
-# Fetch remote spec (dev cert)
-api2skill generate https://svc.local/swagger.json --insecure --out ./skills/my-api
+# Multi-spec + shared base URL
+api2skill generate \
+  --spec ./public.json --spec-id public \
+  --spec ./admin.json --spec-id admin \
+  --base-url https://api.example.com \
+  --out ./skills/acme-api
+
+# Remote spec (dev cert)
+api2skill generate https://svc.local/swagger.json --insecure --base-url https://svc.local --out ./skills/my-api
 
 # Bearer shorthand
 api2skill generate ./openapi.json --auth bearer --out ./skills/my-api
 
-# Explicit auth + interactive OAuth login
+# Explicit auth + OAuth login
 api2skill generate ./openapi.json --auth-config ./auth.json --login --out ./skills/my-api --force
 
-# Refresh existing skill
-api2skill update ./skills/my-api ./openapi-v2.json
-api2skill update ./skills/my-api --name my-api-prod --out ./skills/my-api-prod
+# Merge existing skills
+api2skill merge --into ./skills/acme ./skills/acme-public ./skills/acme-admin
+
+# Append to existing skill
+api2skill add-spec ./skills/acme ./billing.json --spec-id billing
+
+# Refresh
+api2skill update ./skills/my-api
+api2skill update ./skills/acme ./new-admin.json --spec-id admin
 ```
 
-After generate, remind them:
+## After generate — secrets placement (required)
 
-```bash
-cd <skill-dir>
-cp secrets.example.json secrets.json   # fill credentials
-# then run operations via the dispatcher under scripts/
+**Always** walk through this after the user runs generate/merge/add-spec:
+
+1. `cd <skill-dir>`
+2. The generator wrote **`secrets.example.json`** (committed template, placeholders only).
+3. Create the real file (gitignored), either:
+   - `cp secrets.example.json secrets.json` then fill real values, **or**
+   - Create `secrets.json` with the **same keys and structure** as `secrets.example.json`
+     (empty strings as placeholders) so the user only replaces values locally.
+4. Explain the shape:
+   - Nested objects keyed by **security scheme ID** (from OpenAPI), e.g. `api_key.apiKey`.
+   - Top-level keys may come from `auth.json` `{secret:NAME}` references.
+5. **OAuth**: put `clientId` / `clientSecret` in `secrets.json`; run
+   `api2skill login --skill . --profile <name>` for access tokens (stored in
+   `.auth-cache.json`, not `secrets.json`).
+6. **Never commit** `secrets.json` or `.auth-cache.json`.
+
+Example placeholder `secrets.json` (agent may draft — user fills real values):
+
+```json
+{
+  "$comment": "Replace empty strings with real credentials. Never commit this file.",
+  "api_key": { "apiKey": "" },
+  "admin_oauth": {
+    "clientId": "",
+    "clientSecret": "",
+    "tokenUrl": "https://api.example.com/oauth/token",
+    "scopes": ["api.read"]
+  }
+}
 ```
+
+If the user needs `auth.json`, point to `wiki/Authentication.md` and use `{secret:KEY}` placeholders
+that match keys you help them add to `secrets.json`.
+
+After merge, warn that duplicate keys in source `secrets.json` files keep the **first source's**
+value; check warnings in CLI output.
 
 ## Auth JSON hints (for agents drafting auth.json)
 
-When the user needs OAuth / Entra, point them at `wiki/Authentication.md` and ensure
-profiles include the right `type`, endpoints, scopes, secrets placeholders (`{secret:…}`),
-and for authorization-code flows a `callbackUrl`. Do not invent secret values.
+Profiles need `type`, endpoints, scopes, `{secret:…}` placeholders, and `callbackUrl` for
+authorization-code flows. Do not invent secret values.
 
-## After install
+## Self-update (session start — always ask the user)
 
-This skill lives at `<skills-root>/api2skill-creator/SKILL.md`. Install or refresh it with:
+Before interviewing about the user's API:
+
+1. From the **repository root**, run:
+   ```bash
+   api2skill creator check-update
+   ```
+2. If any line shows **`update available`**, tell the user which skill roots are outdated
+   (bundled version vs installed). **Ask explicitly** whether to update — **never** run
+   `install-creator` without their approval.
+3. If they agree, run (adapt the skills root from the check output):
+   ```bash
+   api2skill install-creator --target .cursor/skills
+   ```
+   On a TTY, `install-creator` prompts again: *"Update available … Install update? [y/N]"*
+   — wait for the user to confirm there too unless they passed `--force` themselves.
+4. If they decline, continue with the current installed skill.
+5. **Never auto-update silently** — not in chat, not via `--force` unless the user explicitly
+   requested that flag.
+
+Installed version is recorded in `<skills-root>/api2skill-creator/.creator-version.json`
+(written on install; value matches the api2skill package `<Version>`). Legacy installs without
+that file are treated as oldest and offered an update.
+
+## After install / manual refresh
 
 ```bash
 api2skill install-creator --target <skills-root> [--force]
-# or interactively: api2skill install-creator
 ```
 
-Supported project skills roots: `.cursor/skills/`, `.claude/skills/`, `.github/skills/`,
-`.agents/skills/` — see `wiki/Install-Creator.md`.
+Roots: `.cursor/skills/`, `.claude/skills/`, `.github/skills/`, `.agents/skills/` —
+see `wiki/Install-Creator.md`.

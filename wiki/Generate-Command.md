@@ -1,10 +1,14 @@
 # Generate Command
 
 ```
-api2skill generate <spec-source> [options]
+api2skill generate [<spec-source>] [options]
+api2skill generate --spec <source> [--spec-id <id>] … [options]
 ```
 
-Converts an OpenAPI/Swagger document into a Claude Agent Skill directory.
+Converts one or more OpenAPI/Swagger documents into a Claude Agent Skill directory.
+Multi-spec: repeat `--spec` (same base URL) to compose parts into one skill — see
+[Multi-Spec Skills](Multi-Spec-Skills.md) and
+[contracts/cli.md](../specs/012-multi-spec-skill/contracts/cli.md).
 
 ## Spec source
 
@@ -30,9 +34,30 @@ Converts an OpenAPI/Swagger document into a Claude Agent Skill directory.
 | `--auth-config <path>` | | | Path to `auth.json` (mutually exclusive with `--auth`) |
 | `--auth <type>` | | | Shorthand: `bearer`, `basic`, or `custom` |
 | `--login` | | off | After write, run interactive login for `authorization_code` profiles |
+| `--spec <source>` | | | Repeatable extra/primary spec source (multi-spec) |
+| `--spec-id <id>` | | filename slug | Id for the most recent `--spec` |
+| `--spec-label <text>` | | id | Display label for the most recent `--spec` |
+| `--on-conflict` | | `fail` | `fail` or `prefix` on duplicate `operationId` across parts |
+
+### Multi-spec
+
+Repeat `--spec`; pair each with `--spec-id` / `--spec-label` (apply to the **most recent**
+`--spec`). All parts must share one base URL — pass `--base-url` when `servers` disagree or
+are missing.
+
+```bash
+api2skill generate \
+  --spec ./public.json --spec-id public --spec-label "Public API" \
+  --spec ./admin.json --spec-id admin --spec-label "Admin API" \
+  --base-url https://api.example.com \
+  --out ./skills/acme
+```
+
+Related: [Multi-Spec Skills](Multi-Spec-Skills.md), [`merge --into`](Merge-Command.md),
+[`add-spec`](Add-Spec-Command.md), multi-part [`update`](Update-Command.md).
 
 See [Authentication](Authentication.md) for auth details, including auto-scaffold `auth.json`
-on first generate.
+on first generate. For different auth per document, prefer tag/global profiles in `auth.json`.
 
 ## Auto-scaffold `auth.json`
 

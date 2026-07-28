@@ -143,4 +143,66 @@ public class UpdateCommandTests : IDisposable
         Assert.True(File.Exists(Path.Combine(foreignDir, "unrelated.txt"))); // destination untouched
         Assert.Single(Directory.GetFileSystemEntries(foreignDir)); // nothing new written into it
     }
+
+    private static string MultiFixture(string name) =>
+        Path.Combine(AppContext.BaseDirectory, "fixtures", "multi-spec", name);
+
+    [Fact]
+    public async Task MultiPart_PositionalWithoutSpecId_UsageError()
+    {
+        var skillDir = Path.Combine(_workDir, "multi");
+        Assert.Equal(ExitCodes.Success, await GenerateCommand.RunAsync(
+            new GenerateOptions(
+                SpecSource: MultiFixture("public.json"),
+                OutputDirectory: skillDir,
+                Name: "multi",
+                ScriptKind: "cs",
+                Include: [],
+                Exclude: [],
+                Force: false,
+                Insecure: false,
+                Format: null,
+                BaseUrl: "https://api.example.com",
+                SpecParts:
+                [
+                    new GenerateSpecPart(MultiFixture("public.json"), "public"),
+                    new GenerateSpecPart(MultiFixture("admin.json"), "admin"),
+                ]),
+            CancellationToken.None));
+
+        var exit = await UpdateCommand.RunAsync(skillDir, MultiFixture("admin.json"), CancellationToken.None);
+        Assert.Equal(ExitCodes.UsageError, exit);
+    }
+
+    [Fact]
+    public async Task MultiPart_WithSpecId_ReplacesOnePart()
+    {
+        var skillDir = Path.Combine(_workDir, "multi2");
+        Assert.Equal(ExitCodes.Success, await GenerateCommand.RunAsync(
+            new GenerateOptions(
+                SpecSource: MultiFixture("public.json"),
+                OutputDirectory: skillDir,
+                Name: "multi2",
+                ScriptKind: "cs",
+                Include: [],
+                Exclude: [],
+                Force: false,
+                Insecure: false,
+                Format: null,
+                BaseUrl: "https://api.example.com",
+                SpecParts:
+                [
+                    new GenerateSpecPart(MultiFixture("public.json"), "public"),
+                    new GenerateSpecPart(MultiFixture("admin.json"), "admin"),
+                ]),
+            CancellationToken.None));
+
+        var newAdmin = Path.Combine(_workDir, "admin-new.json");
+        File.Copy(MultiFixture("admin.json"), newAdmin);
+        var exit = await UpdateCommand.RunAsync(skillDir, newAdmin, CancellationToken.None, specId: "admin");
+        Assert.Equal(ExitCodes.Success, exit);
+        var parts = SkillManifestIo.TryLoad(skillDir)!.GetSpecSources();
+        Assert.Equal(newAdmin, parts.Single(p => p.Id == "admin").Source);
+        Assert.Contains(parts, p => p.Id == "public");
+    }
 }

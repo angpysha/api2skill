@@ -20,6 +20,9 @@ public sealed record OperationModel(
     IReadOnlyList<ResponseModel> Responses,
     IReadOnlyList<string> AuthProfileNames)
 {
+    /// <summary>Spec part id that produced this operation (set by <see cref="SkillModelComposer"/>).</summary>
+    public string? SourceSpecId { get; init; }
+
     public OperationModel(
         string OperationId,
         HttpMethod Method,
