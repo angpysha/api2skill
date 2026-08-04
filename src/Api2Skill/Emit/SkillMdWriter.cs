@@ -170,6 +170,7 @@ public static class SkillMdWriter
 
         sb.AppendLine("## Operations");
         sb.AppendLine();
+        var referenceStems = ReferencePaths.BuildTagFileStems(model.Tags.Select(t => t.Tag));
         foreach (var tag in model.Tags)
         {
             sb.AppendLine($"### {tag.Tag}");
@@ -182,10 +183,11 @@ public static class SkillMdWriter
 
             sb.AppendLine("| operationId | method | path | summary | reference |");
             sb.AppendLine("|---|---|---|---|---|");
+            var referenceFile = $"reference/{referenceStems[tag.Tag]}.md";
             foreach (var op in tag.Operations)
             {
                 var summary = EscapeTableCell(op.Summary ?? op.Description ?? string.Empty);
-                sb.AppendLine($"| `{op.OperationId}` | {op.Method.Method} | `{op.PathTemplate}` | {summary} | [reference/{tag.Tag}.md](reference/{tag.Tag}.md) |");
+                sb.AppendLine($"| `{op.OperationId}` | {op.Method.Method} | `{op.PathTemplate}` | {summary} | [{referenceFile}]({referenceFile}) |");
             }
             sb.AppendLine();
         }

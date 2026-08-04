@@ -142,7 +142,14 @@ public static class MergeCommand
                     return ExitCodes.UsageError;
                 }
 
-                parts.Add(new GenerateSpecPart(part.Source, part.Id, part.Label));
+                var source = SpecCache.ResolveMergeSource(dir, part.Id, part.Source);
+                if (!string.Equals(source, part.Source, StringComparison.Ordinal))
+                {
+                    Console.Error.WriteLine(
+                        $"info: merge using cached spec for '{part.Id}' at '{source}' (original source left intact in source skill).");
+                }
+
+                parts.Add(new GenerateSpecPart(source, part.Id, part.Label));
             }
         }
 
@@ -153,6 +160,34 @@ public static class MergeCommand
                 : Path.GetFileName(targetDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)) is { Length: > 0 } leaf
                     ? leaf
                     : loaded[0].Manifest.Name);
+
+        // Prefer an explicit HTTP(S) base from any source manifest over a missing/file:// value.
+        string? mergeBaseUrl = null;
+        foreach (var (_, manifest) in loaded)
+        {
+            var candidate = manifest.BaseUrl;
+            if (string.IsNullOrWhiteSpace(candidate))
+            {
+                continue;
+            }
+
+            if (Uri.TryCreate(candidate.Trim(), UriKind.Absolute, out var uri)
+                && (uri.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase)
+                    || uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase)))
+            {
+                mergeBaseUrl = candidate.Trim().TrimEnd('/');
+                break;
+            }
+        }
+
+        mergeBaseUrl ??= optionsSource.BaseUrl;
+        if (mergeBaseUrl is not null
+            && Uri.TryCreate(mergeBaseUrl.Trim(), UriKind.Absolute, out var badUri)
+            && !badUri.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase)
+            && !badUri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase))
+        {
+            mergeBaseUrl = null;
+        }
 
         string? preserveDir = null;
         try
@@ -177,7 +212,7 @@ public static class MergeCommand
                 Force: force || targetIsSkill,
                 Insecure: optionsSource.Insecure,
                 Format: optionsSource.Format,
-                BaseUrl: optionsSource.BaseUrl,
+                BaseUrl: mergeBaseUrl,
                 AuthConfigPath: null,
                 AuthShorthand: null,
                 Login: false,

@@ -47,7 +47,7 @@ public static class CompositeGenerateService
 
         var buildTasks = parts.Select(p => BuildPartAsync(p, options, authConfig, cts.Token)).ToArray();
 
-        (SpecPartManifest Manifest, SkillModel Model, IReadOnlyList<string> LoadWarnings)[] built;
+        (SpecPartManifest Manifest, SkillModel Model, IReadOnlyList<string> LoadWarnings, byte[] SpecBytes, string Format)[] built;
         try
         {
             built = await Task.WhenAll(buildTasks).ConfigureAwait(false);
@@ -69,11 +69,39 @@ public static class CompositeGenerateService
             new CompositionOptions(conflictMode, options.BaseUrl));
 
         string? scaffoldAuthJson = null;
+        string? effectiveAuthJson = authConfigJson;
         if (authConfig is null && composed.SecuritySchemes.Count > 0)
         {
             var scaffold = AuthScaffold.Build(composed);
             scaffoldAuthJson = scaffold.Json;
             composed = composed with { AuthScaffoldGuidance = scaffold.Guidance };
+
+            string? preservedAuthText = null;
+            if (preserveFromDirectory is { Length: > 0 })
+            {
+                var preservedAuthPath = Path.Combine(preserveFromDirectory, "auth.json");
+                if (File.Exists(preservedAuthPath))
+                {
+                    preservedAuthText = File.ReadAllText(preservedAuthPath);
+                    effectiveAuthJson = AuthGuidanceOverlay.Apply(preservedAuthText, scaffold.Json);
+                    scaffoldAuthJson = null;
+                }
+            }
+
+            // Bake AuthProfileNames from the auth.json that will actually be written so
+            // dispatcher profile lookups match on-disk profiles (merge first-wins vs scaffold).
+            var bakeJson = effectiveAuthJson ?? scaffold.Json;
+            if (TryParseAuthConfig(bakeJson, out var bakeConfig))
+            {
+                composed = SkillModelAuthApplier.Apply(composed, bakeConfig);
+            }
+        }
+        else if (authConfig is not null && composed.SecuritySchemes.Count > 0)
+        {
+            effectiveAuthJson = AuthGuidanceOverlay.Apply(
+                authConfigJson,
+                AuthScaffold.Build(composed).Json);
+            scaffoldAuthJson = null;
         }
 
         IScriptEmitter emitter = options.ScriptKind switch
@@ -89,6 +117,15 @@ public static class CompositeGenerateService
             ? o
             : Path.Combine(".", skillName);
 
+        var effectiveBaseUrl = options.BaseUrl ?? composed.BaseUrl;
+        if (effectiveBaseUrl is not null
+            && Uri.TryCreate(effectiveBaseUrl.Trim(), UriKind.Absolute, out var baseUri)
+            && !baseUri.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase)
+            && !baseUri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase))
+        {
+            effectiveBaseUrl = composed.BaseUrl;
+        }
+
         var manifestJson = SkillManifestIo.Serialize(new SkillManifest(
             Name: skillName,
             SpecSource: parts[0].Manifest.Source,
@@ -96,7 +133,7 @@ public static class CompositeGenerateService
             Include: options.Include,
             Exclude: options.Exclude,
             Format: options.Format,
-            BaseUrl: options.BaseUrl ?? composed.BaseUrl,
+            BaseUrl: effectiveBaseUrl,
             Insecure: options.Insecure,
             SpecSources: parts.Select(p => p.Manifest).ToList()));
 
@@ -105,10 +142,15 @@ public static class CompositeGenerateService
             outputDirectory,
             options.Force,
             emitter,
-            authConfigJson,
+            effectiveAuthJson,
             scaffoldAuthJson,
             manifestJson,
             preserveFromDirectory);
+
+        foreach (var part in built)
+        {
+            SpecCache.Write(written.FullName, part.Manifest.Id, part.Format, part.SpecBytes);
+        }
 
         var warnings = built
             .SelectMany(b => b.LoadWarnings)
@@ -118,7 +160,21 @@ public static class CompositeGenerateService
         return new Result(written, composed, warnings);
     }
 
-    private static async Task<(SpecPartManifest Manifest, SkillModel Model, IReadOnlyList<string> LoadWarnings)>
+    private static bool TryParseAuthConfig(string json, out AuthConfig config)
+    {
+        try
+        {
+            config = AuthConfigLoader.Parse(json);
+            return config.Profiles.Count > 0;
+        }
+        catch (AuthConfigException)
+        {
+            config = null!;
+            return false;
+        }
+    }
+
+    private static async Task<(SpecPartManifest Manifest, SkillModel Model, IReadOnlyList<string> LoadWarnings, byte[] SpecBytes, string Format)>
         BuildPartAsync(
             PartRequest part,
             GenerateOptions options,
@@ -151,9 +207,12 @@ public static class CompositeGenerateService
                 ex);
         }
 
+        byte[] specBytes;
         LoadedSpec loaded;
         await using (stream)
         {
+            specBytes = stream.ToArray();
+            stream.Position = 0;
             try
             {
                 loaded = await OpenApiLoader.LoadAsync(stream, format, cancellationToken).ConfigureAwait(false);
@@ -178,6 +237,6 @@ public static class CompositeGenerateService
             AuthConfig: authConfig);
 
         var model = SkillModelBuilder.Build(loaded.Document, loaded.SpecVersion, buildOptions);
-        return (part.Manifest, model, loaded.Warnings);
+        return (part.Manifest, model, loaded.Warnings, specBytes, format);
     }
 }

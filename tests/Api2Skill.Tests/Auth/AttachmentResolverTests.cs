@@ -115,4 +115,65 @@ public class AttachmentResolverTests
 
         Assert.Empty(result.ProfileNamesByOperationId);
     }
+
+    [Fact]
+    public void Resolve_SchemeNamedUnscopedProfiles_ApplyOnlyToMatchingOperations_NoCollision()
+    {
+        var config = new AuthConfig([
+            new AuthProfile("oauth2", AuthType.OAuth2, Attachment.Global, null, null, null, null,
+                new OAuthSettings(
+                    OAuthGrant.AuthorizationCode, null, null, "https://auth.example/authorize",
+                    "https://auth.example/token", [], "http://localhost:8400/callback", "auto",
+                    ClientAuthMethod.Body, "cid", null, OAuthRequestExtras.Empty, OAuthRequestExtras.Empty, "access_token")),
+            new AuthProfile("service", AuthType.Script, Attachment.Global, null, null, null,
+                new ScriptSettings("echo token", "Authorization", BearerPrefix: true), null),
+        ]);
+        var operationTags = new Dictionary<string, IReadOnlyList<string>>
+        {
+            ["userOp"] = ["Users"],
+            ["svcOp"] = ["Internal"],
+        };
+        var operationSchemes = new Dictionary<string, IReadOnlyList<string>>
+        {
+            ["userOp"] = ["oauth2"],
+            ["svcOp"] = ["service"],
+        };
+
+        var result = AttachmentResolver.Resolve(
+            config, operationTags, operationSchemes, knownSchemeIds: new HashSet<string> { "oauth2", "service" });
+
+        Assert.Equal(["oauth2"], result.ProfileNamesByOperationId["userOp"]);
+        Assert.Equal(["service"], result.ProfileNamesByOperationId["svcOp"]);
+    }
+
+    [Fact]
+    public void Resolve_TwoTrueGlobalAuthorizationProfiles_StillCollides()
+    {
+        var config = new AuthConfig([Bearer("interactive"), Bearer("batch")]);
+        var operationTags = new Dictionary<string, IReadOnlyList<string>> { ["op1"] = ["AnyTag"] };
+        var operationSchemes = new Dictionary<string, IReadOnlyList<string>> { ["op1"] = ["api_key"] };
+
+        var ex = Assert.Throws<AuthConfigCollisionException>(() =>
+            AttachmentResolver.Resolve(
+                config, operationTags, operationSchemes, knownSchemeIds: new HashSet<string> { "api_key" }));
+        Assert.Contains("Authorization", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("api_key", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Resolve_UnusedProfile_ProducesWarning()
+    {
+        var config = new AuthConfig([Bearer("orphan-scheme")]);
+        var operationTags = new Dictionary<string, IReadOnlyList<string>> { ["op1"] = ["T"] };
+        var operationSchemes = new Dictionary<string, IReadOnlyList<string>> { ["op1"] = ["other"] };
+
+        var result = AttachmentResolver.Resolve(
+            config, operationTags, operationSchemes, knownSchemeIds: new HashSet<string> { "other", "orphan-scheme" });
+
+        Assert.Empty(result.ProfileNamesByOperationId);
+        Assert.Contains(
+            result.Warnings,
+            w => w.Contains("orphan-scheme", StringComparison.Ordinal)
+                 && w.Contains("never referenced", StringComparison.Ordinal));
+    }
 }

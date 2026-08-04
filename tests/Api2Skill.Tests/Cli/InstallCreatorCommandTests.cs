@@ -201,5 +201,8 @@ public class InstallCreatorCommandTests : IDisposable
         Assert.Contains("base URL", text, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("merge --into", text, StringComparison.Ordinal);
         Assert.Contains("add-spec", text, StringComparison.Ordinal);
+        Assert.Contains("Migrate existing skills", text, StringComparison.Ordinal);
+        Assert.Contains("AuthProfileNames", text, StringComparison.Ordinal);
+        Assert.Contains(".api2skill/specs/", text, StringComparison.Ordinal);
     }
 }
