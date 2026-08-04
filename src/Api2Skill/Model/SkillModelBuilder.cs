@@ -117,10 +117,30 @@ public static class SkillModelBuilder
             .ToHashSet(StringComparer.Ordinal);
         var componentSchemas = SerializeComponentSchemas(document, filteredSchemaNames, specVersion);
 
-        var baseUrl = options.BaseUrlOverride ?? document.Servers?.FirstOrDefault()?.Url;
-        if (string.IsNullOrWhiteSpace(baseUrl))
+        var candidate = options.BaseUrlOverride ?? document.Servers?.FirstOrDefault()?.Url;
+        string? baseUrl;
+        if (options.BaseUrlOverride is { Length: > 0 })
         {
-            warnings.Add("The spec has no `servers` entry; supply --base-url or set \"baseUrl\" in secrets.json (EC-7).");
+            baseUrl = options.BaseUrlOverride;
+        }
+        else
+        {
+            baseUrl = SkillModelComposer.NormalizeBaseUrl(candidate);
+            if (baseUrl is null)
+            {
+                warnings.Add(
+                    string.IsNullOrWhiteSpace(candidate)
+                        ? "The spec has no `servers` entry; supply --base-url or set \"baseUrl\" in secrets.json (EC-7)."
+                        : $"Ignoring non-HTTP(S) servers URL '{candidate.Trim()}'; supply --base-url or set \"baseUrl\" in secrets.json.");
+            }
+            else if (candidate is { Length: > 0 }
+                     && Uri.TryCreate(candidate.Trim(), UriKind.Absolute, out var abs)
+                     && (abs.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase)
+                         || abs.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase)))
+            {
+                // Prefer the original absolute URL (Preserve host casing / path as authored).
+                baseUrl = candidate.Trim().TrimEnd('/');
+            }
         }
 
         if (tagGroups.Count == 0)
@@ -172,7 +192,18 @@ public static class SkillModelBuilder
                 g => (IReadOnlyList<string>)g.Select(x => x.Tag).Distinct(StringComparer.Ordinal).ToList(),
                 StringComparer.Ordinal);
 
-        var resolved = AttachmentResolver.Resolve(authConfig, operationTags);
+        var operationSchemeIds = filtered
+            .GroupBy(x => x.OperationId, StringComparer.Ordinal)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<string>)g.First().Op.SecuritySchemeIds.ToList(),
+                StringComparer.Ordinal);
+
+        var knownSchemeIds = operationSchemeIds.Values
+            .SelectMany(ids => ids)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var resolved = AttachmentResolver.Resolve(authConfig, operationTags, operationSchemeIds, knownSchemeIds);
         warnings.AddRange(resolved.Warnings);
 
         var bakedById = new Dictionary<string, OperationModel>(StringComparer.Ordinal);

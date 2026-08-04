@@ -78,4 +78,29 @@ public class AuthAttachmentIntegrationTests
         var occurrences = model.Tags.SelectMany(t => t.Operations).Where(o => o.OperationId == "getPetById").ToList();
         Assert.All(occurrences, o => Assert.Equal(["g"], o.AuthProfileNames));
     }
+
+    [Fact]
+    public async Task SchemeNamedProfile_MatchesSecuritySchemeId_OnOperationsUsingThatScheme()
+    {
+        var doc = await LoadPetstoreDocumentAsync();
+        // Two unscoped Authorization-style profiles named after distinct schemes must not
+        // collide; each op gets only the profile matching its SecuritySchemeIds (bug 014).
+        var authConfig = new AuthConfig([
+            new AuthProfile("petstore_auth", AuthType.OAuth2, Attachment.Global, null, null, null, null,
+                new OAuthSettings(
+                    OAuthGrant.AuthorizationCode, null, null, "https://auth.example/authorize",
+                    "https://auth.example/token", [], "http://localhost:8400/callback", "auto",
+                    ClientAuthMethod.Body, "cid", null, OAuthRequestExtras.Empty, OAuthRequestExtras.Empty, "access_token")),
+            new AuthProfile("api_key", AuthType.Custom, Attachment.Global, null, null,
+                new CustomSettings([new HeaderEntry("api_key", "{secret:K}")]), null, null),
+        ]);
+
+        var model = SkillModelBuilder.Build(doc, Microsoft.OpenApi.OpenApiSpecVersion.OpenApi3_0,
+            new BuildOptions(Name: "petstore", AuthConfig: authConfig));
+
+        var getPetById = model.Tags.SelectMany(t => t.Operations).First(o => o.OperationId == "getPetById");
+        Assert.NotEmpty(getPetById.SecuritySchemeIds);
+        Assert.Equal(getPetById.SecuritySchemeIds.ToList(), getPetById.AuthProfileNames.ToList());
+        Assert.All(getPetById.AuthProfileNames, name => Assert.Contains(name, getPetById.SecuritySchemeIds));
+    }
 }

@@ -149,6 +149,40 @@ public class SkillModelComposerTests
     }
 
     [Fact]
+    public void Compose_FileBaseUrlIgnored_PrefersHttpsFromOtherPart()
+    {
+        var a = MinimalModel("https://api.example.com", "opA", "key_a");
+        var b = MinimalModel("file://", "opB", "key_b");
+
+        var composed = SkillModelComposer.Compose(
+            "combined",
+            [
+                (new SpecPartManifest("public", "./public.json"), a),
+                (new SpecPartManifest("local", "./local.json"), b),
+            ]);
+
+        Assert.Equal("https://api.example.com", composed.BaseUrl);
+    }
+
+    [Fact]
+    public void Compose_AllNonHttpBases_ThrowsAskingForBaseUrl()
+    {
+        var a = MinimalModel("file://", "opA", "key_a");
+        var b = MinimalModel(null, "opB", "key_b");
+
+        var ex = Assert.Throws<CompositionException>(() =>
+            SkillModelComposer.Compose(
+                "combined",
+                [
+                    (new SpecPartManifest("a", "./a.json"), a),
+                    (new SpecPartManifest("b", "./b.json"), b),
+                ]));
+
+        Assert.Contains("No usable HTTP(S) base URL", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("--base-url", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ValidateScriptKinds_CanonicalFromTarget_RejectsDifferentSource()
     {
         var ex = Assert.Throws<CompositionException>(() =>

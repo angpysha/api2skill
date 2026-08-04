@@ -12,6 +12,7 @@ public static class ReferenceWriter
     public static void Write(SkillModel model, DirectoryInfo skillDirectory)
     {
         var referenceDirectory = Directory.CreateDirectory(Path.Combine(skillDirectory.FullName, "reference"));
+        var fileStems = ReferencePaths.BuildTagFileStems(model.Tags.Select(t => t.Tag));
 
         foreach (var tag in model.Tags)
         {
@@ -29,7 +30,8 @@ public static class ReferenceWriter
                 WriteOperation(sb, op);
             }
 
-            File.WriteAllText(Path.Combine(referenceDirectory.FullName, $"{tag.Tag}.md"), sb.ToString());
+            var stem = fileStems[tag.Tag];
+            File.WriteAllText(Path.Combine(referenceDirectory.FullName, $"{stem}.md"), sb.ToString());
         }
     }
 

@@ -431,8 +431,11 @@ public static class GenerateCommand
         }
 
         LoadedSpec loaded;
+        byte[] specBytes;
         await using (stream)
         {
+            specBytes = stream.ToArray();
+            stream.Position = 0;
             try
             {
                 loaded = await OpenApiLoader.LoadAsync(stream, format, cancellationToken).ConfigureAwait(false);
@@ -479,6 +482,22 @@ public static class GenerateCommand
             var scaffold = AuthScaffold.Build(model);
             scaffoldAuthJson = scaffold.Json;
             model = model with { AuthScaffoldGuidance = scaffold.Guidance };
+            try
+            {
+                var scaffoldConfig = AuthConfigLoader.Parse(scaffold.Json);
+                if (scaffoldConfig.Profiles.Count > 0)
+                {
+                    model = SkillModelAuthApplier.Apply(model, scaffoldConfig);
+                }
+            }
+            catch (AuthConfigException)
+            {
+                // Scaffold may be guidance-only (manual schemes); leave AuthProfileNames empty.
+            }
+        }
+        else if (authConfig is not null && model.SecuritySchemes.Count > 0)
+        {
+            authConfigJson = AuthGuidanceOverlay.Apply(authConfigJson, AuthScaffold.Build(model).Json);
         }
 
         IScriptEmitter? emitter = options.ScriptKind switch
@@ -523,6 +542,8 @@ public static class GenerateCommand
             Console.Error.WriteLine(ex.Message);
             return ExitCodes.OutputExists;
         }
+
+        SpecCache.Write(written.FullName, partId, format, specBytes);
 
         foreach (var warning in loaded.Warnings.Concat(model.Warnings))
         {

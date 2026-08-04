@@ -90,13 +90,15 @@ public static class SkillModelComposer
                 Url: NormalizeBaseUrl(options.BaseUrlOverride ?? p.Model.BaseUrl)))
             .ToList();
 
-        var distinctBases = resolvedBases
+        // NormalizeBaseUrl drops non-HTTP(S) candidates (e.g. file://) so they do not
+        // poison the composite baseUrl (bug 014).
+        var usableBases = resolvedBases
             .Select(x => x.Url)
             .Where(u => u is not null)
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
-        if (options.BaseUrlOverride is null && distinctBases.Count > 1)
+        if (options.BaseUrlOverride is null && usableBases.Count > 1)
         {
             var summary = string.Join(
                 "; ",
@@ -106,20 +108,24 @@ public static class SkillModelComposer
                 $"Per-part URLs: {summary}");
         }
 
-        var emptyBases = resolvedBases.Where(b => b.Url is null).ToList();
-        if (options.BaseUrlOverride is null && emptyBases.Count > 0 && distinctBases.Count >= 1)
+        string? canonicalBase;
+        if (options.BaseUrlOverride is { Length: > 0 } overrideUrl)
         {
-            var summary = string.Join(
-                "; ",
-                resolvedBases.Select(b => $"{b.Id}={b.Url ?? "(none)"}"));
-            throw new CompositionException(
-                "Base URL mismatch across spec parts (D2). Some parts have no servers URL. " +
-                $"Per-part URLs: {summary}");
+            canonicalBase = NormalizeBaseUrl(overrideUrl) ?? overrideUrl.Trim().TrimEnd('/');
         }
-
-        var canonicalBase = options.BaseUrlOverride
-            ?? distinctBases.FirstOrDefault()
-            ?? resolvedBases[0].Url;
+        else
+        {
+            canonicalBase = usableBases.FirstOrDefault();
+            if (canonicalBase is null && parts.Count > 1)
+            {
+                var summary = string.Join(
+                    "; ",
+                    parts.Select(p => $"{p.Manifest.Id}={DescribeRawBase(p.Model.BaseUrl)}"));
+                throw new CompositionException(
+                    "No usable HTTP(S) base URL across spec parts. Supply --base-url. " +
+                    $"Per-part URLs: {summary}");
+            }
+        }
 
         // Collect operations with provenance; detect operationId collisions.
         var opsById = new Dictionary<string, (string SpecId, OperationModel Op, string Tag, string? TagSummary)>(
@@ -331,7 +337,8 @@ public static class SkillModelComposer
 
     /// <summary>
     /// Normalizes a base URL for D2 comparison: lowercase scheme/host, default ports stripped,
-    /// trailing slash trimmed on the path.
+    /// trailing slash trimmed on the path. Non-HTTP(S) schemes (notably <c>file:</c>) are treated
+    /// as unset so they cannot become the composite skill base URL.
     /// </summary>
     public static string? NormalizeBaseUrl(string? url)
     {
@@ -340,10 +347,18 @@ public static class SkillModelComposer
             return null;
         }
 
-        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri))
+        var trimmed = url.Trim();
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
         {
-            // Non-absolute — compare trimmed lowercase as last resort.
-            return url.Trim().TrimEnd('/').ToLowerInvariant();
+            // Non-absolute — compare trimmed lowercase as last resort (relative API roots).
+            var relative = trimmed.TrimEnd('/');
+            return relative.Length > 0 ? relative.ToLowerInvariant() : null;
+        }
+
+        if (!uri.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase)
+            && !uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
         }
 
         var builder = new StringBuilder();
@@ -368,6 +383,9 @@ public static class SkillModelComposer
 
         return builder.ToString();
     }
+
+    private static string DescribeRawBase(string? url) =>
+        string.IsNullOrWhiteSpace(url) ? "(none)" : url.Trim();
 
     private static int CountDistinctOperations(SkillModel model) =>
         model.Tags.SelectMany(t => t.Operations).Select(o => o.OperationId).Distinct(StringComparer.Ordinal).Count();
