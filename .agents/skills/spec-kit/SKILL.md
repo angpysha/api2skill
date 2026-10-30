@@ -80,6 +80,8 @@ After init, set `pipeline.manifest.json`:
 | `/speckit.specify` | Create the feature spec (`specs/NNN-slug/spec.md`) |
 | `/speckit.clarify` | Resolve ambiguities in the spec (interactive) |
 | `/speckit.plan` | Technical implementation plan (`specs/NNN-slug/plan.md`) |
+| `/speckit.design-context.critique` | Readonly sufficiency check (optional after plan / before tasks) |
+| `/speckit.design-context.scan` | Architecture scan: ADRs/RFCs + task-split pack for tasks |
 | `/speckit.checklist` | Quality checklists validating the spec/plan |
 | `/speckit.tasks` | Break plan into actionable tasks (`specs/NNN-slug/tasks.md`) |
 | `/speckit.analyze` | Cross-artifact consistency check (spec ↔ plan ↔ tasks) |
@@ -87,8 +89,21 @@ After init, set `pipeline.manifest.json`:
 | `/speckit.converge` | Assess codebase vs artifacts; append remaining tasks |
 | `/speckit.taskstoissues` | Convert tasks to tracker issues |
 
-Feature context is keyed to the **git branch** (e.g. `001-feature-name`). Switch branches to
-switch specs.
+Feature **directories** live under `specs/NNN-slug/` (see `.specify/feature.json`). When the
+**branch-format** preset is installed, create/switch the **git branch** with the always-on
+`branch-format` skill (`{type}/{ISO-week}-{slug}`) — mandatory for specify-time branches;
+do not invent `NNN-slug` git branch names. Spec dirs and git branches are independent.
+
+When the **tasks-beads** presets are installed (`br-task-graph`, `render-tasks`,
+`grill-tasks`, `implement-br-task`), `/speckit.tasks` is **`br`-first**: create/reconcile
+the beads graph, optionally grill (recommend on parallel/cross-story risk), then render
+`tasks.md` as a projection. `/speckit.implement` claims/closes in `br` and refreshes
+`tasks.md`. Missing beads → CRITICAL phase failure. See `core/skills/tasks-beads/SKILL.md`.
+
+When the **design-context** extension is installed, `/speckit.plan` offers an **optional**
+readonly critique hook. If architecture/ADRs are thin, **recommend**
+`/speckit.design-context.scan` (ADRs/RFCs/task-split hints) **before** `/speckit.tasks` or
+other mutating agents. Critique writes nothing. See `core/skills/design-context/SKILL.md`.
 
 ---
 
@@ -97,10 +112,11 @@ switch specs.
 | SDLC phase | Agent | Spec Kit command | Canonical artifact |
 |-----------|-------|------------------|--------------------|
 | adapt / intake | project-intake, coordinator | `/speckit.constitution` | `.specify/memory/constitution.md` |
-| 1 Intake | coordinator | create feature branch `NNN-slug`; seed `/speckit.specify` | `specs/NNN-slug/spec.md` |
+| 1 Intake | coordinator | `branch-format` skill + seed `/speckit.specify` | `specs/NNN-slug/spec.md` |
 | 2 Business grilling | ba-analyst | `/speckit.clarify` | updates `spec.md` |
 | 4 Requirements | ba-analyst | `/speckit.specify` (finalize) | `spec.md` (+ our REQ supplements) |
 | 5 Design | architect | `/speckit.plan` | `plan.md` (+ SDD/TDD/ADR/API contracts) |
+| 5 → 6 design-context | architect / design-context | `/speckit.design-context.critique` then scan if recommended | `design-context.md` + ADRs/RFCs (supplements) |
 | 5 → 6 quality | architect / team-lead | `/speckit.checklist` | checklists |
 | 6 Planning | team-lead | `/speckit.tasks` then `/speckit.analyze` | `tasks.md` (+ IMPLEMENTATION-PLAN) |
 | 6 tracker | team-lead / coordinator | `/speckit.taskstoissues` | tracker issues |

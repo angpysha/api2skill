@@ -91,17 +91,10 @@ public static class SkillOAuthLogin
         }
 
         var oauth = profile.OAuth;
-        if (oauth.Grant == OAuthGrant.ClientCredentials)
-        {
-            stdout.WriteLine(
-                $"Profile '{profile.Name}' uses client_credentials — not applicable: no interactive login is needed, a token is obtained automatically at call time.");
-            return ExitCodes.Success;
-        }
-
-        if (string.IsNullOrWhiteSpace(oauth.AuthUrl) || string.IsNullOrWhiteSpace(oauth.TokenUrl))
+        if (string.IsNullOrWhiteSpace(oauth.TokenUrl))
         {
             ConsoleColorWriter.WriteError(
-                $"Profile '{profile.Name}' is missing authUrl/tokenUrl (directly or via a preset).",
+                $"Profile '{profile.Name}' is missing tokenUrl (directly or via a preset).",
                 stderr);
             return ExitCodes.UsageError;
         }
@@ -116,6 +109,22 @@ public static class SkillOAuthLogin
         {
             ConsoleColorWriter.WriteError(ex.Message, stderr);
             return ExitCodes.AcquisitionFailure;
+        }
+
+        var nonInteractive = await TryIssueTokenWithoutBrowserAsync(
+            skillDir, profile, oauth, secrets, clientId, hooks, stdout, stderr, cancellationToken)
+            .ConfigureAwait(false);
+        if (nonInteractive is int handled)
+        {
+            return handled;
+        }
+
+        if (string.IsNullOrWhiteSpace(oauth.AuthUrl))
+        {
+            ConsoleColorWriter.WriteError(
+                $"Profile '{profile.Name}' is missing authUrl (directly or via a preset).",
+                stderr);
+            return ExitCodes.UsageError;
         }
 
         var callbackUrl = string.IsNullOrWhiteSpace(oauth.CallbackUrl)
@@ -456,6 +465,134 @@ public static class SkillOAuthLogin
         return authUrl + sep + string.Join("&", qs);
     }
 
+    /// <summary>
+    /// Reuses a valid cached access token, fetches client-credentials, or refreshes an
+    /// authorization-code token. Returns null when an authorization-code profile still needs
+    /// the browser flow. A failed client-credentials fetch returns a non-zero exit code.
+    /// </summary>
+    private static async Task<int?> TryIssueTokenWithoutBrowserAsync(
+        string skillDir,
+        AuthProfile profile,
+        OAuthSettings oauth,
+        JsonElement? secrets,
+        string clientId,
+        Hooks hooks,
+        TextWriter stdout,
+        TextWriter stderr,
+        CancellationToken cancellationToken)
+    {
+        var cachePath = Path.Combine(skillDir, SecretsScaffold.TokenCacheFileName);
+        var cache = await ReadTokenCacheAsync(cachePath, cancellationToken).ConfigureAwait(false);
+        if (cache.TryGetValue(profile.Name, out var current) && TryReadUsableAccessToken(current, out _))
+        {
+            stdout.WriteLine($"Access token for profile '{profile.Name}' is still valid.");
+            return ExitCodes.Success;
+        }
+
+        using var http = hooks.TokenHttpHandler is null
+            ? new HttpClient()
+            : new HttpClient(hooks.TokenHttpHandler, disposeHandler: false);
+
+        if (oauth.Grant == OAuthGrant.ClientCredentials)
+        {
+            var form = new Dictionary<string, string>
+            {
+                ["grant_type"] = "client_credentials",
+                ["client_id"] = clientId,
+            };
+            if (oauth.Scopes.Count > 0)
+            {
+                form["scope"] = string.Join(' ', oauth.Scopes);
+            }
+
+            var token = await PostTokenAsync(http, oauth, clientId, secrets, form, cancellationToken).ConfigureAwait(false);
+            if (token is null)
+            {
+                ConsoleColorWriter.WriteError(
+                    $"Failed to obtain a client_credentials token for profile '{profile.Name}'.",
+                    stderr);
+                return ExitCodes.AcquisitionFailure;
+            }
+
+            await StoreProfileTokenAsync(skillDir, profile.Name, token.Value, previousRefreshToken: null, cancellationToken)
+                .ConfigureAwait(false);
+            stdout.WriteLine($"Wrote a client_credentials token for profile '{profile.Name}'.");
+            return ExitCodes.Success;
+        }
+
+        string? oldRefresh = null;
+        if (cache.TryGetValue(profile.Name, out var stale)
+            && stale.ValueKind == JsonValueKind.Object
+            && stale.TryGetProperty("refresh_token", out var refreshEl))
+        {
+            oldRefresh = refreshEl.GetString();
+        }
+
+        if (string.IsNullOrEmpty(oldRefresh))
+        {
+            return null;
+        }
+
+        var refreshForm = new Dictionary<string, string>
+        {
+            ["grant_type"] = "refresh_token",
+            ["refresh_token"] = oldRefresh,
+            ["client_id"] = clientId,
+        };
+        var refreshed = await PostTokenAsync(http, oauth, clientId, secrets, refreshForm, cancellationToken)
+            .ConfigureAwait(false);
+        if (refreshed is null)
+        {
+            return null;
+        }
+
+        await StoreProfileTokenAsync(skillDir, profile.Name, refreshed.Value, oldRefresh, cancellationToken)
+            .ConfigureAwait(false);
+        stdout.WriteLine($"Refreshed the access token for profile '{profile.Name}'.");
+        return ExitCodes.Success;
+    }
+
+    private static bool TryReadUsableAccessToken(JsonElement entry, out string accessToken)
+    {
+        accessToken = "";
+        if (entry.ValueKind != JsonValueKind.Object
+            || !entry.TryGetProperty("access_token", out var tokenEl)
+            || tokenEl.GetString() is not { Length: > 0 } token)
+        {
+            return false;
+        }
+
+        if (entry.TryGetProperty("expires_at", out var expEl)
+            && expEl.GetString() is { Length: > 0 } expText
+            && DateTimeOffset.TryParse(expText, out var expires)
+            && expires <= DateTimeOffset.UtcNow.AddSeconds(60))
+        {
+            return false;
+        }
+
+        accessToken = token;
+        return true;
+    }
+
+    private static async Task StoreProfileTokenAsync(
+        string skillDir,
+        string profileName,
+        (string AccessToken, string? RefreshToken, int ExpiresIn, string? IdToken) token,
+        string? previousRefreshToken,
+        CancellationToken cancellationToken)
+    {
+        var refresh = token.RefreshToken ?? previousRefreshToken;
+        var stored = (token.AccessToken, refresh, token.ExpiresIn, token.IdToken);
+        var cachePath = Path.Combine(skillDir, SecretsScaffold.TokenCacheFileName);
+        await WithTokenCacheLockAsync(cachePath, async () =>
+        {
+            var cache = await ReadTokenCacheAsync(cachePath, cancellationToken).ConfigureAwait(false);
+            StoreTokenInCache(cache, profileName, stored);
+            await WriteTokenCacheAsync(cachePath, cache, cancellationToken).ConfigureAwait(false);
+            return true;
+        }).ConfigureAwait(false);
+    }
+
     private static async Task<(string AccessToken, string? RefreshToken, int ExpiresIn, string? IdToken)?> ExchangeCodeForTokenAsync(
         HttpClient http,
         OAuthSettings oauth,
@@ -475,6 +612,17 @@ public static class SkillOAuthLogin
             ["client_id"] = clientId,
         };
 
+        return await PostTokenAsync(http, oauth, clientId, secrets, form, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<(string AccessToken, string? RefreshToken, int ExpiresIn, string? IdToken)?> PostTokenAsync(
+        HttpClient http,
+        OAuthSettings oauth,
+        string clientId,
+        JsonElement? secrets,
+        Dictionary<string, string> form,
+        CancellationToken cancellationToken)
+    {
         using var request = new HttpRequestMessage(HttpMethod.Post, oauth.TokenUrl);
         string? clientSecret = null;
         if (!string.IsNullOrEmpty(oauth.ClientSecret))

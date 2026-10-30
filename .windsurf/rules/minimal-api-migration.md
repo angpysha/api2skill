@@ -1,0 +1,1 @@
+../../.agents/rules/minimal-api-migration.mdc

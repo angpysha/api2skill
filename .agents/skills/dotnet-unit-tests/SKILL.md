@@ -26,7 +26,7 @@ implementing tests and before polish / dev gate.
 From repo root (PowerShell Core):
 
 ```powershell
-$Tests = '.cursor/skills/dotnet-unit-tests/scripts/dotnet-unit-tests.ps1'
+$Tests = '.agents/skills/dotnet-unit-tests/scripts/dotnet-unit-tests.ps1'
 
 # Default — Release, Cobertura + TRX
 pwsh $Tests
@@ -77,7 +77,7 @@ All paths are **repo-relative** — stable for CI and `Publish*@2` tasks.
 ### Azure Pipelines YAML
 
 ```yaml
-- pwsh: .cursor/skills/dotnet-unit-tests/scripts/dotnet-unit-tests.ps1
+- pwsh: .agents/skills/dotnet-unit-tests/scripts/dotnet-unit-tests.ps1
   displayName: Unit tests + coverage
 
 - task: PublishTestResults@2
@@ -98,7 +98,7 @@ All paths are **repo-relative** — stable for CI and `Publish*@2` tasks.
 
 ```json
 "test": {
-  "command": "pwsh .cursor/skills/dotnet-unit-tests/scripts/dotnet-unit-tests.ps1",
+  "command": "pwsh .agents/skills/dotnet-unit-tests/scripts/dotnet-unit-tests.ps1",
   "filter": "Category!=Integration",
   "results": {
     "directory": "TestResults",
@@ -126,7 +126,7 @@ All paths are **repo-relative** — stable for CI and `Publish*@2` tasks.
 ## Checkpoint
 
 ```powershell
-pwsh $Tests 2>&1 | pwsh .cursor/skills/checkpoint/scripts/save-artifact.ps1 `
+pwsh $Tests 2>&1 | pwsh .agents/skills/checkpoint/scripts/save-artifact.ps1 `
   -Session <session> -ArtifactRel gates/unit-tests.log -Mode --stdin
 ```
 

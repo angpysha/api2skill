@@ -7,7 +7,7 @@ Interview me relentlessly about every aspect of this plan until we reach a share
 
 Ask the questions one at a time, waiting for feedback on each question before continuing. Asking multiple questions at once is bewildering.
 
-If a question can be answered by exploring the codebase, explore it using **`skills/code-search/SKILL.md`** priority: (1) mcp-codebase-search MCP, (2) graphify, (3) Grep/Glob/Read — then ask the human only if still unclear.
+If a question can be answered by exploring the codebase, explore it using **`skills/code-search/SKILL.md`** priority: (1) semantic MCP, (2) Grep/Glob/Read — then ask the human only if still unclear.
 
 When composed via **`grill-with-docs`**, every resolved answer is written to Spec Kit
 (`/speckit.clarify`, `/speckit.plan`, or `/speckit.specify`) immediately — see

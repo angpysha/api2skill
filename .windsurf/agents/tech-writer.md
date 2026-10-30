@@ -1,0 +1,1 @@
+../../.agents/agents/tech-writer.md

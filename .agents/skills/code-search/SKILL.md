@@ -1,146 +1,95 @@
 ---
 name: code-search
 description: >-
-  Codebase discovery priority for all agents: (1) mcp-codebase-search MCP, (2) graphify if
-  available, (3) default tools (Grep/Glob/Read). Use before claiming code exists, before
-  adapt stack detection, and when grilling/domain-modeling cross-checks the repo.
+  Codebase discovery priority for all agents: (1) Serena MCP symbolic tools (primary),
+  (2) alternate semantic MCP — codesearch or mcp-codebase-search, (3) default tools
+  (Grep/Glob/Read). Use before claiming code exists, during /pipeline-adapt stack detection,
+  and when grilling/domain-modeling cross-checks the repo.
 disable-model-invocation: false
 ---
 
 # Code Search — discovery priority
 
 **Always follow this order** when exploring a repo, answering "does X exist?", stack detection,
-or cross-checking user claims against code.
+or cross-checking user claims against code. The configured backend is
+`pipeline.manifest.json` → `code_search.primary` (default `serena`); `code_search.alternates`
+lists the other MCP sources this repo may have.
 
-| Priority | Source | When to use |
-|----------|--------|-------------|
-| **1** | **[mcp-codebase-search](https://github.com/teknologika/mcp-codebase-search/)** MCP | MCP server `codebase-search` available in the host |
-| **2** | **graphify** | MCP unavailable or insufficient; `graphify` CLI/skill on PATH |
-| **3** | **Default tools** | Grep, Glob, Read, shell `find`/`rg` — last resort |
+| Priority | Source | Use it for |
+|----------|--------|-----------|
+| **1** | **Serena MCP** (primary) | symbols, definitions, references, file/module overviews, pattern search |
+| **2** | **Alternate semantic MCP** — `codesearch` or `mcp-codebase-search` | fuzzy "where is the code that does X?" when no symbol name is known |
+| **3** | **Default tools** — Grep, Glob, Read | when no MCP is available |
 
-State **DEGRADED MODE** in chat when priority 1 and 2 are unavailable before making
+State **DEGRADED MODE** in chat when neither priority 1 nor 2 is available, before making
 structural claims about the codebase.
 
 ---
 
-## Priority 1 — mcp-codebase-search (preferred)
+## Priority 1 — Serena (primary)
 
-Local semantic search via MCP ([`@teknologika/mcp-codebase-search`](https://github.com/teknologika/mcp-codebase-search/)).
+Symbol-level tools backed by language servers (install: `skills/serena-install`).
 
-### Setup (once per machine / repo)
+| Need | Serena tool |
+|------|-------------|
+| Outline of a file / module | `get_symbols_overview` |
+| Find a class/function/method by name path | `find_symbol` (`include_body` only when needed) |
+| Who uses it? (dedupe, impact) | `find_referencing_symbols` |
+| Text / regex across the repo | `search_for_pattern` |
+| Locate files | `find_file`, `list_dir` |
+
+Workflow: overview → `find_symbol` → read only the bodies you need → `find_referencing_symbols`
+before changing a signature. Cite **file paths + symbol names**.
+
+## Priority 2 — alternate semantic MCP
+
+Use when the concept is known but the symbol name is not, or Serena is unavailable.
+
+### codesearch (offline, vector + BM25)
+
+```bash
+codesearch index .                  # see skills/codesearch-install
+```
+
+Tools: semantic search, symbol nav (`codesearch mcp`).
+
+### mcp-codebase-search
 
 ```bash
 npm install -g @teknologika/mcp-codebase-search
 mcp-codebase-ingest --path . --name <project-name>
 ```
 
-Cursor MCP config (`.cursor/mcp.json` or user settings):
+Tools: `list_codebases`, `search_codebases`, `get_codebase_stats`, `get_chunk_content`,
+`get_file_content`, `get_adjacent_chunks`, `list_files`, `update_codebase_scan` (refresh after edits).
 
-```json
-{
-  "mcpServers": {
-    "codebase-search": {
-      "command": "mcp-codebase-search",
-      "args": []
-    }
-  }
-}
-```
-
-Set `pipeline.manifest.json` → `code_search.codebase_name` to the ingest name.
-
-### MCP tools (use via CallMcpTool when host exposes them)
-
-| Tool | Use |
-|------|-----|
-| `list_codebases` | Verify index exists; check `lastScanAge` |
-| `update_codebase_scan` | Refresh after edits if `staleWarning` or scan age > 10 min |
-| `search_codebases` | Semantic search — primary discovery |
-| `get_chunk_content` / `get_file_content` | Read matched code (paths, not pastes in chat) |
-| `get_adjacent_chunks` | Context around a partial chunk |
-| `list_files` | Stack detection — extensions, layout, test vs src |
-| `get_codebase_stats` | Language distribution for pack matching |
-
-### Workflow
-
-1. `list_codebases` — confirm project is indexed.
-2. If stale → `update_codebase_scan` with manifest `code_search.codebase_name`.
-3. `search_codebases` with descriptive queries (not bare identifiers).
-4. Cite **file paths + line ranges** in chat; use `get_chunk_content` for detail.
-
-### Dedupe Ticket — hard rule (no creation without one)
-
-**codebase-search is the *only valid source* for claims about what already exists** during a
-session. Before adding **any** new file, module, class, function, or helper, produce a
-**Dedupe Ticket**:
-
-- **Intent signature** — one sentence describing what you are about to add
-- **Queries** — 2–4 `search_codebases` calls you will run
-- **Top matches** — up to 5 file paths returned by the tool
-- **Decision** — `reuse | extend | new`
-- **Rationale** — why
-
-Skipping the ticket to create new code is a protocol violation. If the MCP server is
-unavailable, state **DEGRADED MODE** and stop before making changes.
-
----
-
-## Priority 2 — graphify (fallback)
-
-When MCP codebase search is unavailable or did not answer (e.g. no index yet):
-
-```bash
-graphify . --no-viz            # adapt: first run
-graphify . --update --no-viz   # re-adapt
-```
-
-Read `graphify-out/GRAPH_REPORT.md` and `.graphify_labels.json` if present.
-
-Graphify is strong for **stack communities** and dependency graphs; prefer MCP for
-**"where is X implemented?"** during implementation and grilling.
-
----
+Switching the primary: `agentic-tool update --code-search codesearch` (or `mcp-codebase-search`).
 
 ## Priority 3 — default tools
 
-Only when MCP and graphify are unavailable:
-
-- **Glob** — find files by name pattern
-- **Grep** — exact symbol/string matches
-- **Read** — file contents after narrowing
-
-Avoid repo-wide blind grep when MCP or graphify can answer semantically.
+Glob (names) → Grep (exact symbols/strings) → Read (narrowed files).
 
 ---
+
+## Dedupe Ticket — hard rule
+
+Before adding **any** new file, module, class, function, or helper, produce a **Dedupe Ticket**
+(intent, 2–4 queries, top ≤5 matches with paths, decision `reuse | extend | new`, rationale).
+With Serena: `find_symbol` for candidate names + `search_for_pattern` for the concept +
+`find_referencing_symbols` on the best match.
 
 ## Adapt / stack-selector
 
-During `.agents adapt` (after `PROJECT.md` intake):
+During `/pipeline-adapt` (after `PROJECT.md` intake):
 
-1. **mcp-codebase-search** — `list_files` + `get_codebase_stats` + targeted
-   `search_codebases` (e.g. "entry point", "database migrations", "SwiftUI app").
-2. **graphify** — if on PATH and repo has code; read `graphify-out/`.
-3. **Filesystem globs** — `*.csproj`, `pubspec.yaml`, `Package.swift`, etc.
-4. **`PROJECT.md` Stack** — primary on greenfield.
+1. **Serena** — `list_dir` / `get_symbols_overview` on top-level modules for languages + layout
+2. **Alternate MCP** — stats / semantic hits
+3. **Filesystem globs** — `*.csproj`, `pubspec.yaml`, `Package.swift`, …
+4. **`PROJECT.md` Stack** — primary on greenfield
 
-Record `adapt.code_search_source` in recommendation: `mcp-codebase-search` | `graphify` | `filesystem` | `project-brief`.
-
----
-
-## Grilling & domain-modeling
-
-When a grill question is answerable from code:
-
-1. Run **code-search** priority chain (MCP first).
-2. Then ask the human only if still ambiguous.
-
-`domain-modeling` cross-reference: use MCP `search_codebases` before claiming code contradicts the glossary.
-
----
+Record the source used: `serena` | `codesearch` | `mcp-codebase-search` | `filesystem` | `project-brief`.
 
 ## Constraints
 
 - Cite paths; do not dump large files into chat.
-- Call `update_codebase_scan` after significant local edits before relying on search results.
-- MCP runs locally — no code leaves the machine.
-- Graphify and MCP complement each other; **MCP wins for search**, graphify for graph-level stack signals when MCP is missing.
+- All MCP backends run locally — no code leaves the machine.

@@ -16,4 +16,4 @@ Before coordinator closes a task at Phase 10, verify:
 - [ ] No secrets in diff; secret-scan passed (dev gate)
 - [ ] Human review approved (Phase 9)
 
-Template: `.cursor/skills/sdlc-orchestrator/templates/definition-of-done.md`
+Template: `.agents/skills/sdlc-orchestrator/templates/definition-of-done.md`

@@ -47,7 +47,7 @@ From `pipeline.manifest.json` `artifacts`:
 ## Commands
 
 ```powershell
-$OAPI = '.cursor/skills/openapi-contract/scripts'
+$OAPI = '.agents/skills/openapi-contract/scripts'
 
 # 1. Scaffold stub from REQ (after Phase 4 gate)
 pwsh $OAPI/scaffold-openapi.ps1 -ReqId 0006
@@ -137,7 +137,7 @@ BA does **not** write OpenAPI — feeds the architect.
 Manual check:
 
 ```powershell
-pwsh .cursor/skills/openapi-contract/scripts/validate-openapi.ps1 <path> -ReqId NNNN
+pwsh .agents/skills/openapi-contract/scripts/validate-openapi.ps1 <path> -ReqId NNNN
 ```
 
 Checks: OpenAPI 3.0/3.1, `info`, non-empty `paths`, `operationId`s, REQ traceability.
@@ -146,7 +146,7 @@ Optional: `@redocly/cli lint` when `npx` is available.
 ## Checkpoint
 
 ```powershell
-pwsh $OAPI/validate-openapi.ps1 ... 2>&1 | pwsh .cursor/skills/checkpoint/scripts/save-artifact.ps1 `
+pwsh $OAPI/validate-openapi.ps1 ... 2>&1 | pwsh .agents/skills/checkpoint/scripts/save-artifact.ps1 `
   -Session <session> -ArtifactRel gates/openapi-validate.log -Mode --stdin
 ```
 

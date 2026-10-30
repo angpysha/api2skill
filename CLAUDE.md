@@ -4,11 +4,12 @@
 This project uses the agent-orchestrated SDLC pipeline.
 
 - Agent index: [AGENTS.md](AGENTS.md)
-- Adapt skill (run after install): [.agents/SKILL.md](.agents/SKILL.md)
+- Skills/agents/rules: `.agents/` (linked into `.claude/` — edit the `.agents/` file)
 - Contract: [pipeline.manifest.json](pipeline.manifest.json)
 
-If not yet adapted, run: **Run .agents adapt**
+If not yet adapted, run: **/pipeline-adapt mode=init**
 After ready, run: **Run SDLC for: {feature}**
+After upgrading the tool: `agentic-tool update` (keeps settings)
 <!-- agentic-pipeline:end -->
 
 ## Issue tracker CLI

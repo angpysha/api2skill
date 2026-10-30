@@ -1,5 +1,9 @@
-# sync-to-host.ps1 — project .agents/ into agent-host folders (pwsh).
-# Usage: pwsh -File sync-to-host.ps1 [TARGET_DIR] [cursor|claude|windsurf|all|auto|manual]
+# sync-to-host.ps1 — project .agents/ into one or more agent hosts (pwsh).
+# Every skill/agent/rule lives ONCE in .agents/; hosts get one RELATIVE symlink per entry
+# (e.g. .claude/skills/spec-kit -> ../../.agents/skills/spec-kit). Host-only entries
+# (user skills, Spec Kit commands, hooks, settings) are never modified or deleted.
+#
+# Usage: pwsh -File sync-to-host.ps1 [-Target DIR] [-AgentHost auto|all|manual|cursor,claude,...]
 param(
     [string]$Target = (Get-Location).Path,
     [string]$AgentHost = 'auto'
@@ -15,86 +19,69 @@ if (-not (Test-Path $Src)) {
     exit 1
 }
 
+$Known = @('cursor', 'claude', 'windsurf', 'codex', 'agents-md', 'manual')
+
 function Get-DetectedHosts {
     $hosts = [System.Collections.Generic.List[string]]::new()
     if (Test-Path (Join-Path $Target '.cursor')) { $hosts.Add('cursor') }
-    if ((Test-Path (Join-Path $Target '.claude')) -or (Test-Path (Join-Path $Target 'CLAUDE.md'))) {
-        $hosts.Add('claude')
-    }
+    if ((Test-Path (Join-Path $Target '.claude')) -or (Test-Path (Join-Path $Target 'CLAUDE.md'))) { $hosts.Add('claude') }
     if (Test-Path (Join-Path $Target '.windsurf')) { $hosts.Add('windsurf') }
     if ($hosts.Count -eq 0) { $hosts.Add('cursor') }
     return $hosts
 }
 
-function Sync-Subtree {
-    param([string]$SubDir, [string]$DestRoot, [bool]$UseLinks)
-    $source = Join-Path $Src $SubDir
-    if (-not (Test-Path $source)) { return }
-    $destination = Join-Path $DestRoot $SubDir
-    if ($UseLinks) {
-        Write-Host "sync -> $destination (link)"
-        Link-Tree $source $destination
+function Get-ManifestHosts {
+    $path = Join-Path $Target 'pipeline.manifest.json'
+    if (-not (Test-Path $path)) { return @() }
+    try {
+        $m = Get-Content $path -Raw | ConvertFrom-Json
+        if ($m.PSObject.Properties.Name -contains 'hosts' -and $m.hosts) { return @($m.hosts) }
+        if ($m.PSObject.Properties.Name -contains 'host' -and $m.host) { return @($m.host) }
     }
-    else {
-        Write-Host "sync -> $destination (copy)"
-        Copy-Tree $source $destination
-    }
+    catch { }
+    return @()
 }
 
-function Sync-Cursor {
-    param([bool]$UseLinks)
-    $destRoot = Join-Path $Target '.cursor'
-    Sync-Subtree 'agents' $destRoot $UseLinks
-    Sync-Subtree 'skills' $destRoot $UseLinks
-    Sync-Subtree 'rules' $destRoot $UseLinks
-}
-
-function Sync-Claude {
-    param([bool]$UseLinks)
-    $destRoot = Join-Path $Target '.claude'
-    Sync-Subtree 'agents' $destRoot $UseLinks
-    Sync-Subtree 'skills' $destRoot $UseLinks
-    Sync-Subtree 'rules' $destRoot $UseLinks
-}
-
-function Sync-Windsurf {
-    param([bool]$UseLinks)
-    $destRoot = Join-Path $Target '.windsurf'
-    Sync-Subtree 'agents' $destRoot $UseLinks
-    Sync-Subtree 'skills' $destRoot $UseLinks
+# Host layout: kind -> (dest subdir, extension mapping for rules)
+$Layouts = @{
+    cursor   = @{ root = '.cursor';   kinds = @(@('skills', '', ''), @('agents', '', ''), @('rules', '', '')) }
+    claude   = @{ root = '.claude';   kinds = @(@('skills', '', ''), @('agents', '', ''), @('rules', '.mdc', '.md')) }
+    windsurf = @{ root = '.windsurf'; kinds = @(@('skills', '', ''), @('agents', '', ''), @('rules', '.mdc', '.md')) }
 }
 
 function Invoke-HostSync {
-    param([string]$Name, [bool]$UseLinks)
-    switch ($Name) {
-        'cursor' { Sync-Cursor -UseLinks $UseLinks }
-        'claude' { Sync-Claude -UseLinks $UseLinks }
-        'windsurf' { Sync-Windsurf -UseLinks $UseLinks }
-        default { Write-Warning "unknown host: $Name" }
+    param([string]$Name)
+    if (-not $Layouts.ContainsKey($Name)) {
+        Write-Host "INFO $Name — no folder projection (reads AGENTS.md / .agents/ directly)"
+        return
+    }
+    $layout = $Layouts[$Name]
+    foreach ($kind in $layout.kinds) {
+        $sub, $fromExt, $toExt = $kind
+        $dest = Join-Path (Join-Path $Target $layout.root) $sub
+        $s = Sync-LinkedEntries -SourceDir (Join-Path $Src $sub) -DestDir $dest -AgentsRoot $Src -FromExtension $fromExt -ToExtension $toExt
+        $rel = [IO.Path]::GetRelativePath($Target, $dest)
+        Write-Host ("sync -> {0,-18} linked={1} unchanged={2} deduped={3} kept={4} stale-removed={5} fallback={6}" -f `
+                $rel, $s.linked, $s.unchanged, $s.replaced, $s.kept, $s.removed, $s.fallback)
     }
 }
 
-switch ($AgentHost) {
+$hosts = switch ($AgentHost) {
     'auto' {
-        $detected = Get-DetectedHosts
-        $useLinks = $detected.Count -gt 1
-        foreach ($h in $detected) { Invoke-HostSync $h $useLinks }
+        $m = @(Get-ManifestHosts)
+        if ($m.Count -gt 0) { $m } else { Get-DetectedHosts }
     }
-    'all' {
-        Sync-Cursor -UseLinks $true
-        Sync-Claude -UseLinks $true
-        Sync-Windsurf -UseLinks $true
-    }
-    'manual' {
-        Write-Host 'INFO manual host — no projection ( .agents/ only )'
-    }
-    { $_ -in @('cursor', 'claude', 'windsurf') } {
-        Invoke-HostSync $AgentHost $false
-    }
-    default {
-        Write-Error "unknown host: $AgentHost"
-        exit 1
-    }
+    'all' { @('cursor', 'claude', 'windsurf') }
+    default { $AgentHost.Split(',', [StringSplitOptions]::RemoveEmptyEntries) | ForEach-Object { $_.Trim().ToLowerInvariant() } }
 }
 
-Write-Host "OK sync complete ($AgentHost)"
+foreach ($h in $hosts) {
+    if ($h -notin $Known) { Write-Error "unknown host: $h"; exit 1 }
+}
+if ($hosts -contains 'manual') {
+    Write-Host 'INFO manual host — no projection (.agents/ only)'
+    exit 0
+}
+
+foreach ($h in ($hosts | Select-Object -Unique)) { Invoke-HostSync $h }
+Write-Host "OK sync complete ($((@($hosts) | Select-Object -Unique) -join ','))"

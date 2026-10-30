@@ -8,6 +8,46 @@
       "source": "bundled",
       "installed_at": "2026-07-10T18:24:56.146693+00:00",
       "updated_at": "2026-07-10T18:24:56.146697+00:00"
+    },
+    "pipeline-spike": {
+      "name": "Pipeline Spike Lane",
+      "version": "1.0.0",
+      "description": "Spike lane \u2014 specify + review only (no implement)",
+      "source": "/Users/andrii/.dotnet/tools/.store/agentic.tool/0.11.0-local/agentic.tool/0.11.0-local/tools/net10.0/any/core/workflows/pipeline-spike",
+      "installed_at": "2026-10-29T21:45:13.778890+00:00",
+      "updated_at": "2026-10-30T08:52:22.652338+00:00"
+    },
+    "pipeline-micro": {
+      "name": "Pipeline Micro Lane",
+      "version": "1.0.0",
+      "description": "Micro lane \u2014 minimal specify \u2192 implement \u2192 verify",
+      "source": "/Users/andrii/.dotnet/tools/.store/agentic.tool/0.11.0-local/agentic.tool/0.11.0-local/tools/net10.0/any/core/workflows/pipeline-micro",
+      "installed_at": "2026-10-29T21:45:13.957812+00:00",
+      "updated_at": "2026-10-30T08:52:22.823088+00:00"
+    },
+    "pipeline-short": {
+      "name": "Pipeline Short Lane",
+      "version": "1.0.0",
+      "description": "Short lane \u2014 specify \u2192 plan \u2192 tasks \u2192 analyze \u2192 implement \u2192 converge",
+      "source": "/Users/andrii/.dotnet/tools/.store/agentic.tool/0.11.0-local/agentic.tool/0.11.0-local/tools/net10.0/any/core/workflows/pipeline-short",
+      "installed_at": "2026-10-29T21:45:14.126931+00:00",
+      "updated_at": "2026-10-30T08:52:22.982917+00:00"
+    },
+    "pipeline-fast": {
+      "name": "Pipeline Fast Lane",
+      "version": "1.0.0",
+      "description": "Fast lane \u2014 short core + tester gate after implement",
+      "source": "/Users/andrii/.dotnet/tools/.store/agentic.tool/0.11.0-local/agentic.tool/0.11.0-local/tools/net10.0/any/core/workflows/pipeline-fast",
+      "installed_at": "2026-10-29T21:45:14.305551+00:00",
+      "updated_at": "2026-10-30T08:52:23.130002+00:00"
+    },
+    "pipeline-full": {
+      "name": "Pipeline Full Lane",
+      "version": "1.0.0",
+      "description": "Full lane \u2014 clarify, checklist, analyze, implement, converge, security gate",
+      "source": "/Users/andrii/.dotnet/tools/.store/agentic.tool/0.11.0-local/agentic.tool/0.11.0-local/tools/net10.0/any/core/workflows/pipeline-full",
+      "installed_at": "2026-10-29T21:45:14.487093+00:00",
+      "updated_at": "2026-10-30T08:52:23.274406+00:00"
     }
   }
 }

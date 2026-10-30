@@ -34,7 +34,7 @@ Sibling skills: `openapi-contract` (REST), `grpc-contract` (protobuf/gRPC).
 ## Commands
 
 ```powershell
-$GQL = '.cursor/skills/graphql-contract/scripts'
+$GQL = '.agents/skills/graphql-contract/scripts'
 
 pwsh $GQL/scaffold-graphql.ps1 -ReqId 0006
 # architect/TL completes schema — remove placeholders, add @req / @ac directives

@@ -1,0 +1,1 @@
+../../.agents/rules/version-bump.mdc

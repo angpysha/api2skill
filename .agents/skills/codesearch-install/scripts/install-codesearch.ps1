@@ -207,6 +207,11 @@ function Set-McpConfig {
         }
     }
 
+    # Add-only: an existing 'codesearch' entry is user-owned (custom args/env) — never overwrite it.
+    if ($config.mcpServers.Contains('codesearch')) {
+        Write-Host "MCP config kept ($detected): $configPath already has 'codesearch'"
+        return $configPath
+    }
     $config.mcpServers['codesearch'] = [ordered]@{ command = 'codesearch'; args = @('mcp') }
 
     New-Item -ItemType Directory -Force -Path (Split-Path $configPath -Parent) | Out-Null

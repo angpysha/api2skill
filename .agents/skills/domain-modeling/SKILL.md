@@ -59,7 +59,7 @@ When domain relationships are being discussed, stress-test them with specific sc
 
 ### Cross-reference with code
 
-When the user states how something works, check whether the code agrees. Use **`skills/code-search/SKILL.md`** (MCP `search_codebases` first, then graphify, then Grep/Read). If you find a contradiction, surface it: "Your code cancels entire Orders, but you just said partial cancellation is possible — which is right?"
+When the user states how something works, check whether the code agrees. Use **`skills/code-search/SKILL.md`** (semantic MCP first, then Grep/Read). If you find a contradiction, surface it: "Your code cancels entire Orders, but you just said partial cancellation is possible — which is right?"
 
 ### Update CONTEXT.md inline
 

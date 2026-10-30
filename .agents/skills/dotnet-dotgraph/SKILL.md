@@ -37,7 +37,7 @@ an upstream `<Version>` changes (NuGet rejects republishing the same version).
 Install tool once (script auto-installs global tool if missing):
 
 ```powershell
-pwsh .cursor/skills/dotnet-dotgraph/scripts/dotnet-dotgraph.ps1 ensure-tool
+pwsh .agents/skills/dotnet-dotgraph/scripts/dotnet-dotgraph.ps1 ensure-tool
 ```
 
 Or local manifest:
@@ -50,7 +50,7 @@ dotnet tool install --local dotgraph --version 0.3.0
 ## Commands
 
 ```powershell
-$DG = '.cursor/skills/dotnet-dotgraph/scripts/dotnet-dotgraph.ps1'
+$DG = '.agents/skills/dotnet-dotgraph/scripts/dotnet-dotgraph.ps1'
 
 # Bootstrap graph snapshot
 pwsh $DG init
@@ -124,7 +124,7 @@ Cite report + log paths in chat; do not paste full diff output.
 ## Checkpoint
 
 ```powershell
-pwsh $DG diff 2>&1 | pwsh .cursor/skills/checkpoint/scripts/save-artifact.ps1 `
+pwsh $DG diff 2>&1 | pwsh .agents/skills/checkpoint/scripts/save-artifact.ps1 `
   -Session <session> -ArtifactRel gates/dotgraph-diff.log -Mode --stdin
 ```
 

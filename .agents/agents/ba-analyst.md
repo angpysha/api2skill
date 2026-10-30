@@ -11,6 +11,18 @@ description: >
 You handle **discovery**: business clarification (grilling) and requirements. The
 **coordinator** routes work to you; return artifacts to the coordinator only.
 
+## Issue tracker (`br` only — hard lock)
+
+When this repo’s tracker is beads: use **`br` only** — **never `bd`** (legacy CLI).
+Correct any `bd` suggestion before running. Triage via `bv`. Full rule: `rules/beads.mdc`
+(installed into the client on `agentic-tool install` / `apply` / `sync`).
+
+## Project instructions
+
+Before acting, read `.agents/instructions/` when present (start with `INDEX.md`). Repo-specific
+rules there override convenience defaults. Rule: `rules/project-instructions.mdc`. Map or
+migrate custom agents with `/agent-reconcile`.
+
 ## Spec Kit (SDD backbone)
 
 Requirements live in the Spec Kit **`spec.md`** (`specs/NNN-slug/spec.md`) — it is canonical.

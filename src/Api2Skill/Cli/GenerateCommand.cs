@@ -1,5 +1,4 @@
 using System.CommandLine;
-using System.Diagnostics;
 using Api2Skill.Auth;
 using Api2Skill.Emit;
 using Api2Skill.Input;
@@ -71,7 +70,7 @@ public static class GenerateCommand
         };
         var scriptOption = new Option<string>("--script")
         {
-            Description = "Emitter to use: cs (default), fsx, or csx.",
+            Description = $"Emitter to use: {ScriptEmitters.ValidKinds}. Default: cs.",
             DefaultValueFactory = _ => "cs",
         };
         var includeOption = new Option<string[]>("--include")
@@ -329,14 +328,7 @@ public static class GenerateCommand
 
             if (options.Login && authConfig is not null)
             {
-                IScriptEmitter emitter = options.ScriptKind switch
-                {
-                    "cs" => new CsFileEmitter(),
-                    "fsx" => new FsxEmitter(),
-                    "csx" => new CsxEmitter(),
-                    _ => new CsFileEmitter(),
-                };
-                await RunLoginForAuthorizationCodeProfilesAsync(authConfig, emitter, result.Written, cancellationToken);
+                await RunLoginForAuthorizationCodeProfilesAsync(authConfig, result.Written, cancellationToken);
             }
 
             return ExitCodes.Success;
@@ -500,16 +492,10 @@ public static class GenerateCommand
             authConfigJson = AuthGuidanceOverlay.Apply(authConfigJson, AuthScaffold.Build(model).Json);
         }
 
-        IScriptEmitter? emitter = options.ScriptKind switch
-        {
-            "cs" => new CsFileEmitter(),
-            "fsx" => new FsxEmitter(),
-            "csx" => new CsxEmitter(),
-            _ => null,
-        };
+        var emitter = ScriptEmitters.TryCreate(options.ScriptKind);
         if (emitter is null)
         {
-            Console.Error.WriteLine($"Unknown --script '{options.ScriptKind}'. Valid values: cs, fsx, csx.");
+            Console.Error.WriteLine($"Unknown --script '{options.ScriptKind}'. Valid values: {ScriptEmitters.ValidKinds}.");
             return ExitCodes.UsageError;
         }
 
@@ -555,7 +541,7 @@ public static class GenerateCommand
 
         if (options.Login && authConfig is not null)
         {
-            await RunLoginForAuthorizationCodeProfilesAsync(authConfig, emitter, written, cancellationToken);
+            await RunLoginForAuthorizationCodeProfilesAsync(authConfig, written, cancellationToken);
         }
 
         return ExitCodes.Success;
@@ -567,25 +553,19 @@ public static class GenerateCommand
     /// fully non-interactive without this flag.
     /// </summary>
     private static async Task RunLoginForAuthorizationCodeProfilesAsync(
-        AuthConfig authConfig, IScriptEmitter emitter, DirectoryInfo written, CancellationToken cancellationToken)
+        AuthConfig authConfig, DirectoryInfo written, CancellationToken cancellationToken)
     {
-        // RunnerDescription looks like "dotnet run scripts/call.cs --" / "dotnet fsi scripts/call.fsx --" /
-        // "dotnet script scripts/call.csx --" — always "dotnet <rest>".
-        var runnerArgs = emitter.RunnerDescription["dotnet ".Length..];
-
         foreach (var profile in authConfig.Profiles.Where(p => p.Type == AuthType.OAuth2 && p.OAuth!.Grant == OAuthGrant.AuthorizationCode))
         {
             Console.WriteLine($"--login: running interactive login for profile '{profile.Name}'...");
-            var psi = new ProcessStartInfo("dotnet", $"{runnerArgs} login {profile.Name}")
+            var exit = await SkillOAuthLogin.RunAsync(
+                new SkillOAuthLogin.RunOptions(SkillDir: written.FullName, ProfileName: profile.Name),
+                stdout: Console.Out,
+                stderr: Console.Error,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            if (exit != ExitCodes.Success)
             {
-                WorkingDirectory = written.FullName,
-                UseShellExecute = false,
-            };
-            using var process = Process.Start(psi)!;
-            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-            if (process.ExitCode != 0)
-            {
-                Console.Error.WriteLine($"--login: login for profile '{profile.Name}' failed (exit {process.ExitCode}).");
+                Console.Error.WriteLine($"--login: login for profile '{profile.Name}' failed (exit {exit}).");
             }
         }
     }

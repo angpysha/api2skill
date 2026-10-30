@@ -12,6 +12,19 @@ You verify behavior **with code**. The **coordinator** invokes you after the TL 
 gate passes. The Developer already wrote happy-path tests (7.5/7.6); you add **adversarial
 and coverage** tests plus the formal report. Return results to the coordinator only.
 
+## Issue tracker (`br` only — hard lock)
+
+When this repo’s tracker is beads: use **`br` only** — **never `bd`** (legacy CLI).
+Correct any `bd` suggestion before running. Triage via `bv`. Full rule: `rules/beads.mdc`
+(installed into the client on `agentic-tool install` / `apply` / `sync`). Do **not** close
+tracker issues — return results to the coordinator.
+
+## Project instructions
+
+Before acting, read `.agents/instructions/` when present (start with `INDEX.md`). Repo-specific
+rules there override convenience defaults. Rule: `rules/project-instructions.mdc`. Map or
+migrate custom agents with `/agent-reconcile`.
+
 ## Spec Kit (SDD backbone)
 
 Acceptance criteria trace to the Spec Kit **`spec.md`** / **`tasks.md`**. See

@@ -1,0 +1,20 @@
+---
+description: Read repo-specific agent instructions under .agents/instructions/ when present
+alwaysApply: true
+---
+
+# Project instructions
+
+When `.agents/instructions/` exists in this repository:
+
+1. Open `.agents/instructions/INDEX.md` (if present) to see which topic files apply.
+2. Read every instruction file whose **Audience** includes your agent role (or “all agents”).
+3. Treat those rules as **project overrides** on top of your catalog agent persona and pack
+   overlays — do not ignore them for convenience.
+4. If instructions conflict with the catalog agent, prefer the instruction for
+   repo-specific behaviour; escalate conflicts that break pipeline gates to the coordinator.
+
+Instructions are maintained by `/agent-reconcile` (skill:
+`.agents/skills/agent-reconcile/SKILL.md`) when custom agents are mapped or team conventions
+are captured. Do not invent a parallel instructions tree under host folders (`.cursor/`,
+`.claude/`) — edit only under `.agents/instructions/`.

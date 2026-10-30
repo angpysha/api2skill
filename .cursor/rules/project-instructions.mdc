@@ -1,0 +1,1 @@
+../../.agents/rules/project-instructions.mdc

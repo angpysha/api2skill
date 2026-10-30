@@ -5,16 +5,23 @@ Universal agent-orchestrated SDLC pipeline for this repository.
 
 ## Bootstrap
 
-If `pipeline.manifest.json` shows `"status": "needs_adapt"`:
+If `pipeline.manifest.json` shows `"status": "needs_adapt"`, run the native skill:
 
 ```text
-Run .agents adapt
+/pipeline-adapt mode=init
 ```
 
-Adapt skill: [.agents/SKILL.md](.agents/SKILL.md)
+Skill: [.agents/skills/pipeline-adapt/SKILL.md](.agents/skills/pipeline-adapt/SKILL.md) (strict
+`key=value` parameters; mechanical steps run through `agentic-tool recommend` / `update`).
 
 **Greenfield / empty repo:** adapt runs **project-intake** first — ensures `PROJECT.md`
 (Vision + Stack) exists before recommending packs and agents.
+
+## Layout (one copy, many IDEs)
+
+All skills, agents and rules live once in `.agents/`. Each IDE folder in `pipeline.manifest.json`
+→ `hosts` (`.cursor/`, `.claude/`, `.windsurf/`) holds **relative symlinks** into `.agents/`.
+Edit the `.agents/` file (or add a `## local overlay` section) — never a host copy.
 
 ## Spec-Driven Development (Spec Kit)
 
@@ -24,7 +31,7 @@ Install once and initialize per repo:
 
 ```text
 uv tool install specify-cli --from git+https://github.com/github/spec-kit.git
-specify init . --integration cursor        # then /speckit.constitution from PROJECT.md
+specify init . --integration <host>        # agentic-tool install/update does this per host
 ```
 
 All agents follow `rules/spec-kit.mdc`. Playbook: `skills/spec-kit/SKILL.md`. If Spec Kit is
@@ -36,7 +43,7 @@ unavailable, the pipeline runs in **SPEC-KIT DEGRADED** mode (hand-written SDLC 
 Run SDLC for: {your feature}
 ```
 
-Coordinator playbook: `.cursor/skills/sdlc-orchestrator/SKILL.md` (or `.agents/skills/sdlc-orchestrator/SKILL.md`)
+Coordinator playbook: `.agents/skills/sdlc-orchestrator/SKILL.md`
 
 ## Specialist agents
 
@@ -53,40 +60,38 @@ Coordinator playbook: `.cursor/skills/sdlc-orchestrator/SKILL.md` (or `.agents/s
 | tech-writer | Docs sync (Phase 9) |
 | stack-selector | Stack detection during adapt only |
 
+**Project instructions:** [.agents/instructions/](.agents/instructions/) (when present) —
+every agent reads `INDEX.md` + matching topic files. Rule: `rules/project-instructions.mdc`.
+Custom / unknown agents from adapt: run `/agent-reconcile` to map catalog replacements or
+extract rules into instructions.
+
 Contract: [pipeline.manifest.json](pipeline.manifest.json)
 
-## Catalog refresh (keep skills/agents/rules current)
+## Updating (keep settings)
 
-After any `agentic-tool` upgrade, refresh from the package catalog:
+After any `agentic-tool` upgrade:
 
 ```bash
-agentic-tool apply --target .
-agentic-tool sync --target . --host auto
-agentic-tool verify --target .
+agentic-tool update
 ```
 
-`verify` warns when `catalog_version` in the manifest is behind the tool. Rule:
-`rules/catalog-refresh.mdc`. Coordinator stops SDLC if the catalog is stale.
+Backs up settings to `.agents/.backup/<ts>/`, refreshes the catalog, keeps user values in
+`pipeline.manifest.json` and IDE/MCP settings, keeps user skills/agents/hooks/rules, re-links
+hosts and verifies. Rule: `rules/catalog-refresh.mdc`.
 
 ## Codebase Dedupe Protocol
 
 ### Goal
 
-Prevent duplicate implementations and "wrong file" edits by making **codebase-search** the
+Prevent duplicate implementations and "wrong file" edits by making the **code-search MCP** the
 *only valid source* for claims about what already exists in this repo during this session.
 
 ### Tools you MUST use for codebase discovery
 
-- `list_codebases`
-- `search_codebases`
-- `get_codebase_stats`
-- `get_chunk_content`
-- `get_file_content`
-- `get_adjacent_chunks`
-- `list_files`
-- `update_codebase_scan`
-
-After edits run `update_codebase_scan` to refresh the index.
+1. **Serena MCP** (primary): `get_symbols_overview`, `find_symbol`, `find_referencing_symbols`,
+   `search_for_pattern`, `find_file`, `list_dir`
+2. **Alternates**: codesearch, or mcp-codebase-search (`search_codebases`, `get_chunk_content`,
+   `list_files`, `update_codebase_scan` after edits)
 
 ### Hard rule: No creation without a Dedupe Ticket
 
@@ -101,6 +106,16 @@ Before adding a new file, module, class, function, or helper, produce a **Dedupe
 ### Graceful degradation
 
 If the MCP server is unavailable: state **DEGRADED MODE** and stop before making changes.
-Full priority chain (MCP → graphify → default tools): `rules/code-search.mdc` +
+Full priority chain (semantic MCP → default tools): `rules/code-search.mdc` +
 `skills/code-search/SKILL.md`.
+
+## Beads issue tracker (`br` only)
+
+Local planning and issue tracking use **beads_rust**. The CLI is **`br`** — **never `bd`**
+(legacy CLI). Triage via `bv --robot-triage`. Full rule: `rules/beads.mdc`.
+
+**Client install:** `agentic-tool install` copies `beads.mdc` into `.agents/rules/`;
+`update` refreshes all core rules + every enabled agent (each agent persona includes the
+same hard lock) and links them into every host (`.cursor/`, `.claude/`, …).
+Every specialist in this repo MUST follow **`br` only**.
 <!-- agentic-pipeline:end -->

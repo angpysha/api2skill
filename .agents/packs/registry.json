@@ -1,6 +1,6 @@
 {
   "version": "1",
-  "description": "Pack registry for the universal AI dev pipeline. `.agents adapt` matches signals against mcp-codebase-search, graphify, PROJECT.md, and filesystem, then merges packs into pipeline.manifest.json and syncs overlays into the host (.cursor/, .claude/, etc).",
+  "description": "Pack registry for the universal AI dev pipeline. `/pipeline-adapt` matches signals against semantic code-search MCP, PROJECT.md, and filesystem, then merges packs into pipeline.manifest.json and syncs overlays into the host (.cursor/, .claude/, etc).",
   "packs": {
     "dotnet-minimal": {
       "signals": ["*.csproj", "*.slnx", "*.sln", "Minimal API", "xUnit"],
@@ -16,7 +16,7 @@
       "defaults": {
         "build": { "command": "dotnet build --configuration Release --verbosity minimal" },
         "test": {
-          "command": "pwsh .cursor/skills/dotnet-unit-tests/scripts/dotnet-unit-tests.ps1",
+          "command": "pwsh .agents/skills/dotnet-unit-tests/scripts/dotnet-unit-tests.ps1",
           "results": {
             "directory": "TestResults",
             "trx": "TestResults/test-results.trx",
@@ -71,10 +71,10 @@
       },
       "defaults": {
         "build": {
-          "command": "pwsh .cursor/skills/swift-lint/scripts/swift-lint.ps1 -Mode lint && pwsh .cursor/skills/xcode-build/scripts/xcode-build.ps1 -Action build"
+          "command": "pwsh .agents/skills/swift-lint/scripts/swift-lint.ps1 -Mode lint && pwsh .agents/skills/xcode-build/scripts/xcode-build.ps1 -Action build"
         },
         "test": {
-          "command": "pwsh .cursor/skills/swift-test/scripts/swift-test.ps1",
+          "command": "pwsh .agents/skills/swift-test/scripts/swift-test.ps1",
           "results": {
             "directory": "TestResults",
             "junit": "TestResults/junit.xml",
@@ -84,7 +84,7 @@
           }
         },
         "format": {
-          "command": "pwsh .cursor/skills/swift-lint/scripts/swift-lint.ps1 -Mode format"
+          "command": "pwsh .agents/skills/swift-lint/scripts/swift-lint.ps1 -Mode format"
         }
       }
     },

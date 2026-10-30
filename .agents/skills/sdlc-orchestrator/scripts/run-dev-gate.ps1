@@ -8,7 +8,7 @@ Set-Location $repoRoot
 
 $manifest = Join-Path $repoRoot 'pipeline.manifest.json'
 if (-not (Test-Path $manifest)) {
-    Write-Host 'FAIL: pipeline.manifest.json not found — run agentic-tool install + .agents adapt'
+    Write-Host 'FAIL: pipeline.manifest.json not found — run agentic-tool install + /pipeline-adapt'
     exit 1
 }
 

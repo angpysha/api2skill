@@ -12,7 +12,7 @@ disable-model-invocation: false
 
 Installs [**codesearch**](https://github.com/flupkede/codesearch) — a fully-local, offline Rust
 MCP server for semantic code search across repositories. It satisfies **Priority 1** of the
-[`code-search`](../code-search/SKILL.md) discovery order (semantic search before graphify / Grep).
+[`code-search`](../code-search/SKILL.md) discovery order (semantic search before Grep).
 
 The `-with-csharp` release variant bundles a `scip-csharp` helper for C# semantic analysis and is
 the **default**, since this pipeline targets .NET/C# projects. Pass `-NoCsharp` for the plain build.
@@ -41,7 +41,7 @@ There is **no** Windows-ARM, Linux-ARM, or Intel-macOS build; build from source
 ## Usage
 
 ```powershell
-$CS = '.cursor/skills/codesearch-install/scripts/install-codesearch.ps1'   # or .claude/... / .agents/...
+$CS = '.agents/skills/codesearch-install/scripts/install-codesearch.ps1'
 
 # Dry run — show which asset would be downloaded for this machine, then exit
 pwsh $CS -DryRun

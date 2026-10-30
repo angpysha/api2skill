@@ -10,7 +10,7 @@ disable-model-invocation: true
 Run a **`grilling`** session using **`domain-modeling`** and **`spec-kit`**.
 
 Before asking the human, answer code-backed questions via **`code-search`** (MCP
-[mcp-codebase-search](https://github.com/teknologika/mcp-codebase-search/) first, then graphify,
+[mcp-codebase-search](https://github.com/teknologika/mcp-codebase-search/) first, then default tools if needed,
 then default tools).
 
 Read `skills/grilling/SKILL.md`, `skills/domain-modeling/SKILL.md`, and

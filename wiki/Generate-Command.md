@@ -122,9 +122,11 @@ the output — schemes only referenced by excluded operations are omitted.
 | `cs` (default) | `dotnet run scripts/call.cs --` |
 | `fsx` | `dotnet fsi scripts/call.fsx --` |
 | `csx` | `dotnet script scripts/call.csx --` (requires `dotnet tool install -g dotnet-script`) |
+| `py` | `python3 scripts/call.py --` |
 
-All three emit full dispatcher implementations — plain `HttpClient` / `System.Text.Json`, no
-third-party dependencies in generated code.
+`cs`, `fsx`, and `csx` use `HttpClient` / `System.Text.Json`. `py` uses the Python standard
+library. If `scripts/requirements.txt` lists packages, `call.py` installs them into
+`scripts/.pydeps`. Switch an existing skill with `api2skill migrate <skill> --script py`.
 
 ## Custom name and output path
 

@@ -5,11 +5,11 @@
 #
 # Add to ~/.zshrc:
 #   export AZDO_ORG=petrovskyitools
-#   source /path/to/repo/.cursor/skills/azure-devops-cli/templates/azdo-login-macos.zsh
+#   source /path/to/repo/.agents/skills/azure-devops-cli/templates/azdo-login-macos.zsh
 #
 # Usage:
 #   azdo-login
-#   pwsh .cursor/skills/azure-devops-cli/scripts/ensure-azure-devops.ps1
+#   pwsh .agents/skills/azure-devops-cli/scripts/ensure-azure-devops.ps1
 
 azdo-login() {
   local org="${AZDO_ORG:-petrovskyitools}"

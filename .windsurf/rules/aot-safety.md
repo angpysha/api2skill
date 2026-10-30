@@ -1,0 +1,1 @@
+../../.agents/rules/aot-safety.mdc

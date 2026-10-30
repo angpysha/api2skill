@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "codesearch": {
+			"type": "remote",
+			"url": "http://127.0.0.1:39725/mcp",
+			"enabled": true
+		}
+  }
+}

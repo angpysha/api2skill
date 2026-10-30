@@ -1,0 +1,1 @@
+../../.agents/rules/spec-kit.mdc

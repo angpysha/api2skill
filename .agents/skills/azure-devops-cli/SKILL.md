@@ -71,7 +71,7 @@ Usage:
 ```bash
 export AZDO_ORG=petrovskyitools   # or your org slug
 azdo-login
-pwsh .cursor/skills/azure-devops-cli/scripts/ensure-azure-devops.ps1
+pwsh .agents/skills/azure-devops-cli/scripts/ensure-azure-devops.ps1
 ```
 
 `az devops login` reads `AZURE_DEVOPS_EXT_PAT` from the environment — the function sets both.
@@ -85,8 +85,8 @@ echo "$AZURE_DEVOPS_EXT_PAT" | az devops login --organization https://dev.azure.
 #### Verify auth
 
 ```powershell
-pwsh .cursor/skills/azure-devops-cli/scripts/ensure-azure-devops.ps1 -Json
-pwsh .cursor/skills/azure-devops-cli/scripts/configure-azure-devops.ps1
+pwsh .agents/skills/azure-devops-cli/scripts/ensure-azure-devops.ps1 -Json
+pwsh .agents/skills/azure-devops-cli/scripts/configure-azure-devops.ps1
 ```
 
 | Context | Method |
@@ -118,7 +118,7 @@ Set in `pipeline.manifest.json`:
 ## Commands
 
 ```powershell
-$ADO = '.cursor/skills/azure-devops-cli/scripts'
+$ADO = '.agents/skills/azure-devops-cli/scripts'
 
 # 1. Verify CLI + extension + auth (+ optional install extension)
 pwsh $ADO/ensure-azure-devops.ps1 -InstallExtension
@@ -205,7 +205,7 @@ Standalone encode:
 ```powershell
 agentic-tool toon encode --file data.json --stats
 echo '{"items":[1,2,3]}' | agentic-tool toon encode --stdin
-python3 .cursor/skills/azure-devops-cli/scripts/json-to-toon.py --stdin --stats
+python3 .agents/skills/azure-devops-cli/scripts/json-to-toon.py --stdin --stats
 ```
 
 ### Token savings (measured)

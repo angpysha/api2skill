@@ -40,7 +40,7 @@ Installs a composed **`.editorconfig`** at the repo root from curated templates 
 ### Step 1 — detect
 
 ```powershell
-$EC = '.cursor/skills/editorconfig-install/scripts/install-editorconfig.ps1'
+$EC = '.agents/skills/editorconfig-install/scripts/install-editorconfig.ps1'
 pwsh $EC -DetectOnly
 ```
 

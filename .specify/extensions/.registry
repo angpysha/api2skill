@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0",
+  "extensions": {
+    "design-context": {
+      "version": "1.0.0",
+      "source": "local",
+      "manifest_hash": "sha256:2fc67bfe7dbd2736d7a53588808bea63def415fd1a16ce43c78be664fea61fa0",
+      "enabled": true,
+      "priority": 10,
+      "registered_commands": {
+        "claude": [
+          "speckit.design-context.scan",
+          "speckit.design-context.critique"
+        ]
+      },
+      "registered_skills": [],
+      "installed_at": "2026-10-29T21:45:15.585925+00:00"
+    },
+    "spec-branch": {
+      "version": "1.0.0",
+      "source": "local",
+      "manifest_hash": "sha256:0e22192a03674ffb17fe013c474106943896df1e5573d696e1c6abc09784fb25",
+      "enabled": true,
+      "priority": 10,
+      "registered_commands": {
+        "claude": [
+          "speckit.spec-branch.create"
+        ]
+      },
+      "registered_skills": [],
+      "installed_at": "2026-10-29T21:45:15.761411+00:00"
+    },
+    "bug": {
+      "version": "1.0.0",
+      "source": "local",
+      "manifest_hash": "sha256:1d0da5458f3c18ff08cf1602d88cecc33fad07068208951fb7128090cfa90c90",
+      "enabled": true,
+      "priority": 10,
+      "registered_commands": {
+        "claude": [
+          "speckit.bug.assess",
+          "speckit.bug.fix",
+          "speckit.bug.test"
+        ]
+      },
+      "registered_skills": [],
+      "installed_at": "2026-10-29T21:45:15.960910+00:00"
+    }
+  }
+}

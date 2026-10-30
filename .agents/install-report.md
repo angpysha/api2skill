@@ -35,6 +35,21 @@ Basic auth schemes to support, which is an auth/token-handling signal) + `tech-w
 **Confidence:** `high` — stack is explicit in both `PROJECT.md` and the human override, and
 only one .NET pack exists in the registry (no ambiguity).
 
+## Recheck 2026-10-30 (`/pipeline-adapt mode=update`)
+
+| Source | Signal | Score | Notes |
+|---|---|---|---|
+| Serena (`search_for_pattern`) | `src/Api2Skill/Api2Skill.csproj`: `OutputType` Exe, `TargetFramework` net10.0 | 2 | Runtime is a C# console app |
+| Serena | `tests/Api2Skill.Tests/Api2Skill.Tests.csproj`: xunit | 1 | Matches `dotnet-minimal` test signal |
+| Serena | no `PublishAot` / `TrimMode` | — | `native-aot` feature not selected |
+| PROJECT.md | Stack: C# / .NET (console application) | 2 | Agrees with the csproj |
+
+**Runtime pack:** `dotnet-minimal` (confidence high). **Add-on packs:** none. **Features:** none.
+**Hosts:** `cursor`, `claude`, `windsurf` (primary `cursor`). **Code search:** `codesearch`.
+**Lane:** `full`. **devops:** disabled. Recommendation written by `agentic-tool recommend` (exit 0).
+`agentic-tool update` exit 0, `verify` PASS, `catalog_version` 0.10.0 matches `agentic-tool version`.
+Tracker prefix stayed `api2skill` (user setting). Windsurf Spec Kit integration install still warns (exit 1); Cursor and Claude integrations are installed.
+
 ## Next steps
 
 1. Human confirms this recommendation (or edits `PROJECT.md` / manifest overrides and

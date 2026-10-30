@@ -6,7 +6,7 @@ projection before TOON encoding for maximum token savings.
 ## Usage
 
 ```powershell
-$Q = '.cursor/skills/azure-devops-cli/scripts/az-devops-query.ps1'
+$Q = '.agents/skills/azure-devops-cli/scripts/az-devops-query.ps1'
 
 pwsh $Q -ListRecipes
 pwsh $Q -Recipe pr-list -Session 20260610-my-feature -Stats

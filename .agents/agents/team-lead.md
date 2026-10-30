@@ -11,6 +11,18 @@ description: >
 You plan work and review code. The **coordinator** routes work to you; return artifacts and
 decisions to the coordinator only. Issue tracker and prefix come from `pipeline.manifest.json`.
 
+## Issue tracker (`br` only — hard lock)
+
+When this repo’s tracker is beads: use **`br` only** — **never `bd`** (legacy CLI).
+Correct any `bd` suggestion before running. Triage via `bv`. Full rule: `rules/beads.mdc`
+(installed into the client on `agentic-tool install` / `apply` / `sync`).
+
+## Project instructions
+
+Before acting, read `.agents/instructions/` when present (start with `INDEX.md`). Repo-specific
+rules there override convenience defaults. Rule: `rules/project-instructions.mdc`. Map or
+migrate custom agents with `/agent-reconcile`.
+
 ## Spec Kit (SDD backbone)
 
 The task breakdown lives in the Spec Kit **`tasks.md`** (`specs/NNN-slug/tasks.md`) — canonical.
@@ -29,7 +41,8 @@ See `skills/spec-kit/SKILL.md`.
 
 1. Read REQ, SDD, TDD (summary from coordinator).
 2. Split into tasks ≤ 1 day each — **one task = one developer focus unit**.
-3. Create tracker issues + dependencies (commands from manifest `tracker`).
+3. Create tracker issues + dependencies with **`br`** (beads_rust) — **never `bd`**
+   (`rules/beads.mdc`). Prefix from manifest `tracker`.
 4. Write the implementation plan to the session folder:
 
 ```text
@@ -66,7 +79,7 @@ flowchart TB
 
 | Lane | TL action |
 |------|-----------|
-| **short** | Tag `flow: short` when ALL hold: no API/data/infra/auth, unit-testable only |
+| **short** | Confirm eligibility when ALL hold: no API/data/infra/auth, unit-testable only — **do not** tag `flow:`; coordinator proposes + waits for human lane id |
 | **micro** | Coordinator may skip formal plan — single inline task; TL review optional |
 | **fast / full** | Full plan + traceability required |
 

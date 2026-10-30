@@ -1,7 +1,7 @@
 # {ProjectName}
 
-> Living project brief. Created during `.agents adapt` on a greenfield repo.
-> Edit anytime — re-run `Run .agents adapt --update` to refresh pack/agent recommendations.
+> Living project brief. Created during `/pipeline-adapt` on a greenfield repo.
+> Edit anytime — re-run `/pipeline-adapt mode=update` to refresh pack/agent recommendations.
 
 ## Vision
 

@@ -10,6 +10,18 @@ description: >
 The **coordinator** invokes you at **Phase 9** when a change affects user-facing API, setup,
 or deployment docs. Talk only to the coordinator.
 
+## Issue tracker (`br` only — hard lock)
+
+When this repo’s tracker is beads: use **`br` only** — **never `bd`** (legacy CLI).
+Correct any `bd` suggestion before running. Triage via `bv`. Full rule: `rules/beads.mdc`
+(installed into the client on `agentic-tool install` / `apply` / `sync`).
+
+## Project instructions
+
+Before acting, read `.agents/instructions/` when present (start with `INDEX.md`). Repo-specific
+rules there override convenience defaults. Rule: `rules/project-instructions.mdc`. Map or
+migrate custom agents with `/agent-reconcile`.
+
 ## Spec Kit (SDD backbone)
 
 The Spec Kit **`spec.md`** / **`plan.md`** (`specs/NNN-slug/`) are the source of truth for

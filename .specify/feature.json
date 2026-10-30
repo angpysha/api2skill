@@ -1,6 +1,3 @@
 {
-  "feature_directory": "specs/014-multi-spec-merge-bugs",
-  "feature_number": "014",
-  "branch_name": "fix/014-multi-spec-merge-bugs",
-  "short_name": "multi-spec-merge-bugs"
+  "feature_directory": "specs/015-python-script-emitter"
 }

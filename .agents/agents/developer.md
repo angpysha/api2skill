@@ -15,6 +15,19 @@ scoped brief (task + relevant SDD/TDD sections); return results to the coordinat
 dispatches **separate developer runs** for disjoint parallel tracks (see the plan's
 Parallel Tracks section).
 
+## Issue tracker (`br` only — hard lock)
+
+When this repo’s tracker is beads: use **`br` only** — **never `bd`** (legacy CLI).
+Correct any `bd` suggestion before running. Triage via `bv`. Full rule: `rules/beads.mdc`
+(installed into the client on `agentic-tool install` / `apply` / `sync`). Update task status
+with `br`; never close the issue yourself (coordinator/closeout).
+
+## Project instructions
+
+Before acting, read `.agents/instructions/` when present (start with `INDEX.md`). Repo-specific
+rules there override convenience defaults. Rule: `rules/project-instructions.mdc`. Map or
+migrate custom agents with `/agent-reconcile`.
+
 ## Spec Kit (SDD backbone)
 
 Implementation is driven by the Spec Kit **`tasks.md`** (`specs/NNN-slug/tasks.md`). See
@@ -39,7 +52,7 @@ Implementation is driven by the Spec Kit **`tasks.md`** (`specs/NNN-slug/tasks.m
 | **7.6 Integration tests** | Only if API/data/external I/O touched; else log `not required`. For APIs, smoke-test the running local server with **`api-local-test`** (mcp2cli) | Per file map |
 | **7.7 Polish** | Warnings, linters, formatter | Zero new warnings |
 | **7.8 Dev gate** | `run-dev-gate.ps1` + tests | All green or loop to 7.4 |
-| **7.9 Handoff** | Update tracker issue; return to coordinator | Issue updated, **not** closed |
+| **7.9 Handoff** | Update `br` issue; return to coordinator | Issue updated, **not** closed |
 
 **Short / micro flow:** 7.1–7.4 + 7.5 (required) + 7.7 + 7.8 + 7.9 — skip 7.6.
 
@@ -72,7 +85,7 @@ Use template `templates/code-plan.md`. The plan **must** include:
 Save the plan to disk and **do not paste it in chat**. Register it:
 
 ```powershell
-$CP = '.cursor/skills/checkpoint/scripts/checkpoint.ps1'
+$CP = '.agents/skills/checkpoint/scripts/checkpoint.ps1'
 pwsh $CP link <session> 7 7.3 "tasks/<task-id>/code-plan.md"
 pwsh $CP output <session> 7 7.3 "Code plan: artifacts/tasks/<task-id>/code-plan.md"
 ```
@@ -113,6 +126,9 @@ written or `not required: {reason}`. Do **not** close the issue — TL code-revi
 
 Appended to the core `developer` agent when this pack is active.
 
+Also honour `.agents/instructions/` (see core **Project instructions** /
+`rules/project-instructions.mdc`) for repo-specific conventions beyond this pack.
+
 ## Stack rules
 
 - ASP.NET Core **Minimal APIs**; one static class per route group; thin endpoints.
@@ -127,7 +143,7 @@ Appended to the core `developer` agent when this pack is active.
 Immediately after **7.4 Write code**, run the **`dotnet-format`** skill:
 
 ```powershell
-pwsh .cursor/skills/dotnet-format/scripts/dotnet-format.ps1
+pwsh .agents/skills/dotnet-format/scripts/dotnet-format.ps1
 ```
 
 Then re-run `build.command` if format changed files, then continue to **7.5**.
@@ -143,7 +159,7 @@ Then re-run `build.command` if format changed files, then continue to **7.5**.
 - Unit tests: **xUnit**. At **7.5**, run the **`dotnet-unit-tests`** skill (mandatory):
 
 ```powershell
-pwsh .cursor/skills/dotnet-unit-tests/scripts/dotnet-unit-tests.ps1
+pwsh .agents/skills/dotnet-unit-tests/scripts/dotnet-unit-tests.ps1
 ```
 
 Produces `TestResults/test-results.trx`, `TestResults/coverage/cobertura.xml`, and
@@ -163,7 +179,7 @@ When the solution has **multiple packable projects** with `<Version>` and
 `<ProjectReference>` (internal NuGet suite), use **`dotnet-dotgraph`**:
 
 ```powershell
-$DG = '.cursor/skills/dotnet-dotgraph/scripts/dotnet-dotgraph.ps1'
+$DG = '.agents/skills/dotnet-dotgraph/scripts/dotnet-dotgraph.ps1'
 
 # First time only
 pwsh $DG init

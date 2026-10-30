@@ -3,13 +3,13 @@ name: project-intake
 description: >-
   Greenfield project intake before adapt. Ensures PROJECT.md exists with Vision and Stack
   sections. On empty repos, ask the human structured questions, write PROJECT.md, then
-  proceed to graphify and stack-selector. Available from install (pre-apply).
+  proceed to code-search and stack-selector. Available from install (pre-apply).
 disable-model-invocation: true
 ---
 
 # project-intake
 
-**Step 0 of `.agents adapt`.** Run before graphify when the repo is greenfield or
+**Step 0 of `/pipeline-adapt`.** Run before code-search when the repo is greenfield or
 `PROJECT.md` is missing/incomplete.
 
 ## When to run
@@ -18,14 +18,14 @@ disable-model-invocation: true
 |-----------|--------|
 | `PROJECT.md` missing | **Stop adapt** — run intake (ask questions → write file) |
 | `PROJECT.md` incomplete (no Vision or Stack) | **Stop adapt** — ask to fill gaps |
-| `PROJECT.md` OK + code present | Skip intake → graphify |
+| `PROJECT.md` OK + code present | Skip intake → code-search |
 | `PROJECT.md` OK + **empty repo** | Use PROJECT.md stack hints as primary signals for stack-selector |
 
 Check mechanically:
 
 ```powershell
 pwsh .agents/skills/project-intake/scripts/ensure-project-md.ps1
-# or after apply: pwsh .cursor/skills/project-intake/scripts/ensure-project-md.ps1
+# or after apply: pwsh .agents/skills/project-intake/scripts/ensure-project-md.ps1
 ```
 
 Exit `0` = ready; `1` = missing; `2` = incomplete; `3` = greenfield (empty repo, brief OK).
@@ -40,7 +40,7 @@ Ask in one structured form (use `AskQuestion` when available). Minimum required 
 4. **CI/CD** (optional) — e.g. Azure DevOps, GitHub Actions, none yet.
 5. **Tracker / PR** (optional) — beads, GitHub issues, Azure DevOps work items.
 
-Do **not** proceed to graphify/stack-selector until Vision and Stack are captured in
+Do **not** proceed to code-search/stack-selector until Vision and Stack are captured in
 `PROJECT.md`.
 
 ## Write PROJECT.md
@@ -79,16 +79,16 @@ Once `ensure-project-md.ps1` exits `0`:
 
 1. **mcp-codebase-search** — `list_files` + `get_codebase_stats` + targeted
    `search_codebases` (e.g. "entry point", "database migrations", "SwiftUI app").
-2. **graphify** — if on PATH and repo has code; read `graphify-out/`.
+2. **Semantic MCP** — codesearch / configured primary when available.
 3. **Filesystem globs** — `*.csproj`, `pubspec.yaml`, `Package.swift`, etc.
 4. **`PROJECT.md` Stack** — primary on greenfield.
 5. **`/speckit.constitution`** — seed from `PROJECT.md` once Spec Kit is initialized.
 
-Record `adapt.code_search_source` in recommendation: `mcp-codebase-search` | `graphify` | `filesystem` | `project-brief`.
+Record `adapt.code_search_source` in recommendation: `codesearch` | `mcp-codebase-search` | `filesystem` | `project-brief`.
 
 ## Re-intake
 
-Human may edit `PROJECT.md` anytime. On `Run .agents adapt --update`, re-read the brief;
+Human may edit `PROJECT.md` anytime. On `/pipeline-adapt mode=update`, re-read the brief;
 do not overwrite without asking unless sections are empty.
 
 ## Constraints

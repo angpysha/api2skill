@@ -104,14 +104,9 @@ public static class CompositeGenerateService
             scaffoldAuthJson = null;
         }
 
-        IScriptEmitter emitter = options.ScriptKind switch
-        {
-            "cs" => new CsFileEmitter(),
-            "fsx" => new FsxEmitter(),
-            "csx" => new CsxEmitter(),
-            _ => throw new CompositionException(
-                $"Unknown --script '{options.ScriptKind}'. Valid values: cs, fsx, csx."),
-        };
+        var emitter = ScriptEmitters.TryCreate(options.ScriptKind)
+            ?? throw new CompositionException(
+                $"Unknown --script '{options.ScriptKind}'. Valid values: {ScriptEmitters.ValidKinds}.");
 
         var outputDirectory = options.OutputDirectory is { Length: > 0 } o
             ? o

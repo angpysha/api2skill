@@ -97,7 +97,7 @@ See `wiki/Authentication.md`. **Never invent** client IDs, secrets, or tokens.
 
 - **`--out` / `-o`** — skill directory (default: slug of `info.title`).
 - **`--name`** — skill name override (optional).
-- **`--script`** — `cs` (default), `fsx`, or `csx`.
+- **`--script`** — `cs` (default), `fsx`, `csx`, or `py`. Switch an existing skill with `api2skill migrate <skill-path> --script <kind>`.
 - **`--force` / `-f`** — overwrite existing output.
 - Optional: `--include` / `--exclude`, `--format json|yaml`, filters.
 

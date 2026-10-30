@@ -34,7 +34,7 @@ Sibling skills: `openapi-contract` (REST), `graphql-contract` (GraphQL).
 ## Commands
 
 ```powershell
-$GRPC = '.cursor/skills/grpc-contract/scripts'
+$GRPC = '.agents/skills/grpc-contract/scripts'
 
 pwsh $GRPC/scaffold-grpc.ps1 -ReqId 0006
 # optional: -PackageName myapp -ServiceName PackagesService

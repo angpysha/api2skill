@@ -1,0 +1,1 @@
+../../.agents/rules/azure-devops-auth.mdc

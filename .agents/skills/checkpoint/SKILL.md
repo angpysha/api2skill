@@ -50,7 +50,7 @@ _code_agent/{session}/
 Requires **PowerShell Core** (`pwsh`). From repo root:
 
 ```powershell
-$CP = '.cursor/skills/checkpoint/scripts/checkpoint.ps1'
+$CP = '.agents/skills/checkpoint/scripts/checkpoint.ps1'
 # or after minimal install: $CP = '.agents/scripts/checkpoint.ps1'
 
 # Step lifecycle
@@ -88,7 +88,7 @@ pwsh $CP metrics <session>
 ### Example — developer code plan
 
 ```powershell
-$CP = '.cursor/skills/checkpoint/scripts/checkpoint.ps1'
+$CP = '.agents/skills/checkpoint/scripts/checkpoint.ps1'
 $Session = '20260610-rate-limit'
 $Task = 'task-142'
 
@@ -103,7 +103,7 @@ pwsh $CP output $Session 7 7.3 "Code plan ready: artifacts/tasks/$Task/code-plan
 ### Example — gate log
 
 ```powershell
-$CP = '.cursor/skills/checkpoint/scripts/checkpoint.ps1'
+$CP = '.agents/skills/checkpoint/scripts/checkpoint.ps1'
 $Session = '20260610-rate-limit'
 dotnet test 2>&1 | Tee-Object -FilePath /tmp/test.log
 pwsh $CP save $Session gates/test.log --from /tmp/test.log

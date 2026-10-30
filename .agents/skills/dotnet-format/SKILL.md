@@ -24,7 +24,7 @@ Run **immediately after step 7.4 (Write code)** and before 7.5 (unit tests).
 From repo root (PowerShell Core):
 
 ```powershell
-$Fmt = '.cursor/skills/dotnet-format/scripts/dotnet-format.ps1'
+$Fmt = '.agents/skills/dotnet-format/scripts/dotnet-format.ps1'
 
 # Apply formatting (default — after 7.4)
 pwsh $Fmt
@@ -54,7 +54,7 @@ If omitted, the script auto-detects `*.sln` / `*.slnx` / `*.csproj`.
 Save formatter output when verbose (optional, token-saving):
 
 ```powershell
-dotnet format 2>&1 | pwsh .cursor/skills/checkpoint/scripts/save-artifact.ps1 -Session <session> -ArtifactRel gates/dotnet-format.log -Mode --stdin
+dotnet format 2>&1 | pwsh .agents/skills/checkpoint/scripts/save-artifact.ps1 -Session <session> -ArtifactRel gates/dotnet-format.log -Mode --stdin
 ```
 
 ## Constraints

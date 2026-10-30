@@ -1,0 +1,1 @@
+../../.agents/rules/dotnet-code-style.mdc

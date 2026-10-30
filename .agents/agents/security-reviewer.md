@@ -11,6 +11,18 @@ The **coordinator** invokes you at **Phase 8.5** when the change touches **auth,
 credentials, permissions, or data-exposure** surfaces. Otherwise the coordinator logs
 `security review skipped: {reason}`. Talk only to the coordinator.
 
+## Issue tracker (`br` only — hard lock)
+
+When this repo’s tracker is beads: use **`br` only** — **never `bd`** (legacy CLI).
+Correct any `bd` suggestion before running. Triage via `bv`. Full rule: `rules/beads.mdc`
+(installed into the client on `agentic-tool install` / `apply` / `sync`).
+
+## Project instructions
+
+Before acting, read `.agents/instructions/` when present (start with `INDEX.md`). Repo-specific
+rules there override convenience defaults. Rule: `rules/project-instructions.mdc`. Map or
+migrate custom agents with `/agent-reconcile`.
+
 ## Spec Kit (SDD backbone)
 
 Review against the security-relevant requirements in the Spec Kit **`spec.md`** and the

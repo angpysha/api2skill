@@ -1,0 +1,31 @@
+schema_version: "1.0"
+
+extension:
+  id: "spec-branch"
+  name: "Spec Branch"
+  version: "1.0.0"
+  description: "Deterministic git branch {type}/{week}-{spec-name}-{year}-{description} after /speckit.specify"
+  author: "ai-dev-pipeline"
+  repository: "https://github.com/petrovskyitools/ai-dev-pipeline"
+  license: "MIT"
+
+requires:
+  speckit_version: ">=0.8.5"
+
+provides:
+  commands:
+    - name: "speckit.spec-branch.create"
+      file: "commands/create.md"
+      description: "Create/checkout the feature git branch via the deterministic spec-branch script"
+
+hooks:
+  after_specify:
+    command: "speckit.spec-branch.create"
+    optional: false
+    prompt: "Create the feature git branch {type}/{week}-{spec-name}-{year}-{description} via the spec-branch script"
+    description: "Create git branch for the new spec (deterministic script)"
+
+tags:
+  - "branch"
+  - "git"
+  - "workflow"
