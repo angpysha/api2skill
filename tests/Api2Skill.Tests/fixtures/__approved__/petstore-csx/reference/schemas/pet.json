@@ -1,0 +1,98 @@
+{
+  "Category": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "integer",
+        "description": "Category id",
+        "format": "int64"
+      },
+      "name": {
+        "type": "string",
+        "description": "Category name"
+      }
+    }
+  },
+  "Pet": {
+    "required": [
+      "id",
+      "name"
+    ],
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "integer",
+        "description": "Pet id",
+        "format": "int64"
+      },
+      "name": {
+        "type": "string",
+        "description": "Pet name"
+      },
+      "status": {
+        "enum": [
+          "available",
+          "pending",
+          "sold"
+        ],
+        "type": "string",
+        "description": "Pet status in the store"
+      },
+      "category": {
+        "$ref": "#/components/schemas/Category"
+      },
+      "tags": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Tag"
+        },
+        "description": "Tags attached to this pet"
+      }
+    }
+  },
+  "PetInput": {
+    "required": [
+      "name"
+    ],
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "Pet name"
+      },
+      "status": {
+        "enum": [
+          "available",
+          "pending",
+          "sold"
+        ],
+        "type": "string",
+        "description": "Pet status in the store"
+      },
+      "category": {
+        "$ref": "#/components/schemas/Category"
+      },
+      "tags": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Tag"
+        },
+        "description": "Tags attached to this pet"
+      }
+    }
+  },
+  "Tag": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "integer",
+        "description": "Tag id",
+        "format": "int64"
+      },
+      "name": {
+        "type": "string",
+        "description": "Tag name"
+      }
+    }
+  }
+}

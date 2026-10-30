@@ -30,19 +30,16 @@ public class SchemaWriterTests : IDisposable
         var outputDir = Path.Combine(_workDir, "out");
         SkillWriter.Write(model, outputDir, force: false, new CsFileEmitter());
 
-        var petPath = Path.Combine(outputDir, "reference", "schemas", "Pet.json");
-        var petInputPath = Path.Combine(outputDir, "reference", "schemas", "PetInput.json");
+        var petPath = Path.Combine(outputDir, "reference", "schemas", "pet.json");
         Assert.True(File.Exists(petPath));
-        Assert.True(File.Exists(petInputPath));
+        Assert.Single(Directory.EnumerateFiles(Path.Combine(outputDir, "reference", "schemas")));
 
         var petJson = await File.ReadAllTextAsync(petPath);
+        Assert.Contains("\"Pet\"", petJson);
+        Assert.Contains("\"PetInput\"", petJson);
         Assert.Contains("\"properties\"", petJson);
         Assert.Contains("#/components/schemas/Category", petJson);
         Assert.Contains("#/components/schemas/Tag", petJson);
-
-        var petInputJson = await File.ReadAllTextAsync(petInputPath);
-        Assert.Contains("\"properties\"", petInputJson);
-        Assert.Contains("#/components/schemas/Category", petInputJson);
     }
 
     [Fact]
@@ -55,7 +52,7 @@ public class SchemaWriterTests : IDisposable
         var outputDir = Path.Combine(_workDir, "force");
         SkillWriter.Write(model, outputDir, force: false, new CsFileEmitter());
 
-        var petPath = Path.Combine(outputDir, "reference", "schemas", "Pet.json");
+        var petPath = Path.Combine(outputDir, "reference", "schemas", "pet.json");
         var original = await File.ReadAllTextAsync(petPath);
 
         var mutatedJson = (await File.ReadAllTextAsync(FixturePath("petstore.json")))

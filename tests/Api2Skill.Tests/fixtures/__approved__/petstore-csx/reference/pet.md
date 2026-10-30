@@ -96,7 +96,7 @@ Returns a single pet.
 ### `200`: successful operation
 
 - Content-Type: `application/json`
-- Schema: [`Pet`](schemas/Pet.json)
+- Schema: [`Pet`](schemas/pet.json)
 - Shape: object { id, name, status, category, tags }
 
 | property | type | required | enum | description |
@@ -147,7 +147,7 @@ Add a new pet to the store
 **Request body**
 
 - Content-Type: `application/json` (required)
-- Schema: [`PetInput`](schemas/PetInput.json)
+- Schema: [`PetInput`](schemas/pet.json)
 - Shape: object { name, status, category, tags }
 
 | property | type | required | enum | description |
@@ -188,7 +188,7 @@ Example:
 ### `200`: successful operation
 
 - Content-Type: `application/json`
-- Schema: [`Pet`](schemas/Pet.json)
+- Schema: [`Pet`](schemas/pet.json)
 - Shape: object { id, name, status, category, tags }
 
 | property | type | required | enum | description |

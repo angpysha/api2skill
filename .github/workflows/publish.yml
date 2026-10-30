@@ -66,6 +66,7 @@ jobs:
             -p:DebugSymbols=false `
             -p:DebugType=none `
             -p:NativeDebugSymbols=false `
+            -p:Version=$version `
             -p:PackageVersion=$version `
             --output nupkgs
           Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -109,6 +110,7 @@ jobs:
             --configuration Release \
             -r any \
             -p:PublishAot=false \
+            -p:Version="$VERSION" \
             -p:PackageVersion="$VERSION" \
             --output nupkgs
 
@@ -168,6 +170,7 @@ jobs:
           dotnet pack src/Api2Skill/Api2Skill.csproj \
             --configuration Release \
             -p:PublishAot=true \
+            -p:Version="$VERSION" \
             -p:PackageVersion="$VERSION" \
             --output pointer-nupkg
 

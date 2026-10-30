@@ -25,9 +25,10 @@ public static class ReferenceWriter
                 sb.AppendLine();
             }
 
+            var schemaFile = SchemaWriter.RelativePathForTag(fileStems[tag.Tag]);
             foreach (var op in tag.Operations)
             {
-                WriteOperation(sb, op);
+                WriteOperation(sb, op, schemaFile);
             }
 
             var stem = fileStems[tag.Tag];
@@ -35,7 +36,7 @@ public static class ReferenceWriter
         }
     }
 
-    private static void WriteOperation(StringBuilder sb, OperationModel op)
+    private static void WriteOperation(StringBuilder sb, OperationModel op, string schemaFile)
     {
         sb.AppendLine($"## {op.OperationId}");
         sb.AppendLine();
@@ -81,7 +82,7 @@ public static class ReferenceWriter
                     sb.AppendLine();
                     sb.AppendLine($"**`{p.Name}` ({p.In}) schema**");
                     sb.AppendLine();
-                    WriteSchemaDetail(sb, p.Schema?.Summary, p.Schema, p.Schema?.SchemaName, emitExample: true);
+                    WriteSchemaDetail(sb, p.Schema?.Summary, p.Schema, p.Schema?.SchemaName, emitExample: true, schemaFile);
                 }
             }
 
@@ -103,7 +104,8 @@ public static class ReferenceWriter
                 body.SchemaSummary,
                 body.Schema,
                 body.SchemaName ?? body.Schema?.SchemaName,
-                emitExample: IsJsonMedia(body.ContentType));
+                emitExample: IsJsonMedia(body.ContentType),
+                schemaFile);
             if (!IsJsonMedia(body.ContentType))
             {
                 sb.AppendLine("- Note: no pasteable JSON body emitted for this content type");
@@ -141,7 +143,8 @@ public static class ReferenceWriter
                     r.SchemaSummary,
                     r.Schema,
                     r.SchemaName ?? r.Schema?.SchemaName,
-                    emitExample: emitExample);
+                    emitExample: emitExample,
+                    schemaFile);
                 if (r.ContentType is { Length: > 0 } && !IsJsonMedia(r.ContentType))
                 {
                     sb.AppendLine("- Note: no pasteable JSON body emitted for this content type");
@@ -165,12 +168,13 @@ public static class ReferenceWriter
         string? summary,
         SchemaDetailModel? schema,
         string? schemaName,
-        bool emitExample)
+        bool emitExample,
+        string schemaFile)
     {
         var name = schemaName ?? schema?.SchemaName;
         if (!string.IsNullOrWhiteSpace(name))
         {
-            sb.AppendLine($"- Schema: [`{name}`](schemas/{name}.json)");
+            sb.AppendLine($"- Schema: [`{name}`]({schemaFile})");
         }
 
         var shape = schema?.Summary ?? summary;
@@ -188,7 +192,7 @@ public static class ReferenceWriter
             {
                 if (!string.IsNullOrWhiteSpace(v.SchemaName))
                 {
-                    sb.AppendLine($"{v.Index + 1}. Schema: [`{v.SchemaName}`](schemas/{v.SchemaName}.json) — {v.Summary}");
+                    sb.AppendLine($"{v.Index + 1}. Schema: [`{v.SchemaName}`]({schemaFile}) — {v.Summary}");
                 }
                 else
                 {
@@ -235,7 +239,7 @@ public static class ReferenceWriter
             if (!string.IsNullOrWhiteSpace(name))
             {
                 sb.AppendLine(
-                    $"_Nested fields truncated at depth 4 — see [`{name}`](schemas/{name}.json) for the full schema._");
+                    $"_Nested fields truncated at depth 4 — see [`{name}`]({schemaFile}) for the full schema._");
             }
             else
             {

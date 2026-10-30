@@ -119,15 +119,16 @@ public class CsEmitterGoldenTests : IDisposable
         Assert.Contains("Content-Type: `application/json`", referenceMd);
         Assert.Contains("`available`", referenceMd);
         Assert.Contains("category.id", referenceMd);
-        Assert.Contains("schemas/Pet.json", referenceMd);
-        Assert.Contains("schemas/PetInput.json", referenceMd);
+        Assert.Contains("schemas/pet.json", referenceMd);
+        Assert.Contains("[`Pet`](schemas/pet.json)", referenceMd);
+        Assert.Contains("[`PetInput`](schemas/pet.json)", referenceMd);
         Assert.Contains("Body: none documented in the OpenAPI response", referenceMd);
 
         Assert.DoesNotContain("| property | type | required | enum | description |", skillMd);
-        Assert.DoesNotContain("schemas/Pet.json", skillMd);
+        Assert.DoesNotContain("schemas/pet.json", skillMd);
         Assert.DoesNotContain("```json", skillMd);
 
-        Assert.True(File.Exists(Path.Combine(outputDir, "reference", "schemas", "Pet.json")));
-        Assert.True(File.Exists(Path.Combine(outputDir, "reference", "schemas", "PetInput.json")));
+        Assert.True(File.Exists(Path.Combine(outputDir, "reference", "schemas", "pet.json")));
+        Assert.Single(Directory.EnumerateFiles(Path.Combine(outputDir, "reference", "schemas")));
     }
 }
