@@ -44,8 +44,9 @@ public class ForcePreservesExamplesTests : IDisposable
         Assert.Equal(payload, await File.ReadAllTextAsync(requestPath));
         var petMd = await File.ReadAllTextAsync(Path.Combine(outDir, "reference", "pet.md"));
         Assert.Contains("examples/addPet/happy/request.json", petMd, StringComparison.Ordinal);
-        Assert.True(File.Exists(Path.Combine(outDir, "reference", "schemas", "Pet.json")));
-        Assert.True(File.Exists(Path.Combine(outDir, "reference", "schemas", "PetInput.json")));
+        var schemaGroup = await File.ReadAllTextAsync(Path.Combine(outDir, "reference", "schemas", "pet.json"));
+        Assert.Contains("\"Pet\"", schemaGroup, StringComparison.Ordinal);
+        Assert.Contains("\"PetInput\"", schemaGroup, StringComparison.Ordinal);
     }
 
     [Fact]
