@@ -1,8 +1,33 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace Api2Skill.Tests.NativeAot;
+
+/// <summary>osx-arm64 Native AOT publish cannot run on the Ubuntu CI agent.</summary>
+public sealed class MacOsArm64FactAttribute : FactAttribute
+{
+    public MacOsArm64FactAttribute()
+    {
+        if (!OperatingSystem.IsMacOS() || RuntimeInformation.OSArchitecture != Architecture.Arm64)
+        {
+            Skip = "Native AOT osx-arm64 publish runs on macOS ARM64 only.";
+        }
+    }
+}
+
+/// <summary>osx-arm64 Native AOT publish cannot run on the Ubuntu CI agent.</summary>
+public sealed class MacOsArm64TheoryAttribute : TheoryAttribute
+{
+    public MacOsArm64TheoryAttribute()
+    {
+        if (!OperatingSystem.IsMacOS() || RuntimeInformation.OSArchitecture != Architecture.Arm64)
+        {
+            Skip = "Native AOT osx-arm64 publish runs on macOS ARM64 only.";
+        }
+    }
+}
 
 /// <summary>
 /// Publishes the CLI with Native AOT for osx-arm64 once, then exercises that binary.
@@ -13,6 +38,11 @@ public sealed class NativeAotCliFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
+        if (!OperatingSystem.IsMacOS() || RuntimeInformation.OSArchitecture != Architecture.Arm64)
+        {
+            return;
+        }
+
         var root = FindRepoRoot();
         var project = Path.Combine(root, "src", "Api2Skill", "Api2Skill.csproj");
         var psi = new ProcessStartInfo("dotnet")
@@ -92,7 +122,7 @@ public class NativeAotCliTests : IClassFixture<NativeAotCliFixture>, IDisposable
         GC.SuppressFinalize(this);
     }
 
-    [Fact]
+    [MacOsArm64Fact]
     public async Task Binary_IsMachOArm64()
     {
         var (exit, stdout, stderr) = await RunAsync("file", _fixture.Executable);
@@ -101,7 +131,7 @@ public class NativeAotCliTests : IClassFixture<NativeAotCliFixture>, IDisposable
         Assert.Contains("arm64", stdout + stderr, StringComparison.Ordinal);
     }
 
-    [Fact]
+    [MacOsArm64Fact]
     public async Task Help_ListsGenerateMigrateAndLogin()
     {
         var (exit, stdout, stderr) = await Cli("--help");
@@ -112,7 +142,7 @@ public class NativeAotCliTests : IClassFixture<NativeAotCliFixture>, IDisposable
         Assert.Contains("login", text, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
+    [MacOsArm64Fact]
     public async Task GeneratePy_WritesDispatcherManifestAndParsableJson()
     {
         var skill = Path.Combine(_workDir, "py");
@@ -148,7 +178,7 @@ public class NativeAotCliTests : IClassFixture<NativeAotCliFixture>, IDisposable
         Assert.True(compile.Exit == 0, compile.Stderr);
     }
 
-    [Theory]
+    [MacOsArm64Theory]
     [InlineData("cs", "call.cs")]
     [InlineData("fsx", "call.fsx")]
     [InlineData("csx", "call.csx")]
@@ -163,7 +193,7 @@ public class NativeAotCliTests : IClassFixture<NativeAotCliFixture>, IDisposable
         Assert.Equal(kind, manifest.RootElement.GetProperty("scriptKind").GetString());
     }
 
-    [Fact]
+    [MacOsArm64Fact]
     public async Task GenerateYaml_Succeeds()
     {
         var skill = Path.Combine(_workDir, "yaml");
@@ -172,7 +202,7 @@ public class NativeAotCliTests : IClassFixture<NativeAotCliFixture>, IDisposable
         Assert.True(File.Exists(Path.Combine(skill, "scripts", "call.py")), stderr);
     }
 
-    [Fact]
+    [MacOsArm64Fact]
     public async Task Generate_UnknownScript_ExitsUsage()
     {
         var (exit, _, stderr) = await Cli("generate", Fixture("petstore.json"), "--script", "ruby", "--out", Path.Combine(_workDir, "bad"), "--name", "petstore");
@@ -180,14 +210,14 @@ public class NativeAotCliTests : IClassFixture<NativeAotCliFixture>, IDisposable
         Assert.Contains("py", stderr, StringComparison.Ordinal);
     }
 
-    [Fact]
+    [MacOsArm64Fact]
     public async Task Generate_MissingSpec_ExitsNonZero()
     {
         var (exit, _, _) = await Cli("generate", Path.Combine(_workDir, "missing.json"), "--out", Path.Combine(_workDir, "out"), "--name", "missing");
         Assert.NotEqual(0, exit);
     }
 
-    [Fact]
+    [MacOsArm64Fact]
     public async Task Generate_ExistingOutputWithoutForce_ExitsThree()
     {
         var skill = Path.Combine(_workDir, "exists");
@@ -196,7 +226,7 @@ public class NativeAotCliTests : IClassFixture<NativeAotCliFixture>, IDisposable
         Assert.Equal(3, again.Exit);
     }
 
-    [Fact]
+    [MacOsArm64Fact]
     public async Task Generate_Force_Rewrites()
     {
         var skill = Path.Combine(_workDir, "force");
@@ -207,7 +237,7 @@ public class NativeAotCliTests : IClassFixture<NativeAotCliFixture>, IDisposable
         Assert.False(File.Exists(Path.Combine(skill, "scripts", "call.cs")));
     }
 
-    [Fact]
+    [MacOsArm64Fact]
     public async Task Generate_IncludeOneOperation_DropsTheOthersFromDispatcher()
     {
         var skill = Path.Combine(_workDir, "include");
@@ -221,7 +251,7 @@ public class NativeAotCliTests : IClassFixture<NativeAotCliFixture>, IDisposable
         Assert.Equal("getPetById", ids[0]);
     }
 
-    [Fact]
+    [MacOsArm64Fact]
     public async Task Generate_BaseUrlAndInsecure_AreEmbeddedAsJson()
     {
         var skill = Path.Combine(_workDir, "flags");
@@ -235,7 +265,7 @@ public class NativeAotCliTests : IClassFixture<NativeAotCliFixture>, IDisposable
         Assert.True(exit == 0, stderr);
     }
 
-    [Fact]
+    [MacOsArm64Fact]
     public async Task Generate_QuotedSchemaProperty_IsEscapedInReference()
     {
         var spec = Path.Combine(_workDir, "quotes.json");
@@ -272,7 +302,7 @@ public class NativeAotCliTests : IClassFixture<NativeAotCliFixture>, IDisposable
         Assert.True(exit == 0, stderr);
     }
 
-    [Fact]
+    [MacOsArm64Fact]
     public async Task Migrate_CsToPy_PreservesSecrets()
     {
         var skill = Path.Combine(_workDir, "migrate");
@@ -289,7 +319,7 @@ public class NativeAotCliTests : IClassFixture<NativeAotCliFixture>, IDisposable
         Assert.Equal("py", manifest.RootElement.GetProperty("scriptKind").GetString());
     }
 
-    [Fact]
+    [MacOsArm64Fact]
     public async Task Migrate_SameKind_DoesNotRewriteSecrets()
     {
         var skill = Path.Combine(_workDir, "same");
@@ -305,14 +335,14 @@ public class NativeAotCliTests : IClassFixture<NativeAotCliFixture>, IDisposable
         Assert.Equal(stamp, File.GetLastWriteTimeUtc(Path.Combine(skill, "scripts", "call.py")));
     }
 
-    [Fact]
+    [MacOsArm64Fact]
     public async Task Migrate_MissingSkill_ExitsUsage()
     {
         var (exit, _, _) = await Cli("migrate", Path.Combine(_workDir, "nope"), "--script", "py");
         Assert.Equal(2, exit);
     }
 
-    [Fact]
+    [MacOsArm64Fact]
     public async Task Migrate_UnknownScript_ExitsUsage()
     {
         var skill = Path.Combine(_workDir, "unk");
@@ -322,7 +352,7 @@ public class NativeAotCliTests : IClassFixture<NativeAotCliFixture>, IDisposable
         Assert.Contains("py", stderr, StringComparison.Ordinal);
     }
 
-    [Fact]
+    [MacOsArm64Fact]
     public async Task Update_KeepsPythonScriptKind()
     {
         var skill = Path.Combine(_workDir, "update");
@@ -334,7 +364,7 @@ public class NativeAotCliTests : IClassFixture<NativeAotCliFixture>, IDisposable
         Assert.Equal("py", manifest.RootElement.GetProperty("scriptKind").GetString());
     }
 
-    [Fact]
+    [MacOsArm64Fact]
     public async Task MultiSpec_GeneratesOnePythonDispatcher()
     {
         var skill = Path.Combine(_workDir, "multi");
@@ -355,7 +385,7 @@ public class NativeAotCliTests : IClassFixture<NativeAotCliFixture>, IDisposable
         Assert.True(manifest.RootElement.GetProperty("specSources").GetArrayLength() >= 2);
     }
 
-    [Fact]
+    [MacOsArm64Fact]
     public async Task Login_MissingSkill_ExitsUsage()
     {
         var (exit, _, stderr) = await Cli("login");

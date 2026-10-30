@@ -5,13 +5,13 @@ on:
     tags:
       - 'v*.*.*'
 
+# Native AOT tool packages: one nupkg per RID, built on a matching OS, then a small
+# pointer package. `dotnet tool install -g api2skill` stays the install command.
+# win-x64 / win-arm64 / osx-arm64 are native. `any` is the managed fallback for
+# every other platform. Publish RID packages before the pointer package.
 jobs:
-  publish:
+  test:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write  # needed to create a GitHub Release
-      id-token: write  # needed for NuGet Trusted Publishing (OIDC -> short-lived API key)
-
     steps:
       - uses: actions/checkout@v4
 
@@ -32,16 +32,113 @@ jobs:
       - name: Test
         run: dotnet test --no-build --configuration Release
 
-      - name: Extract version from tag
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+  pack-native:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Same OS, cross-architecture. windows-latest is x64 and can link win-arm64.
+          - os: windows-latest
+            rid: win-x64
+          - os: windows-latest
+            rid: win-arm64
+          - os: macos-latest
+            rid: osx-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Pack
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - name: Pack Native AOT tool
+        shell: pwsh
         run: |
-          dotnet pack src/Api2Skill/Api2Skill.csproj \
-            --no-build \
-            --configuration Release \
-            -p:PackageVersion=${{ env.VERSION }} \
+          $ErrorActionPreference = 'Stop'
+          $version = $env:GITHUB_REF_NAME.Substring(1)
+          dotnet pack src/Api2Skill/Api2Skill.csproj `
+            --configuration Release `
+            -r '${{ matrix.rid }}' `
+            -p:PublishAot=true `
+            -p:DebugSymbols=false `
+            -p:DebugType=none `
+            -p:NativeDebugSymbols=false `
+            -p:PackageVersion=$version `
+            -p:ToolPackageRuntimeIdentifiers=win-x64;win-arm64;osx-arm64;any `
             --output nupkgs
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $bad = @()
+          foreach ($package in Get-ChildItem nupkgs -Filter *.nupkg) {
+            $zip = [System.IO.Compression.ZipFile]::OpenRead($package.FullName)
+            try {
+              $bad += $zip.Entries |
+                Where-Object { $_.FullName -match '\.dSYM|\.pdb$' } |
+                ForEach-Object { "$($package.Name): $($_.FullName)" }
+            } finally {
+              $zip.Dispose()
+            }
+          }
+          if ($bad.Count -gt 0) {
+            Write-Error ("Debug symbols were packed:`n" + ($bad -join "`n"))
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nupkg-${{ matrix.rid }}
+          path: nupkgs/*.nupkg
+          if-no-files-found: error
+
+  pack-portable:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - name: Pack managed fallback (any)
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          dotnet pack src/Api2Skill/Api2Skill.csproj \
+            --configuration Release \
+            -r any \
+            -p:PublishAot=false \
+            -p:PackageVersion="$VERSION" \
+            -p:ToolPackageRuntimeIdentifiers="win-x64;win-arm64;osx-arm64;any" \
+            --output nupkgs
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nupkg-any
+          path: nupkgs/*.nupkg
+          if-no-files-found: error
+
+  publish:
+    needs: [pack-native, pack-portable]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # needed to create a GitHub Release
+      id-token: write  # needed for NuGet Trusted Publishing (OIDC -> short-lived API key)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: nupkg-*
+          path: rid-nupkgs
+          merge-multiple: true
 
       - name: NuGet login (OIDC -> short-lived API key)
         uses: NuGet/login@v1
@@ -49,15 +146,46 @@ jobs:
         with:
           user: ${{ secrets.NUGET_USER }}  # nuget.org profile name, not email
 
-      - name: Push to NuGet.org
+      - name: Push RID packages
         run: |
-          dotnet nuget push nupkgs/*.nupkg \
-            --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} \
+          set -euo pipefail
+          shopt -s nullglob
+          mapfile -t packages < <(find rid-nupkgs -name '*.nupkg' | sort)
+          if [ "${#packages[@]}" -ne 4 ]; then
+            echo "Expected 4 RID packages (win-x64, win-arm64, osx-arm64, any), found ${#packages[@]}."
+            find rid-nupkgs -name '*.nupkg' -print
+            exit 1
+          fi
+          for package in "${packages[@]}"; do
+            dotnet nuget push "$package" \
+              --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}" \
+              --source https://api.nuget.org/v3/index.json \
+              --skip-duplicate
+          done
+
+      - name: Pack pointer package
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          dotnet pack src/Api2Skill/Api2Skill.csproj \
+            --configuration Release \
+            -p:PublishAot=true \
+            -p:PackageVersion="$VERSION" \
+            -p:ToolPackageRuntimeIdentifiers="win-x64;win-arm64;osx-arm64;any" \
+            --output pointer-nupkg
+
+      - name: Push pointer package
+        run: |
+          set -euo pipefail
+          dotnet nuget push pointer-nupkg/*.nupkg \
+            --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}" \
             --source https://api.nuget.org/v3/index.json \
             --skip-duplicate
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: nupkgs/*.nupkg
+          files: |
+            rid-nupkgs/*.nupkg
+            pointer-nupkg/*.nupkg
           generate_release_notes: true

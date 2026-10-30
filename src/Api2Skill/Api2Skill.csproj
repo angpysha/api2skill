@@ -53,4 +53,14 @@
     <InternalsVisibleTo Include="Api2Skill.Tests" />
   </ItemGroup>
 
+  <!-- The Apple linker writes api2skill.dSYM into the publish directory. PackTool globs that
+       directory, so delete the bundle before the tool nupkg is built. -->
+  <Target Name="RemoveNativeDebugSymbolsFromToolPackage" BeforeTargets="PackTool" Condition="'$(PublishAot)' == 'true'">
+    <RemoveDir Directories="$(PublishDir)$(AssemblyName).dSYM" />
+    <ItemGroup>
+      <_AotPdb Include="$(PublishDir)**/*.pdb" />
+    </ItemGroup>
+    <Delete Files="@(_AotPdb)" />
+  </Target>
+
 </Project>
