@@ -369,9 +369,9 @@ public static class SkillModelBuilder
                 ? "string"
                 : FormatType(schema) ?? "string";
             string? example = null;
-            if (schema?.Example is not null)
+            if (schema is not null && SchemaExample(schema) is { } schemaExample)
             {
-                example = FormatJsonNode(schema.Example);
+                example = FormatJsonNode(schemaExample);
             }
             else if (schema?.Default is not null)
             {
@@ -894,6 +894,12 @@ public static class SkillModelBuilder
         }
     }
 
+    // OpenAPI.NET 3.11 marks Example obsolete in favor of Examples. The singular value is still
+    // what the reader fills for a single schema example, and generated docs depend on it.
+#pragma warning disable CS0618
+    private static JsonNode? SchemaExample(IOpenApiSchema schema) => schema.Example;
+#pragma warning restore CS0618
+
     private static string? SerializeExample(IOpenApiSchema schema, int depth)
     {
         if (depth > 4)
@@ -903,9 +909,9 @@ public static class SkillModelBuilder
 
         schema = ResolveForExpand(schema);
 
-        if (schema.Example is not null)
+        if (SchemaExample(schema) is { } schemaExample)
         {
-            return schema.Example.ToJsonString();
+            return schemaExample.ToJsonString();
         }
 
         if (schema.Default is not null)
