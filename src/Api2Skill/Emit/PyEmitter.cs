@@ -1,4 +1,4 @@
-using System.Text.Json;
+using System.Text.Json.Nodes;
 using Api2Skill.Model;
 
 namespace Api2Skill.Emit;
@@ -33,34 +33,53 @@ public sealed class PyEmitter : IScriptEmitter
 
     private static string Generate(SkillModel model)
     {
-        var operations = EmitterOperations.DistinctByOperationId(model)
-            .Select(op => new
-            {
-                id = op.OperationId,
-                method = op.Method.Method,
-                path = op.PathTemplate,
-                hasBody = op.RequestBody is not null,
-                contentType = op.RequestBody?.ContentType,
-                parameters = op.Parameters.Select(p => new { name = p.Name, location = LocationKey(p.In) }),
-                securitySchemeIds = op.SecuritySchemeIds,
-                authProfileNames = op.AuthProfileNames,
-            });
-        var schemes = model.SecuritySchemes.Select(scheme => new
+        // JsonNode, not JsonSerializer.Serialize<T>: anonymous graphs are reflection and fail Native AOT.
+        var operations = new JsonArray();
+        foreach (var op in EmitterOperations.DistinctByOperationId(model))
         {
-            id = scheme.Id,
-            kind = SchemeKindKey(scheme.Kind),
-            apiKeyName = scheme.ApiKeyName,
-            apiKeyLocation = scheme.ApiKeyLocation switch
+            var parameters = new JsonArray();
+            foreach (var parameter in op.Parameters)
             {
-                ApiKeyLocation.Query => "query",
-                ApiKeyLocation.Header => "header",
-                _ => (string?)null,
-            },
-        });
+                parameters.Add(Node(new JsonObject
+                {
+                    ["name"] = parameter.Name,
+                    ["location"] = LocationKey(parameter.In),
+                }));
+            }
 
-        var opsJson = JsonSerializer.Serialize(operations);
-        var schemesJson = JsonSerializer.Serialize(schemes);
-        var baseUrlJson = JsonSerializer.Serialize(model.BaseUrl ?? "");
+            operations.Add(Node(new JsonObject
+            {
+                ["id"] = op.OperationId,
+                ["method"] = op.Method.Method,
+                ["path"] = op.PathTemplate,
+                ["hasBody"] = op.RequestBody is not null,
+                ["contentType"] = JsonOrNull(op.RequestBody?.ContentType),
+                ["parameters"] = parameters,
+                ["securitySchemeIds"] = JsonStrings(op.SecuritySchemeIds),
+                ["authProfileNames"] = JsonStrings(op.AuthProfileNames),
+            }));
+        }
+
+        var schemes = new JsonArray();
+        foreach (var scheme in model.SecuritySchemes)
+        {
+            schemes.Add(Node(new JsonObject
+            {
+                ["id"] = scheme.Id,
+                ["kind"] = SchemeKindKey(scheme.Kind),
+                ["apiKeyName"] = JsonOrNull(scheme.ApiKeyName),
+                ["apiKeyLocation"] = JsonOrNull(scheme.ApiKeyLocation switch
+                {
+                    ApiKeyLocation.Query => "query",
+                    ApiKeyLocation.Header => "header",
+                    _ => null,
+                }),
+            }));
+        }
+
+        var opsJson = operations.ToJsonString();
+        var schemesJson = schemes.ToJsonString();
+        var baseUrlJson = JsonValue.Create(model.BaseUrl ?? "")!.ToJsonString();
         var insecure = model.InsecureDefault ? "1" : "0";
 
         return Template
@@ -68,6 +87,26 @@ public sealed class PyEmitter : IScriptEmitter
             .Replace("__SCHEMES_JSON__", schemesJson, StringComparison.Ordinal)
             .Replace("__BASE_URL_JSON__", baseUrlJson, StringComparison.Ordinal)
             .Replace("__INSECURE__", insecure, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Binds <see cref="JsonArray.Add(JsonNode?)"/> instead of the generic
+    /// <c>Add&lt;T&gt;</c>, which Native AOT rejects even for <see cref="JsonObject"/>.
+    /// </summary>
+    private static JsonNode Node(JsonNode node) => node;
+
+    private static JsonNode JsonOrNull(string? value) =>
+        value is null ? JsonValue.Parse("null")! : JsonValue.Create(value)!;
+
+    private static JsonArray JsonStrings(IEnumerable<string> values)
+    {
+        var array = new JsonArray();
+        foreach (var value in values)
+        {
+            array.Add(Node(JsonValue.Create(value)!));
+        }
+
+        return array;
     }
 
     private static string LocationKey(ParameterLocation location) => location switch

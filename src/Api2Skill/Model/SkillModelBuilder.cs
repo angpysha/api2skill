@@ -936,7 +936,8 @@ public static class SkillModelBuilder
                 }
 
                 var value = SerializeExample(prop, depth + 1) ?? "null";
-                parts.Add($"{JsonSerializer.Serialize(name)}: {value}");
+                // JsonValue quotes the property name without the reflection serializer (Native AOT).
+                parts.Add($"{JsonValue.Create(name)!.ToJsonString()}: {value}");
             }
 
             return "{ " + string.Join(", ", parts) + " }";

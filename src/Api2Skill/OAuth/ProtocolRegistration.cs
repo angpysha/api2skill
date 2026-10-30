@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Runtime.Versioning;
 using System.Text;
@@ -29,7 +30,7 @@ public static class ProtocolRegistration
             ?? Environment.ProcessPath
             ?? throw new InvalidOperationException("Could not resolve the api2skill executable path.");
 
-        var entry = Assembly.GetEntryAssembly()?.Location;
+        var entry = EntryAssemblyLocation();
         var fileName = Path.GetFileNameWithoutExtension(processPath);
 
         if (!string.IsNullOrEmpty(entry)
@@ -42,6 +43,16 @@ public static class ProtocolRegistration
 
         return Quote(processPath) + " " + Placeholder(OperatingSystem.IsWindows());
     }
+
+    /// <summary>
+    /// Managed <c>dotnet api2skill.dll</c> launches need the dll path. Native AOT and single-file
+    /// publishes return an empty location; <see cref="Environment.ProcessPath"/> is the executable then.
+    /// </summary>
+    [UnconditionalSuppressMessage(
+        "SingleFile",
+        "IL3000",
+        Justification = "Empty for Native AOT/single-file. Callers fall back to Environment.ProcessPath.")]
+    private static string? EntryAssemblyLocation() => Assembly.GetEntryAssembly()?.Location;
 
     public static bool IsRegistered(string scheme)
     {

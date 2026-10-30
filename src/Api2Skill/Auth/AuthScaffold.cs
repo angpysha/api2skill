@@ -201,7 +201,7 @@ public static class AuthScaffold
         var schemesArray = new JsonArray();
         foreach (var entry in guidance.Schemes)
         {
-            schemesArray.Add(new JsonObject
+            schemesArray.Add((JsonNode)new JsonObject
             {
                 ["schemeId"] = entry.SchemeId,
                 ["suggestedProfileName"] = entry.SuggestedProfileName,
@@ -224,7 +224,7 @@ public static class AuthScaffold
             foreach (var example in guidance.TagAttachExamples)
             {
                 var profilesJson = JsonNode.Parse(AuthConfigLoader.Serialize(new AuthConfig(example.ExampleProfiles)))!;
-                examplesArray.Add(new JsonObject
+                examplesArray.Add((JsonNode)new JsonObject
                 {
                     ["tag"] = example.Tag,
                     ["schemeIds"] = new JsonArray([.. example.SchemeIds.Select(id => (JsonNode)id)]),

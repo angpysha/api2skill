@@ -34,16 +34,8 @@ public static class CreatorTemplateLocator
 
     private static IEnumerable<string> CandidateRoots()
     {
+        // AppContext.BaseDirectory is the publish directory for both `dotnet run` and Native AOT.
+        // Assembly.Location is empty in a single-file/AOT binary (IL3000).
         yield return AppContext.BaseDirectory;
-
-        var location = typeof(CreatorTemplateLocator).Assembly.Location;
-        if (!string.IsNullOrEmpty(location))
-        {
-            var dir = Path.GetDirectoryName(location);
-            if (!string.IsNullOrEmpty(dir))
-            {
-                yield return dir;
-            }
-        }
     }
 }

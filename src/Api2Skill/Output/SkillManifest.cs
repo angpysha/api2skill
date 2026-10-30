@@ -89,7 +89,7 @@ public static class SkillManifestIo
                 obj["label"] = part.Label;
             }
 
-            specSourcesArray.Add(obj);
+            specSourcesArray.Add((JsonNode)obj);
         }
 
         var root = new JsonObject
