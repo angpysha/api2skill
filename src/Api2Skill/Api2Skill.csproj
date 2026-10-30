@@ -14,6 +14,9 @@
     <PackageId>api2skill</PackageId>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>api2skill</ToolCommandName>
+    <!-- Semicolon-separated here so MSBuild splits it into one RuntimeIdentifierPackage
+         per RID. Passing the same list via -p: collapses it into a single identifier. -->
+    <ToolPackageRuntimeIdentifiers>win-x64;win-arm64;osx-arm64;any</ToolPackageRuntimeIdentifiers>
     <Version>0.7.2</Version>
     <Authors>angpysha</Authors>
     <Description>Converts an OpenAPI/Swagger document into a self-contained Claude Agent Skill (SKILL.md + a runnable .cs/.fsx/.csx/.py dispatcher + reference docs + a secrets scaffold) so an existing REST API becomes something Claude can call correctly, with authentication.</Description>

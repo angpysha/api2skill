@@ -67,7 +67,6 @@ jobs:
             -p:DebugType=none `
             -p:NativeDebugSymbols=false `
             -p:PackageVersion=$version `
-            '-p:ToolPackageRuntimeIdentifiers=win-x64%3Bwin-arm64%3Bosx-arm64%3Bany' `
             --output nupkgs
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $bad = @()
@@ -111,7 +110,6 @@ jobs:
             -r any \
             -p:PublishAot=false \
             -p:PackageVersion="$VERSION" \
-            -p:ToolPackageRuntimeIdentifiers=win-x64%3Bwin-arm64%3Bosx-arm64%3Bany \
             --output nupkgs
 
       - uses: actions/upload-artifact@v4
@@ -171,7 +169,6 @@ jobs:
             --configuration Release \
             -p:PublishAot=true \
             -p:PackageVersion="$VERSION" \
-            -p:ToolPackageRuntimeIdentifiers=win-x64%3Bwin-arm64%3Bosx-arm64%3Bany \
             --output pointer-nupkg
 
       - name: Push pointer package
